@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.6.9] - 2024-12-19
+
+### Fixed
+
+- 修复 GitHub Action 中重复的步骤名称
+- 将认证步骤重命名为 "Authenticate with Crates.io"
+- 将发布步骤保持为 "Publish to Crates.io"
+- 消除步骤名称混淆，提高工作流可读性
+
 ## [0.6.8] - 2024-12-19
 
 ### Changed
