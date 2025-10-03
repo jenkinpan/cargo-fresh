@@ -83,6 +83,11 @@ pkg-checker --include-prerelease
 
 # 非交互模式 + 预发布版本
 pkg-checker --no-interactive --include-prerelease
+
+# 生成 shell 补全脚本
+pkg-checker --completion zsh    # 生成 zsh 补全
+pkg-checker --completion bash   # 生成 bash 补全
+pkg-checker --completion fish   # 生成 fish 补全
 ```
 
 ## 输出示例
@@ -131,6 +136,52 @@ mdbook 有更新可用
 或者移除 --no-interactive 参数进行交互式更新
 ```
 
+## Shell 补全支持
+
+`pkg-checker` 支持多种 shell 的自动补全功能，让命令行使用更加便捷。
+
+### 支持的 Shell
+
+- **Zsh** - 完整的补全支持
+- **Bash** - 基础补全支持  
+- **Fish** - 原生补全支持
+- **PowerShell** - Windows 补全支持
+- **Elvish** - 现代 shell 补全支持
+
+### 安装补全
+
+#### 自动安装（推荐）
+
+```bash
+# 下载并运行安装脚本
+curl -sSL https://raw.githubusercontent.com/jenkinpan/pkg-checker-rs/main/install_completion.sh | bash
+```
+
+#### 手动安装
+
+```bash
+# 1. 生成补全脚本
+pkg-checker --completion zsh > ~/.zsh_completions/pkg-checker.zsh
+
+# 2. 添加到 zsh 配置
+echo 'fpath=($HOME/.zsh_completions $fpath)' >> ~/.zshrc
+echo 'autoload -U compinit && compinit' >> ~/.zshrc
+
+# 3. 重新加载配置
+source ~/.zshrc
+```
+
+### 使用方法
+
+安装完成后，在命令行中输入 `pkg-checker` 然后按 `TAB` 键即可看到自动补全选项：
+
+```bash
+pkg-checker <TAB>
+# 显示所有可用选项：
+# --completion  --help  --include-prerelease  --no-interactive
+# --updates-only  --verbose  --version
+```
+
 ## 技术特性
 
 - **异步处理**: 使用 Tokio 异步运行时，快速并发检查多个包
@@ -139,6 +190,8 @@ mdbook 有更新可用
 - **彩色输出**: 美观的终端输出，清晰的状态显示
 - **错误处理**: 完善的错误处理和重试机制
 - **类型安全**: Rust 类型系统保证代码安全性
+- **进度条**: 实时显示更新进度，提升用户体验
+- **Shell 补全**: 支持多种 shell 的自动补全功能
 
 ## 贡献
 

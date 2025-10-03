@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use colored::*;
 use dialoguer::{Confirm, MultiSelect};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -25,6 +25,10 @@ struct Cli {
     /// 包含预发布版本（alpha、beta、rc等）
     #[arg(long)]
     include_prerelease: bool,
+
+    /// 生成 shell 补全脚本
+    #[arg(long, value_name = "SHELL")]
+    completion: Option<String>,
 }
 
 #[derive(Debug)]
@@ -349,9 +353,42 @@ fn print_results(packages: &[PackageInfo], updates_only: bool) {
     }
 }
 
+fn generate_completion(shell: String) {
+    let mut cmd = Cli::command();
+    let shell = shell.to_lowercase();
+    
+    match shell.as_str() {
+        "bash" => {
+            clap_complete::generate(clap_complete::Shell::Bash, &mut cmd, "pkg-checker", &mut std::io::stdout());
+        }
+        "zsh" => {
+            clap_complete::generate(clap_complete::Shell::Zsh, &mut cmd, "pkg-checker", &mut std::io::stdout());
+        }
+        "fish" => {
+            clap_complete::generate(clap_complete::Shell::Fish, &mut cmd, "pkg-checker", &mut std::io::stdout());
+        }
+        "powershell" => {
+            clap_complete::generate(clap_complete::Shell::PowerShell, &mut cmd, "pkg-checker", &mut std::io::stdout());
+        }
+        "elvish" => {
+            clap_complete::generate(clap_complete::Shell::Elvish, &mut cmd, "pkg-checker", &mut std::io::stdout());
+        }
+        _ => {
+            eprintln!("不支持的 shell: {}. 支持的 shell: bash, zsh, fish, powershell, elvish", shell);
+            std::process::exit(1);
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // 处理 shell 补全生成
+    if let Some(shell) = cli.completion {
+        generate_completion(shell);
+        return Ok(());
+    }
 
     println!("{}", "检查全局安装的 Cargo 包更新...".blue().bold());
 
