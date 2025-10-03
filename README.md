@@ -1,6 +1,6 @@
-# cargo-update-checker
+# cargo-update
 
-[![Crates.io](https://img.shields.io/crates/v/cargo-update-checker.svg)](https://crates.io/crates/cargo-update-checker)
+[![Crates.io](https://img.shields.io/crates/v/cargo-update.svg)](https://crates.io/crates/cargo-update)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 一个用 Rust 编写的工具，用于检查和管理全局安装的 Cargo 包更新。支持交互式更新、智能预发布版本检测和彩色输出。
@@ -20,15 +20,15 @@
 ### 从 crates.io 安装（推荐）
 
 ```bash
-cargo install cargo-update-checker
+cargo install cargo-update
 ```
 
 ### 从源码安装
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/cargo-update-checker.git
-cd cargo-update-checker
+git clone https://github.com/your-username/cargo-update.git
+cd cargo-update
 
 # 构建并安装
 cargo install --path .
@@ -37,7 +37,7 @@ cargo install --path .
 ### 从 GitHub 安装
 
 ```bash
-cargo install --git https://github.com/your-username/cargo-update-checker.git
+cargo install --git https://github.com/your-username/cargo-update.git
 ```
 
 ## 使用方法
@@ -45,7 +45,7 @@ cargo install --git https://github.com/your-username/cargo-update-checker.git
 ### 基本使用
 
 ```bash
-cargo-update-checker
+cargo-update
 ```
 
 ### 命令行选项
@@ -61,28 +61,28 @@ cargo-update-checker
 
 ```bash
 # 检查所有包并显示详细信息
-cargo-update-checker --verbose
+cargo-update --verbose
 
 # 只显示有更新的包
-cargo-update-checker --updates-only
+cargo-update --updates-only
 
 # 组合使用
-cargo-update-checker --verbose --updates-only
+cargo-update --verbose --updates-only
 
 # 默认交互模式（推荐）
-cargo-update-checker
+cargo-update
 
 # 只显示有更新的包（交互模式）
-cargo-update-checker --updates-only
+cargo-update --updates-only
 
 # 非交互模式
-cargo-update-checker --no-interactive
+cargo-update --no-interactive
 
 # 包含预发布版本检查（交互模式）
-cargo-update-checker --include-prerelease
+cargo-update --include-prerelease
 
 # 非交互模式 + 预发布版本
-cargo-update-checker --no-interactive --include-prerelease
+cargo-update --no-interactive --include-prerelease
 ```
 
 ## 输出示例
@@ -156,6 +156,6 @@ mdbook 有更新可用
 
 ## 相关链接
 
-- [Crates.io](https://crates.io/crates/cargo-update-checker)
-- [GitHub Repository](https://github.com/your-username/cargo-update-checker)
-- [Issues](https://github.com/your-username/cargo-update-checker/issues)
+- [Crates.io](https://crates.io/crates/cargo-update)
+- [GitHub Repository](https://github.com/your-username/cargo-update)
+- [Issues](https://github.com/your-username/cargo-update/issues)

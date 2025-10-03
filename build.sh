@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "构建 Cargo Update Checker..."
+echo "构建 Cargo Update..."
 
 # 检查是否安装了 Rust
 if ! command -v cargo &> /dev/null; then
@@ -17,12 +17,12 @@ if [ $? -eq 0 ]; then
     echo "✅ 构建成功！"
     echo ""
     echo "使用方法："
-    echo "  ./target/release/cargo-update-checker                    # 默认交互模式（推荐）"
-    echo "  ./target/release/cargo-update-checker --help"
-    echo "  ./target/release/cargo-update-checker --verbose"
-    echo "  ./target/release/cargo-update-checker --updates-only"
-    echo "  ./target/release/cargo-update-checker --no-interactive  # 非交互模式"
-    echo "  ./target/release/cargo-update-checker --include-prerelease  # 包含预发布版本"
+    echo "  ./target/release/cargo-update                    # 默认交互模式（推荐）"
+    echo "  ./target/release/cargo-update --help"
+    echo "  ./target/release/cargo-update --verbose"
+    echo "  ./target/release/cargo-update --updates-only"
+    echo "  ./target/release/cargo-update --no-interactive  # 非交互模式"
+    echo "  ./target/release/cargo-update --include-prerelease  # 包含预发布版本"
     echo ""
     echo "安装到全局："
     echo "  cargo install --path ."
