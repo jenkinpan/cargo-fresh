@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.6.5] - 2024-12-19
+
+### Fixed
+
+- 修复 GitHub Release 403 权限问题
+- 添加 contents: write 权限用于创建 releases
+- 添加 pull-requests: write 权限用于 release 操作
+- 在 Create Release 步骤中明确指定 GITHUB_TOKEN
+- 解决 GitHub Action 创建 Release 时的权限不足问题
+
 ## [0.6.4] - 2024-12-19
 
 ### Changed
