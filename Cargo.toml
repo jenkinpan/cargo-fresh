@@ -1,6 +1,6 @@
 [package]
 name = "pkg-checker"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection"
 documentation = "https://docs.rs/pkg-checker"
@@ -16,7 +16,7 @@ anyhow = "1.0.100"
 clap = { version = "4.5.48", features = ["derive"] }
 colored = "3.0.0"
 dialoguer = "0.12.0"
-indicatif = "0.17"
+indicatif = "0.18"
 reqwest = { version = "0.12.23", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
