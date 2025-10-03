@@ -44,6 +44,14 @@ struct PackageInfo {
     latest_version: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+struct UpdateResult {
+    package_name: String,
+    old_version: Option<String>,
+    new_version: Option<String>,
+    success: bool,
+}
+
 impl PackageInfo {
     fn has_update(&self) -> bool {
         matches!(
@@ -158,7 +166,7 @@ async fn get_latest_version(
     Ok(None)
 }
 
-async fn update_package(package_name: &str, target_version: Option<&str>) -> Result<bool> {
+async fn update_package(package_name: &str, target_version: Option<&str>) -> Result<UpdateResult> {
     // 创建进度条
     let pb = ProgressBar::new_spinner();
     pb.set_style(
@@ -231,16 +239,26 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
                     pb.println(format!(
                         "✅ {} 已更新: {} → {}",
                         package_name.green(),
-                        old_version.unwrap_or_else(|| "未知".to_string()).red(),
+                        old_version.as_ref().unwrap_or(&"未知".to_string()).red(),
                         new_version.green()
                     ));
-                    return Ok(true);
+                    return Ok(UpdateResult {
+                        package_name: package_name.to_string(),
+                        old_version: old_version.clone(),
+                        new_version: Some(new_version),
+                        success: true,
+                    });
                 } else {
                     pb.println(format!(
                         "⚠️ {} 版本未改变，可能已经是最新版本",
                         package_name.yellow()
                     ));
-                    return Ok(true);
+                    return Ok(UpdateResult {
+                        package_name: package_name.to_string(),
+                        old_version: old_version.clone(),
+                        new_version: old_version,
+                        success: true,
+                    });
                 }
             } else {
                 pb.println(format!(
@@ -252,7 +270,12 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
                     tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                     continue;
                 }
-                return Ok(true); // 仍然认为成功，因为命令执行成功了
+                return Ok(UpdateResult {
+                    package_name: package_name.to_string(),
+                    old_version: old_version.clone(),
+                    new_version: None,
+                    success: true,
+                });
             }
         } else {
             pb.println(format!(
@@ -269,11 +292,21 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
                 tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                 continue;
             }
-            return Ok(false);
+            return Ok(UpdateResult {
+                package_name: package_name.to_string(),
+                old_version: old_version.clone(),
+                new_version: None,
+                success: false,
+            });
         }
     }
 
-    Ok(false)
+    Ok(UpdateResult {
+        package_name: package_name.to_string(),
+        old_version: old_version.clone(),
+        new_version: None,
+        success: false,
+    })
 }
 
 async fn get_installed_version(package_name: &str) -> Result<Option<String>> {
@@ -365,6 +398,85 @@ fn print_results(packages: &[PackageInfo], updates_only: bool) {
     if updates_only && !has_updates {
         println!("{}", "所有包都已是最新版本！".green().bold());
     }
+}
+
+fn print_update_summary(update_results: &[UpdateResult]) {
+    if update_results.is_empty() {
+        return;
+    }
+
+    println!("\n{}", "📋 更新摘要".blue().bold());
+    println!("{}", "=".repeat(50).blue());
+
+    let mut success_updates = Vec::new();
+    let mut failed_updates = Vec::new();
+
+    for result in update_results {
+        if result.success {
+            success_updates.push(result);
+        } else {
+            failed_updates.push(result);
+        }
+    }
+
+    // 显示成功的更新
+    if !success_updates.is_empty() {
+        println!("\n{}", "✅ 成功更新的包:".green().bold());
+        for result in &success_updates {
+            match (&result.old_version, &result.new_version) {
+                (Some(old), Some(new)) if old != new => {
+                    println!(
+                        "  • {}: {} → {}",
+                        result.package_name.cyan(),
+                        old.red(),
+                        new.green()
+                    );
+                }
+                (Some(old), Some(_new)) => {
+                    println!(
+                        "  • {}: {} (版本未改变)",
+                        result.package_name.cyan(),
+                        old.yellow()
+                    );
+                }
+                (Some(old), None) => {
+                    println!(
+                        "  • {}: {} → 未知版本",
+                        result.package_name.cyan(),
+                        old.red()
+                    );
+                }
+                (None, Some(new)) => {
+                    println!(
+                        "  • {}: 未知版本 → {}",
+                        result.package_name.cyan(),
+                        new.green()
+                    );
+                }
+                _ => {
+                    println!("  • {}: 版本信息未知", result.package_name.cyan());
+                }
+            }
+        }
+    }
+
+    // 显示失败的更新
+    if !failed_updates.is_empty() {
+        println!("\n{}", "❌ 更新失败的包:".red().bold());
+        for result in &failed_updates {
+            if let Some(old) = &result.old_version {
+                println!(
+                    "  • {}: {} (更新失败)",
+                    result.package_name.cyan(),
+                    old.red()
+                );
+            } else {
+                println!("  • {}: 更新失败", result.package_name.cyan());
+            }
+        }
+    }
+
+    println!("{}", "=".repeat(50).blue());
 }
 
 fn generate_completion(shell: String) {
@@ -538,6 +650,7 @@ async fn main() -> Result<()> {
 
                 let mut success_count = 0;
                 let mut fail_count = 0;
+                let mut update_results = Vec::new();
                 let total_packages = selections.len();
 
                 // 创建整体进度条
@@ -569,17 +682,25 @@ async fn main() -> Result<()> {
                         .map(|v| v.as_str());
 
                     match update_package(package_name, target_version).await {
-                        Ok(true) => {
-                            success_count += 1;
-                            main_pb.println(format!("✅ {} 更新成功", package_name.green()));
-                        }
-                        Ok(false) => {
-                            fail_count += 1;
-                            main_pb.println(format!("❌ {} 更新失败", package_name.red()));
+                        Ok(result) => {
+                            update_results.push(result.clone());
+                            if result.success {
+                                success_count += 1;
+                                main_pb.println(format!("✅ {} 更新成功", package_name.green()));
+                            } else {
+                                fail_count += 1;
+                                main_pb.println(format!("❌ {} 更新失败", package_name.red()));
+                            }
                         }
                         Err(e) => {
                             main_pb.println(format!("❌ {} 更新出错: {}", package_name.red(), e));
                             fail_count += 1;
+                            update_results.push(UpdateResult {
+                                package_name: package_name.clone(),
+                                old_version: None,
+                                new_version: None,
+                                success: false,
+                            });
                         }
                     }
 
@@ -589,6 +710,9 @@ async fn main() -> Result<()> {
 
                 // 完成整体进度条
                 main_pb.finish_with_message("所有包更新完成！");
+
+                // 显示更新摘要
+                print_update_summary(&update_results);
 
                 println!("\n{}", "更新完成！".green().bold());
                 println!("成功: {} 个包", success_count.to_string().green());
