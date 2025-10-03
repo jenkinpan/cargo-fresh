@@ -9,9 +9,9 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    environment: release  # Optional: for enhanced security
+    environment: release # Optional: for enhanced security
     permissions:
-      id-token: write     # Required for OIDC token exchange
+      id-token: write # Required for OIDC token exchange
 
     steps:
       - name: Checkout code
