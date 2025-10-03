@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2024-12-19
+
+### Fixed
+
+- 修复 GitHub Action 中 cargo publish 检测到未提交文件的问题
+- 添加 --allow-dirty 标志确保发布流程能够正常完成
+- 解决 release_notes.md 文件导致的发布失败问题
+
 ## [0.6.0] - 2024-12-19
 
 ### Added
