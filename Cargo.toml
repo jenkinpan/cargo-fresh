@@ -1,0 +1,23 @@
+[package]
+name = "cargo-update-checker"
+version = "0.2.0"
+edition = "2021"
+description = "A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection"
+documentation = "https://docs.rs/cargo-update-checker"
+readme = "README.md"
+homepage = "https://github.com/jenkinpan/cargo-update-checker"
+repository = "https://github.com/jenkinpan/cargo-update-checker"
+license = "MIT"
+keywords = ["cargo", "manager", "package", "rust", "update"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.48", features = ["derive"] }
+colored = "3.0.0"
+dialoguer = "0.12.0"
+reqwest = { version = "0.12.23", features = ["json"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tokio = { version = "1.47.1", features = ["full"] }
+indicatif = "0.17"
