@@ -143,7 +143,7 @@ mdbook 有更新可用
 ### 支持的 Shell
 
 - **Zsh** - 完整的补全支持
-- **Bash** - 基础补全支持  
+- **Bash** - 基础补全支持
 - **Fish** - 原生补全支持
 - **PowerShell** - Windows 补全支持
 - **Elvish** - 现代 shell 补全支持
