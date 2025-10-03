@@ -1,4 +1,4 @@
-name: Publish to Crates.io
+name: Create GitHub Release
 
 on:
   push:
@@ -6,13 +6,12 @@ on:
       - "v*" # 当推送以 v 开头的标签时触发
 
 jobs:
-  publish:
-    name: Publish to Crates.io
+  create-release:
+    name: Create GitHub Release
     runs-on: ubuntu-latest
-    environment: release # Optional: for enhanced security
     permissions:
-      id-token: write # Required for OIDC token exchange
-      contents: read # Required for reading repository contents
+      contents: write # Required for creating releases
+      pull-requests: write # Required for release operations
 
     steps:
       - name: Checkout code
@@ -31,11 +30,11 @@ jobs:
           # 获取当前标签
           CURRENT_TAG=${GITHUB_REF#refs/tags/}
           echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
-
+          
           # 获取上一个标签
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
           echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
-
+          
           # 生成 changelog
           if [ -n "$PREVIOUS_TAG" ]; then
             echo "## 🎉 新功能" > release_notes.md
@@ -94,53 +93,23 @@ jobs:
             echo "- [Documentation](https://docs.rs/pkg-checker)" >> release_notes.md
           fi
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
         with:
-          toolchain: stable
-          components: rustfmt, clippy
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache Cargo build
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run tests
-        run: cargo test --workspace
-
-      - name: Check formatting
-        run: cargo fmt --all --check
-
-      - name: Run clippy
-        run: cargo clippy --workspace -- -D warnings
-
-      - name: Clean working directory
-        run: |
-          # 清理临时文件
-          rm -f release_notes.md
-          # 确保工作目录干净
-          git status --porcelain
-
-      - name: Publish to Crates.io
-        uses: rust-lang/crates-io-auth-action@v1
-        id: auth
-
-      - name: Publish to Crates.io
-        run: cargo publish
+          tag_name: ${{ steps.changelog.outputs.current_tag }}
+          name: pkg-checker ${{ steps.changelog.outputs.current_tag }} - 自动发布
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload release notes
         run: |
-          echo "Crates.io publish completed successfully!"
+          echo "GitHub Release created successfully!"
           echo "Tag: ${{ steps.changelog.outputs.current_tag }}"
           echo "Previous tag: ${{ steps.changelog.outputs.previous_tag }}"
           echo ""
-          echo "Package published to crates.io: https://crates.io/crates/pkg-checker"
+          echo "Release notes content:"
+          cat release_notes.md
