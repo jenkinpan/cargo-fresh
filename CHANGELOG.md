@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.6.4] - 2024-12-19
+
+### Changed
+
+- 调整发布顺序，先发布 GitHub Release 再发布到 crates.io
+- 先创建 GitHub Release（使用 release_notes.md）
+- 然后清理工作目录（删除 release_notes.md）
+- 最后发布到 crates.io（工作目录干净）
+- 确保 GitHub Release 能够使用 release notes 文件
+- 同时保持 crates.io 发布时工作目录干净
+
 ## [0.6.3] - 2024-12-19
 
 ### Fixed
