@@ -22,8 +22,7 @@
 
 - 添加 Shell 补全支持 (zsh, bash, fish, powershell, elvish)
 - 添加 `--completion` 参数生成补全脚本
-- 添加智能安装脚本 `install_completion.sh`
-- 支持自动检测 shell 类型并安装补全
+- 支持多种 shell 的补全功能
 - 添加详细的补全安装说明
 
 ### Changed

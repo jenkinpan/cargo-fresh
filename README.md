@@ -150,13 +150,6 @@ mdbook 有更新可用
 
 ### 安装补全
 
-#### 自动安装（推荐）
-
-```bash
-# 下载并运行安装脚本
-curl -sSL https://raw.githubusercontent.com/jenkinpan/pkg-checker-rs/main/install_completion.sh | bash
-```
-
 #### 手动安装
 
 ```bash
@@ -169,6 +162,20 @@ echo 'autoload -U compinit && compinit' >> ~/.zshrc
 
 # 3. 重新加载配置
 source ~/.zshrc
+```
+
+#### 其他 Shell 安装
+
+```bash
+# Bash 补全
+pkg-checker --completion bash > ~/.bash_completions/pkg-checker.bash
+echo 'source ~/.bash_completions/pkg-checker.bash' >> ~/.bashrc
+
+# Fish 补全
+pkg-checker --completion fish > ~/.config/fish/completions/pkg-checker.fish
+
+# PowerShell 补全
+pkg-checker --completion powershell > pkg-checker.ps1
 ```
 
 ### 使用方法

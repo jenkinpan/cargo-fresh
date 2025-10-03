@@ -5,6 +5,12 @@ use dialoguer::{Confirm, MultiSelect};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::process::Command;
 
+// 常量定义
+const PRERELEASE_KEYWORDS: &[&str] = &["alpha", "beta", "rc"];
+const MAX_RETRY_ATTEMPTS: u32 = 3;
+const RETRY_DELAY_MS: u64 = 2000;
+const VERSION_UPDATE_DELAY_MS: u64 = 1000;
+
 #[derive(Parser)]
 #[command(name = "pkg-checker")]
 #[command(about = "检查全局安装的Cargo包更新")]
@@ -40,13 +46,21 @@ struct PackageInfo {
 
 impl PackageInfo {
     fn has_update(&self) -> bool {
-        if let (Some(current), Some(latest)) = (&self.current_version, &self.latest_version) {
-            // 简单的版本比较：如果版本字符串不同，则认为有更新
-            // 这里可以改进为更精确的语义化版本比较
-            current != latest
-        } else {
-            false
-        }
+        matches!(
+            (&self.current_version, &self.latest_version),
+            (Some(current), Some(latest)) if current != latest
+        )
+    }
+
+    fn is_prerelease(&self) -> bool {
+        self.latest_version
+            .as_ref()
+            .map(|v| {
+                PRERELEASE_KEYWORDS
+                    .iter()
+                    .any(|&keyword| v.contains(keyword))
+            })
+            .unwrap_or(false)
     }
 }
 
@@ -87,6 +101,20 @@ async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
     Ok(packages)
 }
 
+fn extract_version_from_line(line: &str) -> Option<String> {
+    line.find("= \"").and_then(|start| {
+        line[start + 3..]
+            .find("\"")
+            .map(|end| line[start + 3..start + 3 + end].to_string())
+    })
+}
+
+fn is_stable_version(version: &str) -> bool {
+    !PRERELEASE_KEYWORDS
+        .iter()
+        .any(|&keyword| version.contains(keyword))
+}
+
 async fn get_latest_version(
     package_name: &str,
     include_prerelease: bool,
@@ -100,26 +128,14 @@ async fn get_latest_version(
     }
 
     let output_str = String::from_utf8(output.stdout)?;
+    let package_prefix = format!("{} =", package_name);
 
     // 查找精确匹配的包名
     for line in output_str.lines() {
-        if line.starts_with(&format!("{} =", package_name)) && line.contains("\"") {
-            if let Some(start) = line.find("= \"") {
-                if let Some(end) = line[start + 3..].find("\"") {
-                    let version = &line[start + 3..start + 3 + end];
-
-                    if include_prerelease {
-                        // 如果包含预发布版本，直接返回
-                        return Ok(Some(version.to_string()));
-                    } else {
-                        // 优先选择稳定版本（不包含alpha、beta、rc等）
-                        if !version.contains("alpha")
-                            && !version.contains("beta")
-                            && !version.contains("rc")
-                        {
-                            return Ok(Some(version.to_string()));
-                        }
-                    }
+        if line.starts_with(&package_prefix) && line.contains("\"") {
+            if let Some(version) = extract_version_from_line(line) {
+                if include_prerelease || is_stable_version(&version) {
+                    return Ok(Some(version));
                 }
             }
         }
@@ -132,12 +148,9 @@ async fn get_latest_version(
 
     // 如果包含预发布版本但没有找到精确匹配，返回第一个匹配的版本
     for line in output_str.lines() {
-        if line.starts_with(&format!("{} =", package_name)) && line.contains("\"") {
-            if let Some(start) = line.find("= \"") {
-                if let Some(end) = line[start + 3..].find("\"") {
-                    let version = &line[start + 3..start + 3 + end];
-                    return Ok(Some(version.to_string()));
-                }
+        if line.starts_with(&package_prefix) && line.contains("\"") {
+            if let Some(version) = extract_version_from_line(line) {
+                return Ok(Some(version));
             }
         }
     }
@@ -177,7 +190,7 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
     }
 
     // 尝试更新，最多重试3次
-    for attempt in 1..=3 {
+    for attempt in 1..=MAX_RETRY_ATTEMPTS {
         if attempt > 1 {
             pb.set_message(format!(
                 "重试第 {} 次更新 {}...",
@@ -210,7 +223,7 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
             pb.println(format!("✅ {} 更新命令执行成功", package_name.green()));
 
             // 等待系统更新
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(VERSION_UPDATE_DELAY_MS)).await;
 
             // 验证更新是否真的成功
             if let Ok(Some(new_version)) = get_installed_version(package_name).await {
@@ -234,9 +247,9 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
                     "⚠️ {} 更新命令成功但无法验证新版本",
                     package_name.yellow()
                 ));
-                if attempt < 3 {
+                if attempt < MAX_RETRY_ATTEMPTS {
                     pb.println("等待后重试...");
-                    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                     continue;
                 }
                 return Ok(true); // 仍然认为成功，因为命令执行成功了
@@ -251,9 +264,9 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
                 pb.println(format!("错误详情: {}", stderr.red()));
             }
 
-            if attempt < 3 {
+            if attempt < MAX_RETRY_ATTEMPTS {
                 pb.println("等待后重试...");
-                tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                 continue;
             }
             return Ok(false);
@@ -358,47 +371,12 @@ fn generate_completion(shell: String) {
     let mut cmd = Cli::command();
     let shell = shell.to_lowercase();
 
-    match shell.as_str() {
-        "bash" => {
-            clap_complete::generate(
-                clap_complete::Shell::Bash,
-                &mut cmd,
-                "pkg-checker",
-                &mut std::io::stdout(),
-            );
-        }
-        "zsh" => {
-            clap_complete::generate(
-                clap_complete::Shell::Zsh,
-                &mut cmd,
-                "pkg-checker",
-                &mut std::io::stdout(),
-            );
-        }
-        "fish" => {
-            clap_complete::generate(
-                clap_complete::Shell::Fish,
-                &mut cmd,
-                "pkg-checker",
-                &mut std::io::stdout(),
-            );
-        }
-        "powershell" => {
-            clap_complete::generate(
-                clap_complete::Shell::PowerShell,
-                &mut cmd,
-                "pkg-checker",
-                &mut std::io::stdout(),
-            );
-        }
-        "elvish" => {
-            clap_complete::generate(
-                clap_complete::Shell::Elvish,
-                &mut cmd,
-                "pkg-checker",
-                &mut std::io::stdout(),
-            );
-        }
+    let shell_type = match shell.as_str() {
+        "bash" => clap_complete::Shell::Bash,
+        "zsh" => clap_complete::Shell::Zsh,
+        "fish" => clap_complete::Shell::Fish,
+        "powershell" => clap_complete::Shell::PowerShell,
+        "elvish" => clap_complete::Shell::Elvish,
         _ => {
             eprintln!(
                 "不支持的 shell: {}. 支持的 shell: bash, zsh, fish, powershell, elvish",
@@ -406,7 +384,9 @@ fn generate_completion(shell: String) {
             );
             std::process::exit(1);
         }
-    }
+    };
+
+    clap_complete::generate(shell_type, &mut cmd, "pkg-checker", &mut std::io::stdout());
 }
 
 #[tokio::main]
@@ -441,10 +421,7 @@ async fn main() -> Result<()> {
                 if let Some(current_version) = &package.current_version {
                     if current_version != &prerelease_version {
                         // 检查是否是预发布版本
-                        if prerelease_version.contains("alpha")
-                            || prerelease_version.contains("beta")
-                            || prerelease_version.contains("rc")
-                        {
+                        if !is_stable_version(&prerelease_version) {
                             package.latest_version = Some(prerelease_version);
                         }
                     }
@@ -457,28 +434,18 @@ async fn main() -> Result<()> {
     let stable_updates: Vec<&PackageInfo> = packages
         .iter()
         .filter(|p| {
-            if let Some(latest) = &p.latest_version {
-                !latest.contains("alpha")
-                    && !latest.contains("beta")
-                    && !latest.contains("rc")
-                    && p.has_update()
-            } else {
-                false
-            }
+            p.has_update()
+                && p.latest_version
+                    .as_ref()
+                    .map(|v| is_stable_version(v))
+                    .unwrap_or(false)
         })
         .collect();
 
     // 获取预发布版本更新的包
     let prerelease_updates: Vec<&PackageInfo> = packages
         .iter()
-        .filter(|p| {
-            if let Some(latest) = &p.latest_version {
-                (latest.contains("alpha") || latest.contains("beta") || latest.contains("rc"))
-                    && p.has_update()
-            } else {
-                false
-            }
-        })
+        .filter(|p| p.has_update() && p.is_prerelease())
         .collect();
 
     // 合并所有更新
