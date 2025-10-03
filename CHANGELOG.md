@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2024-12-19
+
+### Added
+
+- 添加自动 Release 和 Crates.io 发布功能
+- 创建 GitHub Action 自动生成 Release
+- 添加智能 changelog 生成，支持 emoji 格式化
+- 集成 Crates.io 自动发布功能
+- 添加代码质量检查 (测试、格式化、clippy)
+- 支持缓存优化构建速度
+
+### Changed
+
+- 优化发布流程，实现完全自动化
+- 每次推送标签时自动创建 Release 并发布到 crates.io
+
 ## [0.5.0] - 2024-12-19
 
 ### Added
