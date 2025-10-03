@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.6.6] - 2024-12-19
+
+### Changed
+
+- 分离 GitHub Action 工作流
+- 将 release.yml 改为专门负责 crates.io 发布
+- 创建 github-release.yml 专门负责 GitHub Release 创建
+- 分离关注点，提高工作流的可维护性
+- release.yml: 负责代码质量检查 + crates.io 发布
+- github-release.yml: 负责 GitHub Release 创建
+
 ## [0.6.5] - 2024-12-19
 
 ### Fixed
