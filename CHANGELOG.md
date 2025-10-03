@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+## [0.6.10] - 2024-12-19
+
+### Improved
+
+- 优化代码结构和可读性
+- 提取公共函数，减少代码重复
+- 改进导入语句组织
+- 统一进度条创建逻辑
+- 简化版本信息格式化
+- 提高代码维护性
+
+### Added
+
+- 新增 `parse_package_line()` 函数用于解析包信息
+- 新增 `create_progress_bar()` 和 `create_main_progress_bar()` 函数
+- 新增 `format_version_info()` 函数统一版本信息显示
+- 新增常量 `PROGRESS_TICK_MS` 和 `PROGRESS_BAR_WIDTH`
+
 ## [0.6.9] - 2024-12-19
 
 ### Fixed

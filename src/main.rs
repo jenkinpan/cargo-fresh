@@ -4,12 +4,15 @@ use colored::*;
 use dialoguer::{Confirm, MultiSelect};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::process::Command;
+use std::collections::HashSet;
 
 // 常量定义
 const PRERELEASE_KEYWORDS: &[&str] = &["alpha", "beta", "rc"];
 const MAX_RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY_MS: u64 = 2000;
 const VERSION_UPDATE_DELAY_MS: u64 = 1000;
+const PROGRESS_TICK_MS: u64 = 100;
+const PROGRESS_BAR_WIDTH: usize = 40;
 
 #[derive(Parser)]
 #[command(name = "pkg-checker")]
@@ -81,32 +84,83 @@ async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
 
     let output_str = String::from_utf8(output.stdout)?;
     let mut packages = Vec::new();
-    let mut seen_packages = std::collections::HashSet::new();
+    let mut seen_packages = HashSet::new();
 
     for line in output_str.lines() {
-        // 解析格式: "package_name v0.1.0:"
-        if line.contains(" v") && line.contains(":") {
-            let parts: Vec<&str> = line.split(" v").collect();
-            if parts.len() == 2 {
-                let package_name = parts[0].trim();
-                let version_part = parts[1].split(':').next().unwrap_or("");
-                let version = version_part.trim();
-
-                if !package_name.is_empty()
-                    && !version.is_empty()
-                    && seen_packages.insert(package_name)
-                {
-                    packages.push(PackageInfo {
-                        name: package_name.to_string(),
-                        current_version: Some(version.to_string()),
-                        latest_version: None,
-                    });
-                }
+        if let Some((name, version)) = parse_package_line(line) {
+            if !name.is_empty() && !version.is_empty() && seen_packages.insert(name) {
+                packages.push(PackageInfo {
+                    name: name.to_string(),
+                    current_version: Some(version.to_string()),
+                    latest_version: None,
+                });
             }
         }
     }
 
     Ok(packages)
+}
+
+fn parse_package_line(line: &str) -> Option<(&str, &str)> {
+    if !line.contains(" v") || !line.contains(":") {
+        return None;
+    }
+    
+    let parts: Vec<&str> = line.split(" v").collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    
+    let package_name = parts[0].trim();
+    let version_part = parts[1].split(':').next()?.trim();
+    
+    if package_name.is_empty() || version_part.is_empty() {
+        return None;
+    }
+    
+    Some((package_name, version_part))
+}
+
+fn create_progress_bar(package_name: &str) -> ProgressBar {
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.green} {msg}")
+            .unwrap()
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+    );
+    pb.set_message(format!("正在更新 {}...", package_name.cyan()));
+    pb
+}
+
+fn create_main_progress_bar(total: usize) -> ProgressBar {
+    let pb = ProgressBar::new(total as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template(&format!("{{bar:{}.green/blue}} {{pos}}/{{len}} {{msg}}", PROGRESS_BAR_WIDTH))
+            .unwrap()
+            .progress_chars("█▉▊▋▌▍▎▏  "),
+    );
+    pb.set_message("正在更新包...");
+    pb
+}
+
+fn format_version_info(old: &Option<String>, new: &Option<String>) -> String {
+    match (old, new) {
+        (Some(old), Some(new)) if old != new => {
+            format!("{} → {}", old.red(), new.green())
+        }
+        (Some(old), Some(_)) => {
+            format!("{} (版本未改变)", old.yellow())
+        }
+        (Some(old), None) => {
+            format!("{} → 未知版本", old.red())
+        }
+        (None, Some(new)) => {
+            format!("未知版本 → {}", new.green())
+        }
+        _ => "版本信息未知".to_string(),
+    }
 }
 
 fn extract_version_from_line(line: &str) -> Option<String> {
@@ -167,15 +221,7 @@ async fn get_latest_version(
 }
 
 async fn update_package(package_name: &str, target_version: Option<&str>) -> Result<UpdateResult> {
-    // 创建进度条
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
-            .unwrap()
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-    );
-    pb.set_message(format!("正在更新 {}...", package_name.cyan()));
+    let pb = create_progress_bar(package_name);
 
     // 获取更新前的版本
     let old_version = get_installed_version(package_name).await.ok().flatten();
@@ -208,7 +254,7 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
         }
 
         // 启动进度条
-        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
 
         let output = Command::new("cargo")
             .args(&args)
@@ -319,12 +365,9 @@ async fn get_installed_version(package_name: &str) -> Result<Option<String>> {
     let output_str = String::from_utf8(output.stdout)?;
 
     for line in output_str.lines() {
-        if line.contains(package_name) && line.contains(" v") && line.contains(":") {
-            let parts: Vec<&str> = line.split(" v").collect();
-            if parts.len() == 2 {
-                let version_part = parts[1].split(':').next().unwrap_or("");
-                let version = version_part.trim();
-                if !version.is_empty() {
+        if line.contains(package_name) {
+            if let Some((name, version)) = parse_package_line(line) {
+                if name == package_name {
                     return Ok(Some(version.to_string()));
                 }
             }
@@ -423,40 +466,11 @@ fn print_update_summary(update_results: &[UpdateResult]) {
     if !success_updates.is_empty() {
         println!("\n{}", "✅ 成功更新的包:".green().bold());
         for result in &success_updates {
-            match (&result.old_version, &result.new_version) {
-                (Some(old), Some(new)) if old != new => {
-                    println!(
-                        "  • {}: {} → {}",
-                        result.package_name.cyan(),
-                        old.red(),
-                        new.green()
-                    );
-                }
-                (Some(old), Some(_new)) => {
-                    println!(
-                        "  • {}: {} (版本未改变)",
-                        result.package_name.cyan(),
-                        old.yellow()
-                    );
-                }
-                (Some(old), None) => {
-                    println!(
-                        "  • {}: {} → 未知版本",
-                        result.package_name.cyan(),
-                        old.red()
-                    );
-                }
-                (None, Some(new)) => {
-                    println!(
-                        "  • {}: 未知版本 → {}",
-                        result.package_name.cyan(),
-                        new.green()
-                    );
-                }
-                _ => {
-                    println!("  • {}: 版本信息未知", result.package_name.cyan());
-                }
-            }
+            println!(
+                "  • {}: {}",
+                result.package_name.cyan(),
+                format_version_info(&result.old_version, &result.new_version)
+            );
         }
     }
 
@@ -654,14 +668,7 @@ async fn main() -> Result<()> {
                 let total_packages = selections.len();
 
                 // 创建整体进度条
-                let main_pb = ProgressBar::new(total_packages as u64);
-                main_pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("{bar:40.green/blue} {pos}/{len} {msg}")
-                        .unwrap()
-                        .progress_chars("█▉▊▋▌▍▎▏  "),
-                );
-                main_pb.set_message("正在更新包...");
+                let main_pb = create_main_progress_bar(total_packages);
 
                 for (i, &index) in selections.iter().enumerate() {
                     let package_name = &package_names[index];
