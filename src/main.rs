@@ -198,10 +198,11 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
         // 停止进度条
         pb.finish_and_clear();
 
-        // 只显示错误信息，不显示正常的编译输出
+        // 检查是否有真正的错误（非编译输出）
         let stderr = String::from_utf8_lossy(&output.stderr);
-
-        if !stderr.is_empty() {
+        
+        // 只有在命令失败时才显示错误信息
+        if !output.status.success() && !stderr.is_empty() {
             pb.println(format!("错误信息: {}", stderr));
         }
 
