@@ -6,7 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::process::Command;
 
 #[derive(Parser)]
-#[command(name = "cargo-update")]
+#[command(name = "pkg-checker")]
 #[command(about = "检查全局安装的Cargo包更新")]
 #[command(version)]
 struct Cli {
