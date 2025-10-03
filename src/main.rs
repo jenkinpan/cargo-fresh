@@ -3,8 +3,8 @@ use clap::{CommandFactory, Parser};
 use colored::*;
 use dialoguer::{Confirm, MultiSelect};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::process::Command;
 use std::collections::HashSet;
+use std::process::Command;
 
 // 常量定义
 const PRERELEASE_KEYWORDS: &[&str] = &["alpha", "beta", "rc"];
@@ -105,19 +105,19 @@ fn parse_package_line(line: &str) -> Option<(&str, &str)> {
     if !line.contains(" v") || !line.contains(":") {
         return None;
     }
-    
+
     let parts: Vec<&str> = line.split(" v").collect();
     if parts.len() != 2 {
         return None;
     }
-    
+
     let package_name = parts[0].trim();
     let version_part = parts[1].split(':').next()?.trim();
-    
+
     if package_name.is_empty() || version_part.is_empty() {
         return None;
     }
-    
+
     Some((package_name, version_part))
 }
 
@@ -137,7 +137,10 @@ fn create_main_progress_bar(total: usize) -> ProgressBar {
     let pb = ProgressBar::new(total as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template(&format!("{{bar:{}.green/blue}} {{pos}}/{{len}} {{msg}}", PROGRESS_BAR_WIDTH))
+            .template(&format!(
+                "{{bar:{}.green/blue}} {{pos}}/{{len}} {{msg}}",
+                PROGRESS_BAR_WIDTH
+            ))
             .unwrap()
             .progress_chars("█▉▊▋▌▍▎▏  "),
     );
