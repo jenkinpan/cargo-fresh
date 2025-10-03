@@ -12,6 +12,8 @@ jobs:
     environment: release # Optional: for enhanced security
     permissions:
       id-token: write # Required for OIDC token exchange
+      contents: write # Required for creating releases
+      pull-requests: write # Required for release operations
 
     steps:
       - name: Checkout code
@@ -129,6 +131,8 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clean working directory
         run: |
