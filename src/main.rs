@@ -200,7 +200,7 @@ async fn update_package(package_name: &str, target_version: Option<&str>) -> Res
 
         // 检查是否有真正的错误（非编译输出）
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
+
         // 只有在命令失败时才显示错误信息
         if !output.status.success() && !stderr.is_empty() {
             pb.println(format!("错误信息: {}", stderr));

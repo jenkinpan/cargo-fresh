@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2024-12-19
+
+### Fixed
+
+- 修复 cargo install 编译输出显示问题
+- 只有在命令失败时才显示 stderr 作为错误信息
+- 成功时不再显示正常的编译输出
+- 避免将正常的编译过程误报为错误
+
+## [0.4.0] - 2024-12-19
+
+### Added
+
+- 添加 Shell 补全支持 (zsh, bash, fish, powershell, elvish)
+- 添加 `--completion` 参数生成补全脚本
+- 添加智能安装脚本 `install_completion.sh`
+- 支持自动检测 shell 类型并安装补全
+- 添加详细的补全安装说明
+
+### Changed
+
+- 版本升级到 0.4.0
+- 优化补全安装体验
+
 ## [0.3.0] - 2024-12-19
 
 ### Added
