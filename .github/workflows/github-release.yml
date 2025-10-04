@@ -97,7 +97,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.changelog.outputs.current_tag }}
-          name: pkg-checker ${{ steps.changelog.outputs.current_tag }} - 自动发布
+          name: pkg-checker ${{ steps.changelog.outputs.current_tag }}
           body_path: release_notes.md
           draft: false
           prerelease: false
