@@ -123,15 +123,22 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
+          echo "GitHub event inputs: ${{ github.event.inputs }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref name: ${{ github.ref_name }}"
+          
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
+            echo "Using input version: $VERSION"
           elif [[ "${{ github.ref }}" =~ ^refs/tags/v ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
+            echo "Using tag version: $VERSION"
           else
             VERSION="0.1.0"
+            echo "Using default version: $VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          echo "Final extracted version: $VERSION"
 
       - name: Checkout tap repository
         uses: actions/checkout@v4
@@ -201,18 +208,18 @@ jobs:
           cd homebrew-tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           # Configure Git to use SSH for GitHub
           git config --local url."git@github.com:".insteadOf "https://github.com/"
-          
+
           git add Formula/pkg-checker.rb
           git commit -m "chore: update pkg-checker to v${{ steps.version.outputs.version }}" || echo "No changes to commit"
-          
+
           # Check current branch and remote branches
           echo "Current branch: $(git branch --show-current)"
           echo "Remote branches:"
           git branch -r
-          
+
           # Try to push to master (since that's the only branch)
           echo "Attempting to push to master..."
           if git push origin master; then
