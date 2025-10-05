@@ -108,17 +108,68 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Trigger Homebrew Tap Update
-        uses: peter-evans/repository-dispatch@v2
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
         with:
-          token: ${{ secrets.TAP_GITHUB_TOKEN }}
           repository: jenkinpan/homebrew-tap
-          event-type: update-pkg-checker
-          client-payload: |
-            {
-              "version": "${{ steps.version.outputs.version }}",
-              "sha256_arm64_macos": "${{ steps.sha256.outputs.arm64_macos }}",
-              "sha256_x86_64_macos": "${{ steps.sha256.outputs.x86_64_macos }}",
-              "sha256_arm64_linux": "${{ steps.sha256.outputs.arm64_linux }}",
-              "sha256_x86_64_linux": "${{ steps.sha256.outputs.x86_64_linux }}"
-            }
+          ssh-key: ${{ secrets.TAP_DEPLOY_KEY }}
+          path: homebrew-tap
+
+      - name: Update formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256_ARM64_MACOS: ${{ steps.sha256.outputs.arm64_macos }}
+          SHA256_X86_64_MACOS: ${{ steps.sha256.outputs.x86_64_macos }}
+          SHA256_ARM64_LINUX: ${{ steps.sha256.outputs.arm64_linux }}
+          SHA256_X86_64_LINUX: ${{ steps.sha256.outputs.x86_64_linux }}
+        run: |
+          cd homebrew-tap
+          cat > Formula/pkg-checker.rb << 'EOF'
+          class PkgChecker < Formula
+            desc "Rust tool for checking and updating globally installed Cargo packages with interactive mode"
+            homepage "https://github.com/jenkinpan/pkg-checker-rs"
+            version "VERSION_PLACEHOLDER"
+            license "MIT"
+
+            if OS.mac?
+              if Hardware::CPU.arm?
+                url "https://github.com/jenkinpan/pkg-checker-rs/releases/download/vVERSION_PLACEHOLDER/pkg-checker-aarch64-apple-darwin.tar.gz"
+                sha256 "SHA256_ARM64_MACOS_PLACEHOLDER"
+              else
+                url "https://github.com/jenkinpan/pkg-checker-rs/releases/download/vVERSION_PLACEHOLDER/pkg-checker-x86_64-apple-darwin.tar.gz"
+                sha256 "SHA256_X86_64_MACOS_PLACEHOLDER"
+              end
+            elsif OS.linux?
+              if Hardware::CPU.arm?
+                url "https://github.com/jenkinpan/pkg-checker-rs/releases/download/vVERSION_PLACEHOLDER/pkg-checker-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "SHA256_ARM64_LINUX_PLACEHOLDER"
+              else
+                url "https://github.com/jenkinpan/pkg-checker-rs/releases/download/vVERSION_PLACEHOLDER/pkg-checker-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "SHA256_X86_64_LINUX_PLACEHOLDER"
+              end
+            end
+
+            def install
+              bin.install "pkg-checker"
+            end
+
+            test do
+              assert_match "pkg-checker VERSION_PLACEHOLDER", shell_output("#{bin}/pkg-checker --version")
+            end
+          end
+          EOF
+
+          sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" Formula/pkg-checker.rb
+          sed -i "s/SHA256_ARM64_MACOS_PLACEHOLDER/$SHA256_ARM64_MACOS/g" Formula/pkg-checker.rb
+          sed -i "s/SHA256_X86_64_MACOS_PLACEHOLDER/$SHA256_X86_64_MACOS/g" Formula/pkg-checker.rb
+          sed -i "s/SHA256_ARM64_LINUX_PLACEHOLDER/$SHA256_ARM64_LINUX/g" Formula/pkg-checker.rb
+          sed -i "s/SHA256_X86_64_LINUX_PLACEHOLDER/$SHA256_X86_64_LINUX/g" Formula/pkg-checker.rb
+
+      - name: Commit and push changes
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/pkg-checker.rb
+          git commit -m "chore: update pkg-checker to v${{ steps.version.outputs.version }}" || echo "No changes to commit"
+          git push origin main || git push origin master
