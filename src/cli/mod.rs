@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use clap_complete_nushell::Nushell;
 
@@ -32,40 +32,49 @@ pub enum Commands {
     /// 生成 shell 补全脚本
     Completion {
         /// 要生成补全脚本的 shell
-        shell: String,
+        #[arg(value_enum)]
+        shell: ShellType,
     },
 }
 
-impl Cli {
-    pub fn generate_completion(shell: String) {
-        let mut cmd = Cli::command();
-        let shell = shell.to_lowercase();
+#[derive(Clone, ValueEnum)]
+pub enum ShellType {
+    /// Bash shell
+    Bash,
+    /// Zsh shell
+    Zsh,
+    /// Fish shell
+    Fish,
+    /// PowerShell
+    Powershell,
+    /// Elvish shell
+    Elvish,
+    /// Nushell
+    Nushell,
+}
 
-        match shell.as_str() {
-            "bash" => {
+impl Cli {
+    pub fn generate_completion(shell: ShellType) {
+        let mut cmd = Cli::command();
+
+        match shell {
+            ShellType::Bash => {
                 generate(Shell::Bash, &mut cmd, "pkg-checker", &mut std::io::stdout());
             }
-            "zsh" => {
+            ShellType::Zsh => {
                 generate(Shell::Zsh, &mut cmd, "pkg-checker", &mut std::io::stdout());
             }
-            "fish" => {
+            ShellType::Fish => {
                 generate(Shell::Fish, &mut cmd, "pkg-checker", &mut std::io::stdout());
             }
-            "powershell" => {
+            ShellType::Powershell => {
                 generate(Shell::PowerShell, &mut cmd, "pkg-checker", &mut std::io::stdout());
             }
-            "elvish" => {
+            ShellType::Elvish => {
                 generate(Shell::Elvish, &mut cmd, "pkg-checker", &mut std::io::stdout());
             }
-            "nushell" | "nu" => {
+            ShellType::Nushell => {
                 generate(Nushell, &mut cmd, "pkg-checker", &mut std::io::stdout());
-            }
-            _ => {
-                eprintln!(
-                    "不支持的 shell: {}. 支持的 shell: bash, zsh, fish, powershell, elvish, nushell",
-                    shell
-                );
-                std::process::exit(1);
             }
         }
     }
