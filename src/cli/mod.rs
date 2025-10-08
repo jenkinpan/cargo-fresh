@@ -1,4 +1,5 @@
 use clap::{CommandFactory, Parser};
+use clap_complete::{generate, Shell};
 
 #[derive(Parser)]
 #[command(name = "pkg-checker")]
@@ -32,11 +33,11 @@ impl Cli {
         let shell = shell.to_lowercase();
 
         let shell_type = match shell.as_str() {
-            "bash" => clap_complete::Shell::Bash,
-            "zsh" => clap_complete::Shell::Zsh,
-            "fish" => clap_complete::Shell::Fish,
-            "powershell" => clap_complete::Shell::PowerShell,
-            "elvish" => clap_complete::Shell::Elvish,
+            "bash" => Shell::Bash,
+            "zsh" => Shell::Zsh,
+            "fish" => Shell::Fish,
+            "powershell" => Shell::PowerShell,
+            "elvish" => Shell::Elvish,
             _ => {
                 eprintln!(
                     "不支持的 shell: {}. 支持的 shell: bash, zsh, fish, powershell, elvish",
@@ -46,6 +47,6 @@ impl Cli {
             }
         };
 
-        clap_complete::generate(shell_type, &mut cmd, "pkg-checker", &mut std::io::stdout());
+        generate(shell_type, &mut cmd, "pkg-checker", &mut std::io::stdout());
     }
 }
