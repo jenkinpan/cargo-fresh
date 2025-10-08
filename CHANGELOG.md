@@ -7,6 +7,50 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2025-01-05
+
+### Added
+
+- 添加 nushell 补全支持
+- 新增 clap_complete_nushell 依赖
+- 支持 6 种 shell 补全：bash, zsh, fish, powershell, elvish, nushell
+- 更新补全功能使用说明文档
+
+### Changed
+
+- 改进 shell 补全功能，支持更多 shell 类型
+- 优化 CLI 模块的补全生成逻辑
+- 更新 clap_complete 到最新版本 4.5.58
+
+### Fixed
+
+- 修复 nushell 补全生成问题
+- 改进错误提示信息
+
+## [0.8.0] - 2025-01-05
+
+### Major Release
+
+- 模块化重构 - 将单一 main.rs 拆分为多个功能模块
+- 提高代码可维护性和可扩展性
+- 保持所有原有功能不变
+- 代码结构更清晰，便于后续开发
+
+### Added
+
+- 创建 cli 模块处理命令行参数和补全生成
+- 创建 models 模块定义数据结构和常量
+- 创建 package 模块处理包管理和版本查询
+- 创建 updater 模块处理包更新功能
+- 创建 display 模块处理用户界面和结果显示
+- 重构 main.rs 为协调器，代码从 748 行减少到 180 行
+
+### Changed
+
+- 模块化架构，每个模块职责单一
+- 提高代码可维护性和可扩展性
+- 便于团队协作和后续功能开发
+
 ## [0.7.0] - 2024-12-19
 
 ### Major Release
@@ -239,7 +283,25 @@
 - 支持批量更新包
 - 支持命令行参数配置
 
-[Unreleased]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.10...v0.7.0
+[0.6.10]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.9...v0.6.10
+[0.6.9]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.8...v0.6.9
+[0.6.8]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.7...v0.6.8
+[0.6.7]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.6...v0.6.7
+[0.6.6]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.5...v0.6.6
+[0.6.5]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.4...v0.6.5
+[0.6.4]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.4.2...v0.5.0
+[0.4.2]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.4.1...v0.4.2
+[0.4.1]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jenkinpan/pkg-checker-rs/releases/tag/v0.1.0
