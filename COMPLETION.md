@@ -9,6 +9,7 @@
 - **fish** - Fish shell 补全
 - **powershell** - PowerShell 补全
 - **elvish** - Elvish shell 补全
+- **nushell** - Nushell 补全
 
 ## 使用方法
 
@@ -29,6 +30,9 @@ pkg-checker --completion powershell > pkg-checker.ps1
 
 # 生成 elvish 补全脚本
 pkg-checker --completion elvish > pkg-checker.elv
+
+# 生成 nushell 补全脚本
+pkg-checker --completion nushell > pkg-checker.nu
 ```
 
 ### 安装补全脚本
@@ -69,6 +73,16 @@ cp pkg-checker.fish ~/.config/fish/completions/
 # 复制到 elvish 配置目录
 mkdir -p ~/.config/elvish/lib
 cp pkg-checker.elv ~/.config/elvish/lib/
+```
+
+#### Nushell
+```bash
+# 复制到 nushell 配置目录
+mkdir -p ~/.config/nushell/completions
+cp pkg-checker.nu ~/.config/nushell/completions/
+
+# 或者在 config.nu 中手动加载
+# source ~/.config/nushell/completions/pkg-checker.nu
 ```
 
 ## 补全功能

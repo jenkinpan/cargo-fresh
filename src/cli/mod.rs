@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
+use clap_complete_nushell::Nushell;
 
 #[derive(Parser)]
 #[command(name = "pkg-checker")]
@@ -32,21 +33,32 @@ impl Cli {
         let mut cmd = Cli::command();
         let shell = shell.to_lowercase();
 
-        let shell_type = match shell.as_str() {
-            "bash" => Shell::Bash,
-            "zsh" => Shell::Zsh,
-            "fish" => Shell::Fish,
-            "powershell" => Shell::PowerShell,
-            "elvish" => Shell::Elvish,
+        match shell.as_str() {
+            "bash" => {
+                generate(Shell::Bash, &mut cmd, "pkg-checker", &mut std::io::stdout());
+            }
+            "zsh" => {
+                generate(Shell::Zsh, &mut cmd, "pkg-checker", &mut std::io::stdout());
+            }
+            "fish" => {
+                generate(Shell::Fish, &mut cmd, "pkg-checker", &mut std::io::stdout());
+            }
+            "powershell" => {
+                generate(Shell::PowerShell, &mut cmd, "pkg-checker", &mut std::io::stdout());
+            }
+            "elvish" => {
+                generate(Shell::Elvish, &mut cmd, "pkg-checker", &mut std::io::stdout());
+            }
+            "nushell" | "nu" => {
+                generate(Nushell, &mut cmd, "pkg-checker", &mut std::io::stdout());
+            }
             _ => {
                 eprintln!(
-                    "不支持的 shell: {}. 支持的 shell: bash, zsh, fish, powershell, elvish",
+                    "不支持的 shell: {}. 支持的 shell: bash, zsh, fish, powershell, elvish, nushell",
                     shell
                 );
                 std::process::exit(1);
             }
-        };
-
-        generate(shell_type, &mut cmd, "pkg-checker", &mut std::io::stdout());
+        }
     }
 }
