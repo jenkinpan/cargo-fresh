@@ -100,12 +100,38 @@ cp pkg-checker.nu ~/.config/nushell/completions/
 ```bash
 # 输入 pkg-checker 后按 Tab 键
 pkg-checker <TAB>
-# 会显示所有可用选项
+# 会显示: completion  help
 
-# 输入部分参数后按 Tab 键
+# 输入 completion 后按 Tab 键
 pkg-checker completion <TAB>
-# 会显示支持的 shell 列表
+# 会显示: bash  zsh  fish  powershell  elvish  nushell
 ```
+
+## 测试补全功能
+
+### 测试步骤
+
+1. **安装补全脚本** - 按照上面的安装说明安装对应 shell 的补全脚本
+2. **重新启动终端** - 或者重新加载 shell 配置
+3. **测试主命令补全**:
+   ```bash
+   pkg-checker <TAB>
+   # 应该显示: completion  help
+   ```
+4. **测试子命令补全**:
+   ```bash
+   pkg-checker completion <TAB>
+   # 应该显示: bash  zsh  fish  powershell  elvish  nushell
+   ```
+
+### 故障排除
+
+如果补全不工作，请检查：
+
+1. **补全脚本是否正确安装** - 确认文件在正确的位置
+2. **shell 配置是否正确** - 确认补全脚本被正确加载
+3. **是否需要重新启动终端** - 某些 shell 需要重启才能生效
+4. **检查 shell 版本** - 确保 shell 版本支持补全功能
 
 ## 注意事项
 
