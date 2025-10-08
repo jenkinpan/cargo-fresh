@@ -17,22 +17,22 @@
 
 ```bash
 # 生成 bash 补全脚本
-pkg-checker --completion bash > pkg-checker.bash
+pkg-checker completion bash > pkg-checker.bash
 
 # 生成 zsh 补全脚本
-pkg-checker --completion zsh > _pkg-checker
+pkg-checker completion zsh > _pkg-checker
 
 # 生成 fish 补全脚本
-pkg-checker --completion fish > pkg-checker.fish
+pkg-checker completion fish > pkg-checker.fish
 
 # 生成 PowerShell 补全脚本
-pkg-checker --completion powershell > pkg-checker.ps1
+pkg-checker completion powershell > pkg-checker.ps1
 
 # 生成 elvish 补全脚本
-pkg-checker --completion elvish > pkg-checker.elv
+pkg-checker completion elvish > pkg-checker.elv
 
 # 生成 nushell 补全脚本
-pkg-checker --completion nushell > pkg-checker.nu
+pkg-checker completion nushell > pkg-checker.nu
 ```
 
 ### 安装补全脚本
@@ -103,7 +103,7 @@ pkg-checker <TAB>
 # 会显示所有可用选项
 
 # 输入部分参数后按 Tab 键
-pkg-checker --completion <TAB>
+pkg-checker completion <TAB>
 # 会显示支持的 shell 列表
 ```
 

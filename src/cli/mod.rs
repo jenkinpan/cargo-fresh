@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use clap_complete_nushell::Nushell;
 
@@ -23,9 +23,17 @@ pub struct Cli {
     #[arg(long)]
     pub include_prerelease: bool,
 
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
     /// 生成 shell 补全脚本
-    #[arg(long, value_name = "SHELL")]
-    pub completion: Option<String>,
+    Completion {
+        /// 要生成补全脚本的 shell
+        shell: String,
+    },
 }
 
 impl Cli {

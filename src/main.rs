@@ -10,7 +10,7 @@ mod package;
 mod updater;
 
 // 导入模块
-use cli::Cli;
+use cli::{Cli, Commands};
 use display::{print_results, print_update_selection, print_update_summary};
 use models::{PackageInfo, UpdateResult};
 use package::{
@@ -22,10 +22,14 @@ use updater::{create_main_progress_bar, update_package};
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // 处理 shell 补全生成
-    if let Some(shell) = cli.completion {
-        Cli::generate_completion(shell);
-        return Ok(());
+    // 处理子命令
+    if let Some(command) = cli.command {
+        match command {
+            Commands::Completion { shell } => {
+                Cli::generate_completion(shell);
+                return Ok(());
+            }
+        }
     }
 
     println!("{}", "检查全局安装的 Cargo 包更新...".blue().bold());
