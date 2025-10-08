@@ -133,8 +133,37 @@ pkg-checker completion <TAB>
 3. **是否需要重新启动终端** - 某些 shell 需要重启才能生效
 4. **检查 shell 版本** - 确保 shell 版本支持补全功能
 
+## 已知问题
+
+### Fish Shell 补全问题
+
+由于 clap_complete 对 fish shell 的支持限制，自动生成的 fish 补全脚本可能缺少 shell 选项补全。
+
+**解决方案：**
+
+1. **使用修复后的补全脚本**：
+   ```bash
+   # 生成修复后的 fish 补全脚本
+   cargo run -- completion fish > /tmp/pkg-checker.fish
+   
+   # 手动添加 shell 选项补全（需要手动编辑）
+   # 或者使用我们提供的修复版本
+   ```
+
+2. **手动安装修复版本**：
+   ```bash
+   # 下载修复后的补全脚本
+   # 安装到 fish 补全目录
+   cp pkg-checker-fixed.fish ~/.config/fish/completions/pkg-checker.fish
+   ```
+
+3. **其他 shell 不受影响**：
+   - bash, zsh, powershell, elvish, nushell 的补全功能完全正常
+   - 只有 fish shell 需要特殊处理
+
 ## 注意事项
 
 - 确保你的 shell 支持补全功能
 - 某些 shell 可能需要重新启动或重新加载配置
+- Fish shell 用户需要手动安装修复后的补全脚本
 - 补全脚本会随着 `pkg-checker` 的更新而更新，建议定期重新生成
