@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- 为 completion 子命令添加 shell 补全支持
+- 用户现在可以在 `pkg-checker completion` 后按 Tab 键看到支持的 shell 列表
+- 使用 clap ValueEnum 实现自动补全功能
+- 支持 6 种 shell 的智能补全：bash, zsh, fish, powershell, elvish, nushell
+
+### Changed
+
+- 将 `--completion` 参数改为 `completion` 子命令
+- 重构 CLI 结构，使用更现代的子命令设计模式
+- 改进命令行用户体验，提供更好的补全支持
+
+### Fixed
+
+- 优化补全脚本生成逻辑
+- 改进错误处理和用户提示
+
 ## [0.8.1] - 2025-10-08
 
 ### Added
