@@ -85,9 +85,9 @@ pkg-checker --include-prerelease
 pkg-checker --no-interactive --include-prerelease
 
 # 生成 shell 补全脚本
-pkg-checker --completion zsh    # 生成 zsh 补全
-pkg-checker --completion bash   # 生成 bash 补全
-pkg-checker --completion fish   # 生成 fish 补全
+pkg-checker completion zsh    # 生成 zsh 补全
+pkg-checker completion bash   # 生成 bash 补全
+pkg-checker completion fish   # 生成 fish 补全
 ```
 
 ## 输出示例
