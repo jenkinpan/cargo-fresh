@@ -40,8 +40,8 @@ cargo install cargo-fresh
 
 ```bash
 # Clone the repository
-git clone https://github.com/jenkinpan/pkg-checker-rs.git
-cd pkg-checker-rs
+git clone https://github.com/jenkinpan/cargo-fresh.git
+cd cargo-fresh
 
 # Build and install
 cargo install --path .
@@ -50,7 +50,7 @@ cargo install --path .
 ### Install from GitHub
 
 ```bash
-cargo install --git https://github.com/jenkinpan/pkg-checker-rs.git
+cargo install --git https://github.com/jenkinpan/cargo-fresh.git
 ```
 
 ## Language Support
