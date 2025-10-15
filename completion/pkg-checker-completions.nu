@@ -1,6 +1,6 @@
-module pkg-checker-completions {
+module cargo-fresh-completions {
   # check for updates to globally installed Cargo packages
-  export extern "pkg-checker" [
+  export extern "cargo-fresh" [
     --verbose (-v) # show detailed information
     --updates-only (-u) # only show packages with available updates
     --no-interactive # not interactive mode (default: interactive mode)
@@ -10,15 +10,15 @@ module pkg-checker-completions {
     ...args: string
   ]
 
-  def "nu-complete pkg-checker completion shell" [] {
+  def "nu-complete cargo-fresh completion shell" [] {
     ["bash" "zsh" "fish" "powershell" "elvish" "nushell"]
   }
 
   # generate shell completion scripts
-  export extern "pkg-checker completion" [
-    shell: string@"nu-complete pkg-checker completion shell"
+  export extern "cargo-fresh completion" [
+    shell: string@"nu-complete cargo-fresh completion shell"
     --help (-h) # Print help (see more with '--help')
   ]
 }
 
-export use pkg-checker-completions *
+export use cargo-fresh-completions *

@@ -1,221 +1,287 @@
-# pkg-checker
+# cargo-fresh
 
-[![Crates.io](https://img.shields.io/crates/v/pkg-checker.svg)](https://crates.io/crates/pkg-checker)
+[![Crates.io](https://img.shields.io/crates/v/cargo-fresh.svg)](https://crates.io/crates/cargo-fresh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-一个用 Rust 编写的工具，用于检查和管理全局安装的 Cargo 包更新。支持交互式更新、智能预发布版本检测和彩色输出。
+<div align="center">
 
-## 功能特性
+**Language / 语言**
 
-- 🔍 自动检测已安装的全局 Cargo 包
-- 📦 检查每个包的最新版本
-- 🎨 彩色输出，清晰显示更新状态
-- ⚡ 异步处理，快速检查多个包
-- 🛠️ 命令行参数支持，灵活使用
-- 🔄 默认交互式更新模式，一键更新包
-- 🧠 智能预发布版本检测和询问
+[![English](https://img.shields.io/badge/English-Current-blue?style=for-the-badge)](README.md) [![中文](https://img.shields.io/badge/中文-中文版-green?style=for-the-badge)](README.zh.md)
 
-## 安装
+</div>
 
-### 从 crates.io 安装（推荐）
+---
+
+A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection. After installation, you can use it via the `cargo fresh` command. The tool automatically detects your system language and displays the interface in Chinese or English accordingly.
+
+## Features
+
+- 🔍 Automatically detect globally installed Cargo packages
+- 📦 Check for the latest version of each package
+- 🎨 Colored output with clear update status display
+- ⚡ Asynchronous processing for fast checking of multiple packages
+- 🛠️ Command-line argument support for flexible usage
+- 🔄 Default interactive update mode with one-click package updates
+- 🧠 Smart prerelease version detection and prompting
+- 🌍 Automatic language detection (Chinese/English)
+- 🚀 Cargo subcommand support (`cargo fresh`)
+- 🌐 Bilingual interface with smart language switching
+
+## Installation
+
+### Install from crates.io (Recommended)
 
 ```bash
-cargo install pkg-checker
+cargo install cargo-fresh
 ```
 
-### 从源码安装
+### Install from source
 
 ```bash
-# 克隆项目
-git clone https://github.com/your-username/pkg-checker.git
-cd pkg-checker
+# Clone the repository
+git clone https://github.com/jenkinpan/pkg-checker-rs.git
+cd pkg-checker-rs
 
-# 构建并安装
+# Build and install
 cargo install --path .
 ```
 
-### 从 GitHub 安装
+### Install from GitHub
 
 ```bash
-cargo install --git https://github.com/your-username/pkg-checker.git
+cargo install --git https://github.com/jenkinpan/pkg-checker-rs.git
 ```
 
-## 使用方法
+## Language Support
 
-### 基本使用
+The tool automatically detects your system language and displays the interface accordingly:
+
+- **Chinese Environment**: Automatically displays Chinese interface
+- **English Environment**: Automatically displays English interface
+- **Language Detection**: Based on system environment variables (LANG, LC_ALL, LC_CTYPE)
+
+You can also manually override the language by setting environment variables:
 
 ```bash
-pkg-checker
+# Force English interface
+LANG=en_US.UTF-8 cargo fresh
+
+# Force Chinese interface  
+LANG=zh_CN.UTF-8 cargo fresh
 ```
 
-### 命令行选项
+## Usage
 
-- `-v, --verbose`: 显示详细信息
-- `-u, --updates-only`: 只显示有更新的包
-- `--no-interactive`: 非交互模式（默认是交互模式）
-- `--include-prerelease`: 包含预发布版本（alpha、beta、rc 等）
-- `-h, --help`: 显示帮助信息
-- `-V, --version`: 显示版本信息
+### Basic Usage
 
-### 示例
+After installation, you can use it in two ways:
 
 ```bash
-# 检查所有包并显示详细信息
-pkg-checker --verbose
+# Method 1: As a cargo subcommand (recommended)
+cargo fresh
 
-# 只显示有更新的包
-pkg-checker --updates-only
-
-# 组合使用
-pkg-checker --verbose --updates-only
-
-# 默认交互模式（推荐）
-pkg-checker
-
-# 只显示有更新的包（交互模式）
-pkg-checker --updates-only
-
-# 非交互模式
-pkg-checker --no-interactive
-
-# 包含预发布版本检查（交互模式）
-pkg-checker --include-prerelease
-
-# 非交互模式 + 预发布版本
-pkg-checker --no-interactive --include-prerelease
-
-# 生成 shell 补全脚本
-pkg-checker completion zsh    # 生成 zsh 补全
-pkg-checker completion bash   # 生成 bash 补全
-pkg-checker completion fish   # 生成 fish 补全
+# Method 2: Direct invocation
+cargo-fresh
 ```
 
-## 输出示例
+### Command Line Options
 
-### 交互模式（默认）
+- `-v, --verbose`: Show detailed information
+- `-u, --updates-only`: Show only packages with updates
+- `--no-interactive`: Non-interactive mode (default is interactive mode)
+- `--include-prerelease`: Include prerelease versions (alpha, beta, rc, etc.)
+- `-h, --help`: Show help information
+- `-V, --version`: Show version information
+
+### Examples
+
+```bash
+# Check all packages and show detailed information
+cargo fresh --verbose
+
+# Show only packages with updates
+cargo fresh --updates-only
+
+# Combine options
+cargo fresh --verbose --updates-only
+
+# Default interactive mode (recommended)
+cargo fresh
+
+# Show only packages with updates (interactive mode)
+cargo fresh --updates-only
+
+# Non-interactive mode
+cargo fresh --no-interactive
+
+# Include prerelease version checks (interactive mode)
+cargo fresh --include-prerelease
+
+# Non-interactive mode + prerelease versions
+cargo fresh --no-interactive --include-prerelease
+
+# Generate shell completion scripts
+cargo fresh completion zsh    # Generate zsh completion
+cargo fresh completion bash   # Generate bash completion
+cargo fresh completion fish   # Generate fish completion
+
+# Generate cargo fresh subcommand completion
+cargo fresh completion zsh --cargo-fresh    # Generate cargo fresh zsh completion
+cargo fresh completion bash --cargo-fresh   # Generate cargo fresh bash completion
+```
+
+## Output Examples
+
+### Interactive Mode (Default)
 
 ```text
-检查全局安装的 Cargo 包更新...
-找到 5 个已安装的包
+Checking for updates to globally installed Cargo packages...
+Found 5 installed packages
 
-检测到以下包有更新:
-稳定版本更新:
+The following packages have updates available:
+Stable version updates:
   • cargo-outdated (0.16.0 → 0.17.0)
   • devtool (0.2.4 → 0.2.5)
 
-预发布版本更新:
-  • mdbook (0.4.52 → 0.5.0-alpha.1) ⚠️ 预发布版本
+Prerelease version updates:
+  • mdbook (0.4.52 → 0.5.0-alpha.1) ⚠️ Prerelease version
 
-是否要更新这些包？ [Y/n]: y
-是否包含预发布版本更新？ [y/N]: n
+Do you want to update these packages? [Y/n]: y
+Include prerelease version updates? [y/N]: n
 
-选择要更新的包（使用空格选择，回车确认）
+Select packages to update (use space to select, enter to confirm)
 > [x] cargo-outdated
 > [x] devtool
 
-开始更新选中的包...
-正在更新 cargo-outdated...
-✅ cargo-outdated 已更新: 0.16.0 → 0.17.0
-正在更新 devtool...
-✅ devtool 已更新: 0.2.4 → 0.2.5
+Starting to update selected packages...
+Updating cargo-outdated...
+✅ cargo-outdated updated: 0.16.0 → 0.17.0
+Updating devtool...
+✅ devtool updated: 0.2.4 → 0.2.5
 
-更新完成！
-成功: 2 个包
+Update completed!
+Success: 2 packages
 ```
 
-### 非交互模式
+### Non-Interactive Mode
 
 ```text
-检查全局安装的 Cargo 包更新...
-找到 5 个已安装的包
-mdbook 有更新可用
-  当前版本: 0.4.52
-  最新版本: 0.5.0-alpha.1
+Checking for updates to globally installed Cargo packages...
+Found 5 installed packages
+mdbook has updates available
+  Current version: 0.4.52
+  Latest version: 0.5.0-alpha.1
 
-要更新包，请使用: cargo install --force <package_name>
-或者移除 --no-interactive 参数进行交互式更新
+To update packages, use: cargo install --force <package_name>
+Or remove --no-interactive flag for interactive updates
 ```
 
-## Shell 补全支持
+## Shell Completion Support
 
-`pkg-checker` 支持多种 shell 的自动补全功能，让命令行使用更加便捷。
+`cargo-fresh` supports automatic completion for multiple shells, making command-line usage more convenient.
 
-### 支持的 Shell
+### Supported Shells
 
-- **Zsh** - 完整的补全支持
-- **Bash** - 基础补全支持
-- **Fish** - 原生补全支持
-- **PowerShell** - Windows 补全支持
-- **Elvish** - 现代 shell 补全支持
+- **Zsh** - Full completion support
+- **Bash** - Basic completion support
+- **Fish** - Native completion support
+- **PowerShell** - Windows completion support
+- **Elvish** - Modern shell completion support
 
-### 安装补全
+### Installing Completions
 
-#### 手动安装
+#### Manual Installation
 
 ```bash
-# 1. 生成补全脚本
-pkg-checker --completion zsh > ~/.zsh_completions/pkg-checker.zsh
+# 1. Generate completion script
+cargo fresh completion zsh > ~/.zsh_completions/cargo-fresh.zsh
 
-# 2. 添加到 zsh 配置
+# 2. Add to zsh configuration
 echo 'fpath=($HOME/.zsh_completions $fpath)' >> ~/.zshrc
 echo 'autoload -U compinit && compinit' >> ~/.zshrc
 
-# 3. 重新加载配置
+# 3. Reload configuration
 source ~/.zshrc
 ```
 
-#### 其他 Shell 安装
+#### Cargo Fresh Subcommand Completion
+
+For `cargo fresh` subcommand completion:
 
 ```bash
-# Bash 补全
-pkg-checker --completion bash > ~/.bash_completions/pkg-checker.bash
-echo 'source ~/.bash_completions/pkg-checker.bash' >> ~/.bashrc
+# Generate cargo fresh subcommand completion
+cargo fresh completion zsh --cargo-fresh > cargo-fresh-completion.zsh
+cargo fresh completion bash --cargo-fresh > cargo-fresh-completion.bash
 
-# Fish 补全
-pkg-checker --completion fish > ~/.config/fish/completions/pkg-checker.fish
-
-# PowerShell 补全
-pkg-checker --completion powershell > pkg-checker.ps1
+# Install cargo fresh completion
+source cargo-fresh-completion.zsh  # For zsh
+source cargo-fresh-completion.bash # For bash
 ```
 
-### 使用方法
-
-安装完成后，在命令行中输入 `pkg-checker` 然后按 `TAB` 键即可看到自动补全选项：
+#### Other Shell Installation
 
 ```bash
-pkg-checker <TAB>
-# 显示所有可用选项：
+# Bash completion
+cargo fresh completion bash > ~/.bash_completions/cargo-fresh.bash
+echo 'source ~/.bash_completions/cargo-fresh.bash' >> ~/.bashrc
+
+# Fish completion
+cargo fresh completion fish > ~/.config/fish/completions/cargo-fresh.fish
+
+# PowerShell completion
+cargo fresh completion powershell > cargo-fresh.ps1
+```
+
+### Usage
+
+After installation, you can use auto-completion in two ways:
+
+#### Direct Command Completion
+```bash
+cargo fresh <TAB>
+# Shows all available options:
 # --completion  --help  --include-prerelease  --no-interactive
 # --updates-only  --verbose  --version
 ```
 
-## 技术特性
+#### Cargo Subcommand Completion
+```bash
+cargo <TAB>        # Shows 'fresh' as a subcommand
+cargo fresh <TAB>  # Shows all fresh options and parameters
+```
 
-- **异步处理**: 使用 Tokio 异步运行时，快速并发检查多个包
-- **智能版本检测**: 自动区分稳定版本和预发布版本
-- **交互式界面**: 用户友好的命令行交互体验
-- **彩色输出**: 美观的终端输出，清晰的状态显示
-- **错误处理**: 完善的错误处理和重试机制
-- **类型安全**: Rust 类型系统保证代码安全性
-- **进度条**: 实时显示更新进度，提升用户体验
-- **Shell 补全**: 支持多种 shell 的自动补全功能
+## Technical Features
 
-## 贡献
+- **Asynchronous Processing**: Uses Tokio async runtime for fast concurrent checking of multiple packages
+- **Smart Version Detection**: Automatically distinguishes between stable and prerelease versions
+- **Interactive Interface**: User-friendly command-line interaction experience
+- **Colored Output**: Beautiful terminal output with clear status display
+- **Error Handling**: Comprehensive error handling and retry mechanisms
+- **Type Safety**: Rust type system ensures code safety
+- **Progress Bars**: Real-time update progress display for better user experience
+- **Shell Completion**: Auto-completion support for multiple shells
+- **Language Detection**: Automatic system language detection and interface adaptation
+- **Cargo Integration**: Native cargo subcommand support for seamless workflow
+- **Bilingual Support**: Complete Chinese and English interface with smart switching
+- **Modular Architecture**: Clean, maintainable code structure with separate modules
 
-欢迎贡献代码！请遵循以下步骤：
+## Contributing
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+Contributions are welcome! Please follow these steps:
 
-## 许可证
+1. Fork the project
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Create a Pull Request
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+## License
 
-## 相关链接
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-- [Crates.io](https://crates.io/crates/pkg-checker)
-- [GitHub Repository](https://github.com/your-username/pkg-checker)
-- [Issues](https://github.com/your-username/pkg-checker/issues)
+## Related Links
+
+- [Crates.io](https://crates.io/crates/cargo-fresh)
+- [GitHub Repository](https://github.com/jenkinpan/pkg-checker-rs)
+- [Issues](https://github.com/jenkinpan/pkg-checker-rs/issues)

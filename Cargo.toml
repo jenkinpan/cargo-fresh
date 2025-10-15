@@ -1,21 +1,25 @@
 [package]
-name = "pkg-checker"
-version = "0.8.1"
+name = "cargo-fresh"
+version = "0.9.2"
 edition = "2021"
 description = "A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection"
-documentation = "https://docs.rs/pkg-checker"
+documentation = "https://docs.rs/cargo-fresh"
 readme = "README.md"
-homepage = "https://github.com/jenkinpan/pkg-checker-rs"
-repository = "https://github.com/jenkinpan/pkg-checker-rs"
+homepage = "https://github.com/jenkinpan/cargo-fresh"
+repository = "https://github.com/jenkinpan/cargo-fresh"
 license = "MIT"
 keywords = ["cargo", "manager", "package", "rust", "update"]
 categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "cargo-fresh"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.5.48", features = ["cargo", "derive"] }
 clap_complete = "4.5.58"
-clap_complete_nushell = "0.1"
+clap_complete_nushell = "4.5"
 colored = "3.0.0"
 dialoguer = "0.12.0"
 indicatif = "0.18"

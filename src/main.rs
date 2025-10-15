@@ -5,6 +5,7 @@ use colored::*;
 // 模块声明
 mod cli;
 mod display;
+mod locale;
 mod models;
 mod package;
 mod updater;
@@ -12,6 +13,7 @@ mod updater;
 // 导入模块
 use cli::{Cli, Commands};
 use display::{print_results, print_update_selection, print_update_summary};
+use locale::detect_language;
 use models::{PackageInfo, UpdateResult};
 use package::{
     check_package_updates, get_installed_packages, get_latest_version, is_stable_version,
@@ -20,28 +22,47 @@ use updater::{create_main_progress_bar, update_package};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    // 检查是否作为 cargo 子命令运行
+    let args: Vec<String> = std::env::args().collect();
+    let cli = if args.get(1) == Some(&"fresh".to_string()) {
+        // 移除 "fresh" 参数，保留其他参数
+        Cli::parse_from(args.into_iter().skip(1))
+    } else {
+        Cli::parse()
+    };
+
+    // 检测系统语言
+    let language = detect_language();
 
     // 处理子命令
     if let Some(command) = cli.command {
         match command {
-            Commands::Completion { shell } => {
-                Cli::generate_completion(shell);
+            Commands::Completion { shell, cargo_fresh } => {
+                if cargo_fresh {
+                    Cli::generate_cargo_fresh_completion(shell);
+                } else {
+                    Cli::generate_completion(shell);
+                }
                 return Ok(());
             }
         }
     }
 
-    println!("{}", "检查全局安装的 Cargo 包更新...".blue().bold());
+    println!("{}", language.get_text("checking_packages").blue().bold());
 
     let mut packages = get_installed_packages().await?;
 
     if packages.is_empty() {
-        println!("{}", "没有找到已安装的包".yellow());
+        println!("{}", language.get_text("no_packages_found").yellow());
         return Ok(());
     }
 
-    println!("找到 {} 个已安装的包", packages.len());
+    println!(
+        "{}",
+        language
+            .get_text("found_packages")
+            .replace("{}", &packages.len().to_string())
+    );
 
     // 首先检查稳定版本
     check_package_updates(&mut packages, cli.verbose, false).await?;
@@ -86,19 +107,19 @@ async fn main() -> Result<()> {
     all_updates.extend(prerelease_updates.clone());
 
     if all_updates.is_empty() {
-        println!("{}", "所有包都已是最新版本！".green().bold());
+        println!("{}", language.get_text("all_up_to_date").green().bold());
         return Ok(());
     }
 
     // 显示更新信息
-    print_results(&packages, cli.updates_only);
+    print_results(&packages, cli.updates_only, language);
 
     // 默认交互模式（除非用户指定 --no-interactive）
     if !cli.no_interactive {
-        let selections = print_update_selection(&stable_updates, &prerelease_updates)?;
+        let selections = print_update_selection(&stable_updates, &prerelease_updates, language)?;
 
         if !selections.is_empty() {
-            println!("\n{}", "开始更新选中的包...".blue().bold());
+            println!("\n{}", language.get_text("starting_update").blue().bold());
 
             let mut success_count = 0;
             let mut fail_count = 0;
@@ -117,8 +138,10 @@ async fn main() -> Result<()> {
 
                 // 更新整体进度条消息
                 main_pb.set_message(format!(
-                    "正在更新 {} ({}/{})",
-                    package_name,
+                    "{} ({}/{})",
+                    language
+                        .get_text("updating_package")
+                        .replace("{}", package_name),
                     i + 1,
                     total_packages
                 ));
@@ -135,14 +158,33 @@ async fn main() -> Result<()> {
                         update_results.push(result.clone());
                         if result.success {
                             success_count += 1;
-                            main_pb.println(format!("✅ {} 更新成功", package_name.green()));
+                            main_pb.println(format!(
+                                "✅ {} {}",
+                                package_name.green(),
+                                language
+                                    .get_text("package_updated")
+                                    .replace("{}", package_name)
+                            ));
                         } else {
                             fail_count += 1;
-                            main_pb.println(format!("❌ {} 更新失败", package_name.red()));
+                            main_pb.println(format!(
+                                "❌ {} {}",
+                                package_name.red(),
+                                language
+                                    .get_text("package_failed")
+                                    .replace("{}", package_name)
+                            ));
                         }
                     }
                     Err(e) => {
-                        main_pb.println(format!("❌ {} 更新出错: {}", package_name.red(), e));
+                        main_pb.println(format!(
+                            "❌ {} {}: {}",
+                            package_name.red(),
+                            language
+                                .get_text("package_error")
+                                .replace("{}", package_name),
+                            e
+                        ));
                         fail_count += 1;
                         update_results.push(UpdateResult::new(
                             package_name.clone(),
@@ -158,25 +200,34 @@ async fn main() -> Result<()> {
             }
 
             // 完成整体进度条
-            main_pb.finish_with_message("所有包更新完成！");
+            main_pb.finish_with_message(language.get_text("update_completed"));
 
             // 显示更新摘要
-            print_update_summary(&update_results);
+            print_update_summary(&update_results, language);
 
-            println!("\n{}", "更新完成！".green().bold());
-            println!("成功: {} 个包", success_count.to_string().green());
+            println!("\n{}", language.get_text("update_completed").green().bold());
+            println!(
+                "{}",
+                language
+                    .get_text("success_count")
+                    .replace("{}", &success_count.to_string())
+                    .green()
+            );
             if fail_count > 0 {
-                println!("失败: {} 个包", fail_count.to_string().red());
+                println!(
+                    "{}",
+                    language
+                        .get_text("fail_count")
+                        .replace("{}", &fail_count.to_string())
+                        .red()
+                );
             }
         } else {
-            println!("{}", "未选择任何包进行更新".yellow());
+            println!("{}", language.get_text("no_packages_selected").yellow());
         }
     } else {
-        println!(
-            "\n{}",
-            "要更新包，请使用: cargo install --force <package_name>".blue()
-        );
-        println!("或者移除 --no-interactive 参数进行交互式更新");
+        println!("\n{}", language.get_text("update_instructions").blue());
+        println!("{}", language.get_text("interactive_instructions"));
     }
 
     Ok(())

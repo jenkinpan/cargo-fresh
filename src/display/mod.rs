@@ -1,27 +1,55 @@
 use colored::*;
 use dialoguer::{Confirm, MultiSelect};
 
+use crate::locale::Language;
 use crate::models::{PackageInfo, UpdateResult};
 
-pub fn format_version_info(old: &Option<String>, new: &Option<String>) -> String {
+/// 格式化包版本信息
+fn format_package_version(package: &PackageInfo, language: Language) -> String {
+    let current = package
+        .current_version
+        .as_deref()
+        .unwrap_or(language.get_text("unknown"));
+    let latest = package
+        .latest_version
+        .as_deref()
+        .unwrap_or(language.get_text("unknown"));
+
+    format!(
+        "{} ({} → {})",
+        package.name.cyan(),
+        current.red(),
+        latest.green()
+    )
+}
+
+pub fn format_version_info(
+    old: &Option<String>,
+    new: &Option<String>,
+    language: Language,
+) -> String {
     match (old, new) {
         (Some(old), Some(new)) if old != new => {
             format!("{} → {}", old.red(), new.green())
         }
         (Some(old), Some(_)) => {
-            format!("{} (版本未改变)", old.yellow())
+            format!(
+                "{} ({})",
+                old.yellow(),
+                language.get_text("version_unchanged")
+            )
         }
         (Some(old), None) => {
-            format!("{} → 未知版本", old.red())
+            format!("{} → {}", old.red(), language.get_text("unknown_version"))
         }
         (None, Some(new)) => {
-            format!("未知版本 → {}", new.green())
+            format!("{} → {}", language.get_text("unknown_version"), new.green())
         }
-        _ => "版本信息未知".to_string(),
+        _ => language.get_text("version_info_unknown").to_string(),
     }
 }
 
-pub fn print_results(packages: &[PackageInfo], updates_only: bool) {
+pub fn print_results(packages: &[PackageInfo], updates_only: bool, language: Language) {
     let mut has_updates = false;
 
     for package in packages {
@@ -31,32 +59,53 @@ pub fn print_results(packages: &[PackageInfo], updates_only: bool) {
 
         if package.has_update() {
             has_updates = true;
-            println!("{} 有更新可用", package.name.yellow().bold());
+            println!(
+                "{}",
+                language
+                    .get_text("package_has_update")
+                    .replace("{}", &package.name)
+                    .yellow()
+                    .bold()
+            );
             if let Some(current) = &package.current_version {
-                println!("  当前版本: {}", current.red());
+                println!(
+                    "  {} {}",
+                    language.get_text("current_version"),
+                    current.red()
+                );
             }
             if let Some(latest) = &package.latest_version {
-                println!("  最新版本: {}", latest.green());
+                println!(
+                    "  {} {}",
+                    language.get_text("latest_version"),
+                    latest.green()
+                );
             }
         } else if !updates_only {
-            println!("{} 已是最新版本", package.name.green());
+            println!(
+                "{}",
+                language
+                    .get_text("package_up_to_date")
+                    .replace("{}", &package.name)
+                    .green()
+            );
             if let Some(current) = &package.current_version {
-                println!("  版本: {}", current.green());
+                println!("  {} {}", language.get_text("version"), current.green());
             }
         }
     }
 
     if updates_only && !has_updates {
-        println!("{}", "所有包都已是最新版本！".green().bold());
+        println!("{}", language.get_text("all_up_to_date").green().bold());
     }
 }
 
-pub fn print_update_summary(update_results: &[UpdateResult]) {
+pub fn print_update_summary(update_results: &[UpdateResult], language: Language) {
     if update_results.is_empty() {
         return;
     }
 
-    println!("\n{}", "📋 更新摘要".blue().bold());
+    println!("\n{}", language.get_text("update_summary").blue().bold());
     println!("{}", "=".repeat(50).blue());
 
     let mut success_updates = Vec::new();
@@ -72,28 +121,36 @@ pub fn print_update_summary(update_results: &[UpdateResult]) {
 
     // 显示成功的更新
     if !success_updates.is_empty() {
-        println!("\n{}", "✅ 成功更新的包:".green().bold());
+        println!(
+            "\n{}",
+            language.get_text("successful_updates").green().bold()
+        );
         for result in &success_updates {
             println!(
                 "  • {}: {}",
                 result.package_name.cyan(),
-                format_version_info(&result.old_version, &result.new_version)
+                format_version_info(&result.old_version, &result.new_version, language)
             );
         }
     }
 
     // 显示失败的更新
     if !failed_updates.is_empty() {
-        println!("\n{}", "❌ 更新失败的包:".red().bold());
+        println!("\n{}", language.get_text("failed_updates").red().bold());
         for result in &failed_updates {
             if let Some(old) = &result.old_version {
                 println!(
-                    "  • {}: {} (更新失败)",
+                    "  • {}: {} ({})",
                     result.package_name.cyan(),
-                    old.red()
+                    old.red(),
+                    language.get_text("update_failed")
                 );
             } else {
-                println!("  • {}: 更新失败", result.package_name.cyan());
+                println!(
+                    "  • {}: {}",
+                    result.package_name.cyan(),
+                    language.get_text("update_failed")
+                );
             }
         }
     }
@@ -104,33 +161,27 @@ pub fn print_update_summary(update_results: &[UpdateResult]) {
 pub fn print_update_selection(
     stable_updates: &[&PackageInfo],
     prerelease_updates: &[&PackageInfo],
+    language: Language,
 ) -> Result<Vec<usize>, anyhow::Error> {
-    println!("\n{}", "检测到以下包有更新:".yellow().bold());
+    println!(
+        "\n{}",
+        language.get_text("updates_detected").yellow().bold()
+    );
 
     // 显示稳定版本更新
     if !stable_updates.is_empty() {
-        println!("{}", "稳定版本更新:".green().bold());
+        println!("{}", language.get_text("stable_updates").green().bold());
         for package in stable_updates {
-            println!(
-                "  • {} ({} → {})",
-                package.name.cyan(),
-                package
-                    .current_version
-                    .as_ref()
-                    .unwrap_or(&"未知".to_string())
-                    .red(),
-                package
-                    .latest_version
-                    .as_ref()
-                    .unwrap_or(&"未知".to_string())
-                    .green()
-            );
+            println!("  • {}", format_package_version(package, language));
         }
     }
 
     // 显示预发布版本更新
     if !prerelease_updates.is_empty() {
-        println!("{}", "预发布版本更新:".yellow().bold());
+        println!(
+            "{}",
+            language.get_text("prerelease_updates").yellow().bold()
+        );
         for package in prerelease_updates {
             println!(
                 "  • {} ({} → {}) {}",
@@ -138,21 +189,21 @@ pub fn print_update_selection(
                 package
                     .current_version
                     .as_ref()
-                    .unwrap_or(&"未知".to_string())
+                    .unwrap_or(&language.get_text("unknown").to_string())
                     .red(),
                 package
                     .latest_version
                     .as_ref()
-                    .unwrap_or(&"未知".to_string())
+                    .unwrap_or(&language.get_text("unknown").to_string())
                     .yellow(),
-                "⚠️ 预发布版本".yellow()
+                language.get_text("prerelease_warning").yellow()
             );
         }
     }
 
     // 询问是否要更新
     if !Confirm::new()
-        .with_prompt("是否要更新这些包？")
+        .with_prompt(language.get_text("update_question"))
         .default(true)
         .interact()?
     {
@@ -163,7 +214,7 @@ pub fn print_update_selection(
     let mut packages_to_update = stable_updates.to_vec();
     if !prerelease_updates.is_empty()
         && Confirm::new()
-            .with_prompt("是否包含预发布版本更新？")
+            .with_prompt(language.get_text("include_prerelease_question"))
             .default(false)
             .interact()?
     {
@@ -174,7 +225,7 @@ pub fn print_update_selection(
     let package_names: Vec<String> = packages_to_update.iter().map(|p| p.name.clone()).collect();
 
     let selections = MultiSelect::new()
-        .with_prompt("选择要更新的包（使用空格选择，回车确认）")
+        .with_prompt(language.get_text("select_packages"))
         .items(&package_names)
         .interact()?;
 

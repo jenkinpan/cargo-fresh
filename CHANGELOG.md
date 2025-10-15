@@ -7,23 +7,40 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-10-15
+
+### Major Release
+
+- 项目重命名为 `cargo-fresh`，支持 `cargo fresh` 子命令
+- 添加自动语言检测功能，根据系统语言环境自动选择输出语言
+- 支持中英文双语界面，提升国际化用户体验
+
 ### Added
 
-- 为 completion 子命令添加 shell 补全支持
-- 用户现在可以在 `pkg-checker completion` 后按 Tab 键看到支持的 shell 列表
-- 使用 clap ValueEnum 实现自动补全功能
-- 支持 6 种 shell 的智能补全：bash, zsh, fish, powershell, elvish, nushell
+- 添加自动语言检测功能，检测系统环境变量 (LANG, LC_ALL, LC_CTYPE)
+- 支持中文环境自动显示中文界面
+- 支持英文环境自动显示英文界面
+- 创建 locale.rs 模块处理多语言支持
+- 实现完整的中英文文本映射系统
+- 支持所有用户界面文本的多语言显示
+- 添加 Language 枚举类型 (English/Chinese)
+- 为所有输出函数添加多语言参数支持
 
 ### Changed
 
-- 将 `--completion` 参数改为 `completion` 子命令
-- 重构 CLI 结构，使用更现代的子命令设计模式
-- 改进命令行用户体验，提供更好的补全支持
+- 项目名称从 `pkg-checker` 重命名为 `cargo-fresh`
+- 支持 `cargo fresh` 子命令调用方式
+- 更新 Cargo.toml 配置支持 cargo 子命令
+- 修改主程序支持 cargo 子命令参数处理
+- 更新所有文档和示例使用新的命令名称
+- 重构 display 模块支持多语言输出
+- 优化用户体验，根据系统语言自动选择界面语言
 
 ### Fixed
 
-- 优化补全脚本生成逻辑
-- 改进错误处理和用户提示
+- 修复语言检测的环境变量处理逻辑
+- 改进多语言文本的生命周期管理
+- 优化编译警告，清理未使用的导入
 
 ## [0.8.1] - 2025-10-08
 
@@ -301,7 +318,8 @@
 - 支持批量更新包
 - 支持命令行参数配置
 
-[Unreleased]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.6.10...v0.7.0

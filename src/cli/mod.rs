@@ -1,25 +1,25 @@
-use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use clap_complete_nushell::Nushell;
 
 #[derive(Parser)]
-#[command(name = "pkg-checker")]
-#[command(about = "检查全局安装的Cargo包更新")]
+#[command(name = "cargo-fresh")]
+#[command(about = "Check and update globally installed Cargo packages")]
 #[command(version)]
 pub struct Cli {
-    /// 显示详细信息
+    /// Show detailed information
     #[arg(short, long)]
     pub verbose: bool,
 
-    /// 只显示有更新的包
+    /// Show only packages with updates
     #[arg(short, long)]
     pub updates_only: bool,
 
-    /// 非交互模式（默认是交互模式）
+    /// Non-interactive mode (default is interactive mode)
     #[arg(long)]
     pub no_interactive: bool,
 
-    /// 包含预发布版本（alpha、beta、rc等）
+    /// Include prerelease versions (alpha, beta, rc, etc.)
     #[arg(long)]
     pub include_prerelease: bool,
 
@@ -29,11 +29,14 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// 生成 shell 补全脚本
+    /// Generate shell completion scripts
     Completion {
-        /// 要生成补全脚本的 shell
+        /// Shell to generate completion script for
         #[arg(value_enum)]
         shell: ShellType,
+        /// Generate completion for cargo fresh subcommand
+        #[arg(long)]
+        cargo_fresh: bool,
     },
 }
 
@@ -54,28 +57,77 @@ pub enum ShellType {
 }
 
 impl Cli {
-    pub fn generate_completion(shell: ShellType) {
-        let mut cmd = Cli::command();
+    /// 创建标准的 cargo-fresh 命令结构
+    fn create_cargo_fresh_command() -> clap::Command {
+        clap::Command::new("cargo-fresh")
+            .about("Check and update globally installed Cargo packages")
+            .arg(
+                clap::Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .help("Show detailed information"),
+            )
+            .arg(
+                clap::Arg::new("updates-only")
+                    .short('u')
+                    .long("updates-only")
+                    .help("Show only packages with updates"),
+            )
+            .arg(
+                clap::Arg::new("no-interactive")
+                    .long("no-interactive")
+                    .help("Non-interactive mode (default is interactive mode)"),
+            )
+            .arg(
+                clap::Arg::new("include-prerelease")
+                    .long("include-prerelease")
+                    .help("Include prerelease versions (alpha, beta, rc, etc.)"),
+            )
+            .subcommand(
+                clap::Command::new("completion")
+                    .about("Generate shell completion scripts")
+                    .arg(
+                        clap::Arg::new("shell")
+                            .help("Shell to generate completion script for")
+                            .value_parser(clap::value_parser!(ShellType)),
+                    )
+                    .arg(
+                        clap::Arg::new("cargo-fresh")
+                            .long("cargo-fresh")
+                            .help("Generate completion for cargo fresh subcommand")
+                            .action(clap::ArgAction::SetTrue),
+                    ),
+            )
+    }
 
-        match shell {
-            ShellType::Bash => {
-                generate(Shell::Bash, &mut cmd, "pkg-checker", &mut std::io::stdout());
-            }
-            ShellType::Zsh => {
-                generate(Shell::Zsh, &mut cmd, "pkg-checker", &mut std::io::stdout());
-            }
-            ShellType::Fish => {
-                generate(Shell::Fish, &mut cmd, "pkg-checker", &mut std::io::stdout());
-            }
-            ShellType::Powershell => {
-                generate(Shell::PowerShell, &mut cmd, "pkg-checker", &mut std::io::stdout());
-            }
-            ShellType::Elvish => {
-                generate(Shell::Elvish, &mut cmd, "pkg-checker", &mut std::io::stdout());
-            }
-            ShellType::Nushell => {
-                generate(Nushell, &mut cmd, "pkg-checker", &mut std::io::stdout());
-            }
-        }
+    /// 生成补全脚本的通用方法
+    fn generate_completion_for_shell(shell: ShellType, cmd: &mut clap::Command, name: &str) {
+        let shell_type = match shell {
+            ShellType::Bash => Shell::Bash,
+            ShellType::Zsh => Shell::Zsh,
+            ShellType::Fish => Shell::Fish,
+            ShellType::Powershell => Shell::PowerShell,
+            ShellType::Elvish => Shell::Elvish,
+            ShellType::Nushell => return generate(Nushell, cmd, name, &mut std::io::stdout()),
+        };
+        generate(shell_type, cmd, name, &mut std::io::stdout());
+    }
+
+    pub fn generate_completion(shell: ShellType) {
+        let mut cmd = Self::create_cargo_fresh_command();
+        Self::generate_completion_for_shell(shell, &mut cmd, "cargo-fresh");
+    }
+
+    /// 生成 cargo fresh 子命令的补全脚本
+    pub fn generate_cargo_fresh_completion(shell: ShellType) {
+        let mut cargo_cmd = clap::Command::new("cargo")
+            .about("Rust's package manager")
+            .subcommand(
+                Self::create_cargo_fresh_command()
+                    .name("fresh")
+                    .about("Check and update globally installed Cargo packages"),
+            );
+
+        Self::generate_completion_for_shell(shell, &mut cargo_cmd, "cargo");
     }
 }
