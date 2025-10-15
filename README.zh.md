@@ -41,8 +41,8 @@ cargo install cargo-fresh
 
 ```bash
 # 克隆项目
-git clone https://github.com/jenkinpan/pkg-checker-rs.git
-cd pkg-checker-rs
+git clone https://github.com/jenkinpan/cargo-fresh.git
+cd cargo-fresh
 
 # 构建并安装
 cargo install --path .
@@ -51,7 +51,7 @@ cargo install --path .
 ### 从 GitHub 安装
 
 ```bash
-cargo install --git https://github.com/jenkinpan/pkg-checker-rs.git
+cargo install --git https://github.com/jenkinpan/cargo-fresh.git
 ```
 
 ## 语言支持
