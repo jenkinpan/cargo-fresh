@@ -65,6 +65,28 @@ pub fn get_english_text(key: &str) -> &'static str {
         "updates_detected" => "The following packages have updates available:",
         "unknown" => "unknown",
 
+        // Updater模块文本
+        "updating_package_progress" => "Updating {}...",
+        "current_version_label" => "Current version:",
+        "executing_command" => "Executing command:",
+        "retry_attempt" => "Retry attempt {} for {}...",
+        "error_message" => "Error message:",
+        "package_update_success" => "✅ {} update command executed successfully",
+        "package_updated_version" => "✅ {} updated: {} → {}",
+        "package_version_unchanged" => "⚠️ {} version unchanged, may already be the latest version",
+        "package_update_verification_failed" => {
+            "⚠️ {} update command successful but unable to verify new version"
+        }
+        "package_update_failed" => "❌ {} update failed (exit code: {})",
+        "error_details" => "Error details:",
+        "waiting_retry" => "Waiting before retry...",
+
+        // Package模块文本
+        "cargo_install_list_failed" => "Failed to execute cargo install --list",
+        "checking_package" => "Checking",
+        "unable_to_get_latest_version" => "unable to get latest version information",
+        "check_failed" => "check failed",
+
         _ => "",
     }
 }
@@ -130,6 +152,26 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "update_failed" => "更新失败",
         "updates_detected" => "检测到以下包有更新:",
         "unknown" => "未知",
+
+        // Updater模块文本
+        "updating_package_progress" => "正在更新 {}...",
+        "current_version_label" => "当前版本:",
+        "executing_command" => "执行命令:",
+        "retry_attempt" => "重试第 {} 次更新 {}...",
+        "error_message" => "错误信息:",
+        "package_update_success" => "✅ {} 更新命令执行成功",
+        "package_updated_version" => "✅ {} 已更新: {} → {}",
+        "package_version_unchanged" => "⚠️ {} 版本未改变，可能已经是最新版本",
+        "package_update_verification_failed" => "⚠️ {} 更新命令成功但无法验证新版本",
+        "package_update_failed" => "❌ {} 更新失败 (退出码: {})",
+        "error_details" => "错误详情:",
+        "waiting_retry" => "等待后重试...",
+
+        // Package模块文本
+        "cargo_install_list_failed" => "执行 cargo install --list 失败",
+        "checking_package" => "检查",
+        "unable_to_get_latest_version" => "无法获取最新版本信息",
+        "check_failed" => "检查失败",
 
         _ => "",
     }
@@ -201,6 +243,23 @@ mod tests {
             "update_failed",
             "updates_detected",
             "unknown",
+            "updating_package_progress",
+            "current_version_label",
+            "executing_command",
+            "retry_attempt",
+            "error_message",
+            "package_update_success",
+            "package_updated_version",
+            "package_version_unchanged",
+            "package_update_verification_failed",
+            "package_update_failed",
+            "error_details",
+            "waiting_retry",
+            "unknown_version",
+            "cargo_install_list_failed",
+            "checking_package",
+            "unable_to_get_latest_version",
+            "check_failed",
         ];
 
         for key in &english_keys {

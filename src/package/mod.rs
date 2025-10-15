@@ -3,13 +3,15 @@ use colored::*;
 use std::collections::HashSet;
 use std::process::Command;
 
+use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PRERELEASE_KEYWORDS};
 
 pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
     let output = Command::new("cargo").args(["install", "--list"]).output()?;
 
     if !output.status.success() {
-        anyhow::bail!("执行 cargo install --list 失败");
+        let language = detect_language();
+        anyhow::bail!("{}", language.get_text("cargo_install_list_failed"));
     }
 
     let output_str = String::from_utf8(output.stdout)?;
@@ -134,9 +136,15 @@ pub async fn check_package_updates(
     verbose: bool,
     include_prerelease: bool,
 ) -> Result<()> {
+    let language = detect_language();
+
     for package in packages.iter_mut() {
         if verbose {
-            println!("检查 {}...", package.name.cyan());
+            println!(
+                "{} {}...",
+                language.get_text("checking_package"),
+                package.name.cyan()
+            );
         }
 
         match get_latest_version(&package.name, include_prerelease).await {
@@ -144,20 +152,30 @@ pub async fn check_package_updates(
                 package.latest_version = Some(version);
                 if verbose {
                     println!(
-                        "  {} 最新版本: {}",
+                        "  {} {}: {}",
                         package.name,
+                        language.get_text("latest_version"),
                         package.latest_version.as_ref().unwrap().green()
                     );
                 }
             }
             Ok(None) => {
                 if verbose {
-                    println!("  {} 无法获取最新版本信息", package.name.red());
+                    println!(
+                        "  {} {}",
+                        package.name.red(),
+                        language.get_text("unable_to_get_latest_version")
+                    );
                 }
             }
             Err(e) => {
                 if verbose {
-                    println!("  {} 检查失败: {}", package.name.red(), e);
+                    println!(
+                        "  {} {}: {}",
+                        package.name.red(),
+                        language.get_text("check_failed"),
+                        e
+                    );
                 }
             }
         }

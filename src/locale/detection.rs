@@ -36,6 +36,12 @@ mod tests {
 
     #[test]
     fn test_detect_chinese_language() {
+        // 保存原始环境变量
+        let original_lang = std::env::var("LANG").ok();
+        let original_lc_all = std::env::var("LC_ALL").ok();
+        let original_lc_ctype = std::env::var("LC_CTYPE").ok();
+
+        // 测试中文环境
         std::env::set_var("LANG", "zh_CN.UTF-8");
         assert_eq!(detect_language(), Language::Chinese);
 
@@ -44,22 +50,81 @@ mod tests {
 
         std::env::set_var("LANG", "zh");
         assert_eq!(detect_language(), Language::Chinese);
+
+        // 恢复原始环境变量
+        if let Some(lang) = original_lang {
+            std::env::set_var("LANG", lang);
+        } else {
+            std::env::remove_var("LANG");
+        }
+        if let Some(lc_all) = original_lc_all {
+            std::env::set_var("LC_ALL", lc_all);
+        } else {
+            std::env::remove_var("LC_ALL");
+        }
+        if let Some(lc_ctype) = original_lc_ctype {
+            std::env::set_var("LC_CTYPE", lc_ctype);
+        } else {
+            std::env::remove_var("LC_CTYPE");
+        }
     }
 
     #[test]
     fn test_detect_english_language() {
+        // 保存原始环境变量
+        let original_lang = std::env::var("LANG").ok();
+        let original_lc_all = std::env::var("LC_ALL").ok();
+        let original_lc_ctype = std::env::var("LC_CTYPE").ok();
+
+        // 测试英文环境
         std::env::set_var("LANG", "en_US.UTF-8");
         assert_eq!(detect_language(), Language::English);
 
         std::env::set_var("LANG", "en_GB.UTF-8");
         assert_eq!(detect_language(), Language::English);
+
+        // 恢复原始环境变量
+        if let Some(lang) = original_lang {
+            std::env::set_var("LANG", lang);
+        } else {
+            std::env::remove_var("LANG");
+        }
+        if let Some(lc_all) = original_lc_all {
+            std::env::set_var("LC_ALL", lc_all);
+        } else {
+            std::env::remove_var("LC_ALL");
+        }
+        if let Some(lc_ctype) = original_lc_ctype {
+            std::env::set_var("LC_CTYPE", lc_ctype);
+        } else {
+            std::env::remove_var("LC_CTYPE");
+        }
     }
 
     #[test]
     fn test_detect_default_language() {
+        // 保存原始环境变量
+        let original_lang = std::env::var("LANG").ok();
+        let original_lc_all = std::env::var("LC_ALL").ok();
+        let original_lc_ctype = std::env::var("LC_CTYPE").ok();
+
+        // 清理环境变量
         std::env::remove_var("LANG");
         std::env::remove_var("LC_ALL");
         std::env::remove_var("LC_CTYPE");
+
+        // 测试默认行为
         assert_eq!(detect_language(), Language::English);
+
+        // 恢复原始环境变量
+        if let Some(lang) = original_lang {
+            std::env::set_var("LANG", lang);
+        }
+        if let Some(lc_all) = original_lc_all {
+            std::env::set_var("LC_ALL", lc_all);
+        }
+        if let Some(lc_ctype) = original_lc_ctype {
+            std::env::set_var("LC_CTYPE", lc_ctype);
+        }
     }
 }
