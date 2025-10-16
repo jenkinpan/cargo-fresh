@@ -38,7 +38,7 @@ cargo install cargo-fresh
 ```
 or
 ```bash
-# more directly install without complinig
+# directly install without complinig
 cargo binstall cargo-fresh
 ```
 
