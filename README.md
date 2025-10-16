@@ -283,7 +283,25 @@ Contributions are welcome! Please follow these steps:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for complete license terms.
+
+### License Summary
+
+The MIT License is a permissive open source license that allows you to:
+
+- ✅ **Commercial use** - Use in commercial projects
+- ✅ **Modification** - Modify the source code
+- ✅ **Distribution** - Distribute original or modified code
+- ✅ **Private use** - Use privately
+- ✅ **Patent use** - Use related patents
+
+**Only requirement**: Include the original license and copyright notice when distributing.
+
+### Copyright Information
+
+Copyright (c) 2025 Jenkin Pan
+
+This project is open source under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Related Links
 
