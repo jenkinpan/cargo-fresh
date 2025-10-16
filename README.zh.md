@@ -36,6 +36,11 @@
 ```bash
 cargo install cargo-fresh
 ```
+or
+```bash
+# more directly install without complinig
+cargo binstall cargo-fresh
+```
 
 ### 从源码安装
 
