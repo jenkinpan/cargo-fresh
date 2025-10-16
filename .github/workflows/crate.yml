@@ -43,6 +43,10 @@ jobs:
           ```bash
           cargo install cargo-fresh
           ```
+          or 
+          ```bash
+          cargo binstall cargo-fresh
+          ```
           
           Or download pre-built binaries from the assets below.
           
