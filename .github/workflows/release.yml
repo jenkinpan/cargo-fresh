@@ -7,6 +7,9 @@ on:
         description: "Version to release"
         required: false
         type: string
+  workflow_run:
+    workflows: ["Publish to crates.io and Create Release"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -41,6 +44,7 @@ jobs:
           echo "GitHub event inputs: ${{ github.event.inputs }}"
           echo "GitHub ref: ${{ github.ref }}"
           echo "GitHub ref name: ${{ github.ref_name }}"
+          echo "Workflow run event: ${{ github.event_name }}"
 
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
@@ -48,6 +52,24 @@ jobs:
           elif [[ "${{ github.ref }}" =~ ^refs/tags/v ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
             echo "Using tag version: $VERSION"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # For workflow_run trigger, extract from the triggering workflow's ref
+            TRIGGERING_REF="${{ github.event.workflow_run.head_branch }}"
+            echo "Triggering ref: $TRIGGERING_REF"
+            if [[ "$TRIGGERING_REF" =~ ^refs/tags/v ]]; then
+              VERSION=${TRIGGERING_REF#refs/tags/v}
+              echo "Using triggering tag version: $VERSION"
+            else
+              # Get the latest tag
+              LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+              if [ -n "$LATEST_TAG" ]; then
+                VERSION=${LATEST_TAG#v}
+                echo "Using latest tag version: $VERSION"
+              else
+                VERSION="0.1.0"
+                echo "Using default version: $VERSION"
+              fi
+            fi
           else
             # Get the latest tag
             LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
