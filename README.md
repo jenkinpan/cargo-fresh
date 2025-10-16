@@ -35,6 +35,11 @@ A Rust tool for checking and updating globally installed Cargo packages with int
 ```bash
 cargo install cargo-fresh
 ```
+or
+```bash
+# more directly install without complinig
+cargo binstall cargo-fresh
+```
 
 ### Install from source
 
