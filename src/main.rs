@@ -158,22 +158,8 @@ async fn main() -> Result<()> {
                         update_results.push(result.clone());
                         if result.success {
                             success_count += 1;
-                            main_pb.println(format!(
-                                "✅ {} {}",
-                                package_name.green(),
-                                language
-                                    .get_text("package_updated")
-                                    .replace("{}", package_name)
-                            ));
                         } else {
                             fail_count += 1;
-                            main_pb.println(format!(
-                                "❌ {} {}",
-                                package_name.red(),
-                                language
-                                    .get_text("package_failed")
-                                    .replace("{}", package_name)
-                            ));
                         }
                     }
                     Err(e) => {

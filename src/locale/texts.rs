@@ -26,9 +26,10 @@ pub fn get_english_text(key: &str) -> &'static str {
         "stable_updates" => "Stable version updates:",
         "prerelease_updates" => "Prerelease version updates:",
         "prerelease_warning" => "⚠️ Prerelease version",
-        "update_question" => "Do you want to update these packages? [Y/n]:",
-        "include_prerelease_question" => "Include prerelease version updates? [y/N]:",
+        "update_question" => "Do you want to update these packages?",
+        "include_prerelease_question" => "Include prerelease version updates?",
         "select_packages" => "Select packages to update (use space to select, enter to confirm)",
+        "no_interactive_mode" => "Non-interactive mode detected. Skipping update selection.",
 
         // 更新过程文本
         "starting_update" => "Starting to update selected packages...",
@@ -114,9 +115,10 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "stable_updates" => "稳定版本更新:",
         "prerelease_updates" => "预发布版本更新:",
         "prerelease_warning" => "⚠️ 预发布版本",
-        "update_question" => "是否要更新这些包？ [Y/n]:",
-        "include_prerelease_question" => "是否包含预发布版本更新？ [y/N]:",
+        "update_question" => "是否要更新这些包？",
+        "include_prerelease_question" => "是否包含预发布版本更新？",
         "select_packages" => "选择要更新的包（使用空格选择，回车确认）",
+        "no_interactive_mode" => "检测到非交互模式。跳过更新选择。",
 
         // 更新过程文本
         "starting_update" => "开始更新选中的包...",

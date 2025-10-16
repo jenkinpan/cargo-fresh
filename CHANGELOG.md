@@ -7,7 +7,26 @@
 
 ## [Unreleased]
 
-## [0.9.3] - 2025-01-27
+## [0.9.4] - 2025-10-16
+
+### Fixed
+- 修复重复的 `[Y/n]: [Y/n]` 提示问题，移除文本中的重复提示符
+- 修复 `dialoguer` 库在非终端环境中的错误处理
+- 优化更新完成后的信息显示，移除重复的成功信息
+- 修复 `src/locale/texts.rs` 中的语法错误（缺失逗号）
+
+### Enhanced
+- 改进交互式确认的用户体验，使用 `show_default(false)` 配置
+- 优化错误处理机制，在非终端环境中优雅降级
+- 完善 GitHub Actions 工作流配置，修复项目名称不匹配问题
+- 添加自动化的 crates.io 发布和 GitHub Release 创建流程
+
+### Changed
+- 更新 GitHub Actions 工作流，支持自动触发 release 构建
+- 修复 Homebrew formula 配置，指向正确的项目仓库
+- 优化 release 流程，实现推送标签后自动发布到 crates.io 并创建 release
+
+## [0.9.3] - 2025-10-15
 
 ### Enhanced
 - 完善updater模块的国际化支持，所有更新相关文本支持中英文切换

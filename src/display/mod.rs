@@ -202,32 +202,72 @@ pub fn print_update_selection(
     }
 
     // 询问是否要更新
-    if !Confirm::new()
+    let should_update = match Confirm::new()
         .with_prompt(language.get_text("update_question"))
         .default(true)
-        .interact()?
+        .show_default(false)
+        .interact()
     {
+        Ok(choice) => choice,
+        Err(e) => {
+            // 如果不是终端环境，默认选择不更新
+            if e.to_string().contains("not a terminal") {
+                println!("{}", language.get_text("no_interactive_mode").yellow());
+                return Ok(vec![]);
+            }
+            return Err(e.into());
+        }
+    };
+
+    if !should_update {
         return Ok(vec![]);
     }
 
     // 如果有预发布版本，询问是否包含
     let mut packages_to_update = stable_updates.to_vec();
-    if !prerelease_updates.is_empty()
-        && Confirm::new()
+    if !prerelease_updates.is_empty() {
+        let include_prerelease = match Confirm::new()
             .with_prompt(language.get_text("include_prerelease_question"))
             .default(false)
-            .interact()?
-    {
-        packages_to_update.extend(prerelease_updates);
+            .show_default(false)
+            .interact()
+        {
+            Ok(choice) => choice,
+            Err(e) => {
+                // 如果不是终端环境，默认不包含预发布版本
+                if e.to_string().contains("not a terminal") {
+                    println!("{}", language.get_text("no_interactive_mode").yellow());
+                    false
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
+
+        if include_prerelease {
+            packages_to_update.extend(prerelease_updates);
+        }
     }
 
     // 让用户选择要更新的包
     let package_names: Vec<String> = packages_to_update.iter().map(|p| p.name.clone()).collect();
 
-    let selections = MultiSelect::new()
+    let selections = match MultiSelect::new()
         .with_prompt(language.get_text("select_packages"))
         .items(&package_names)
-        .interact()?;
+        .interact()
+    {
+        Ok(choices) => choices,
+        Err(e) => {
+            // 如果不是终端环境，默认选择所有包
+            if e.to_string().contains("not a terminal") {
+                println!("{}", language.get_text("no_interactive_mode").yellow());
+                (0..package_names.len()).collect()
+            } else {
+                return Err(e.into());
+            }
+        }
+    };
 
     Ok(selections)
 }

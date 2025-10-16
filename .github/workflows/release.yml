@@ -23,16 +23,16 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: pkg-checker
-            asset_name: pkg-checker-aarch64-apple-darwin.tar.gz
+            artifact_name: cargo-fresh
+            asset_name: cargo-fresh-aarch64-apple-darwin.tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: pkg-checker
-            asset_name: pkg-checker-x86_64-apple-darwin.tar.gz
+            artifact_name: cargo-fresh
+            asset_name: cargo-fresh-x86_64-apple-darwin.tar.gz
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: pkg-checker
-            asset_name: pkg-checker-x86_64-unknown-linux-gnu.tar.gz
+            artifact_name: cargo-fresh
+            asset_name: cargo-fresh-x86_64-unknown-linux-gnu.tar.gz
 
     steps:
       - name: Extract version from tag
@@ -177,40 +177,40 @@ jobs:
           SHA256_X86_64_LINUX: ${{ steps.sha256.outputs.x86_64_linux }}
         run: |
           cd homebrew-tap
-          cat > Formula/pkg-checker.rb << 'FORMULA_EOF'
-          class PkgChecker < Formula
-            desc "CLI tool for checking package versions and updates"
-            homepage "https://github.com/jenkinpan/pkg-checker-rs"
+          cat > Formula/cargo-fresh.rb << 'FORMULA_EOF'
+          class CargoFresh < Formula
+            desc "A Rust tool for checking and updating globally installed Cargo packages"
+            homepage "https://github.com/jenkinpan/cargo-fresh"
             version "VERSION_PLACEHOLDER"
-            license "MIT OR Apache-2.0"
+            license "MIT"
 
             if OS.mac?
               if Hardware::CPU.arm?
-                url "https://github.com/jenkinpan/pkg-checker-rs/releases/download/v#{version}/pkg-checker-aarch64-apple-darwin.tar.gz"
+                url "https://github.com/jenkinpan/cargo-fresh/releases/download/v#{version}/cargo-fresh-aarch64-apple-darwin.tar.gz"
                 sha256 "SHA256_ARM64_MACOS_PLACEHOLDER"
               else
-                url "https://github.com/jenkinpan/pkg-checker-rs/releases/download/v#{version}/pkg-checker-x86_64-apple-darwin.tar.gz"
+                url "https://github.com/jenkinpan/cargo-fresh/releases/download/v#{version}/cargo-fresh-x86_64-apple-darwin.tar.gz"
                 sha256 "SHA256_X86_64_MACOS_PLACEHOLDER"
               end
             elsif OS.linux?
-              url "https://github.com/jenkinpan/pkg-checker-rs/releases/download/v#{version}/pkg-checker-x86_64-unknown-linux-gnu.tar.gz"
+              url "https://github.com/jenkinpan/cargo-fresh/releases/download/v#{version}/cargo-fresh-x86_64-unknown-linux-gnu.tar.gz"
               sha256 "SHA256_X86_64_LINUX_PLACEHOLDER"
             end
 
             def install
-              bin.install "pkg-checker"
+              bin.install "cargo-fresh"
             end
 
             test do
-              assert_match "pkg-checker VERSION_PLACEHOLDER", shell_output("#{bin}/pkg-checker --version")
+              assert_match "cargo-fresh VERSION_PLACEHOLDER", shell_output("#{bin}/cargo-fresh --version")
             end
           end
           FORMULA_EOF
 
-          sed -i "s|VERSION_PLACEHOLDER|$VERSION|g" Formula/pkg-checker.rb
-          sed -i "s|SHA256_ARM64_MACOS_PLACEHOLDER|$SHA256_ARM64_MACOS|g" Formula/pkg-checker.rb
-          sed -i "s|SHA256_X86_64_MACOS_PLACEHOLDER|$SHA256_X86_64_MACOS|g" Formula/pkg-checker.rb
-          sed -i "s|SHA256_X86_64_LINUX_PLACEHOLDER|$SHA256_X86_64_LINUX|g" Formula/pkg-checker.rb
+          sed -i "s|VERSION_PLACEHOLDER|$VERSION|g" Formula/cargo-fresh.rb
+          sed -i "s|SHA256_ARM64_MACOS_PLACEHOLDER|$SHA256_ARM64_MACOS|g" Formula/cargo-fresh.rb
+          sed -i "s|SHA256_X86_64_MACOS_PLACEHOLDER|$SHA256_X86_64_MACOS|g" Formula/cargo-fresh.rb
+          sed -i "s|SHA256_X86_64_LINUX_PLACEHOLDER|$SHA256_X86_64_LINUX|g" Formula/cargo-fresh.rb
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -226,8 +226,8 @@ jobs:
           # Configure Git to use SSH for GitHub
           git config --local url."git@github.com:".insteadOf "https://github.com/"
 
-          git add Formula/pkg-checker.rb
-          git commit -m "chore: update pkg-checker to v${{ steps.version.outputs.version }}" || echo "No changes to commit"
+          git add Formula/cargo-fresh.rb
+          git commit -m "chore: update cargo-fresh to v${{ steps.version.outputs.version }}" || echo "No changes to commit"
 
           # Check current branch and remote branches
           echo "Current branch: $(git branch --show-current)"

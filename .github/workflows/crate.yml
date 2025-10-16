@@ -1,17 +1,81 @@
-name: Publish to crates.io
+name: Publish to crates.io and Create Release
 on:
   push:
     tags: ['v*']  # Triggers when pushing tags starting with 'v'
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: release  # Optional: for enhanced security
     permissions:
       id-token: write     # Required for OIDC token exchange
+      contents: write     # Required for creating releases
     steps:
     - uses: actions/checkout@v5
     - uses: rust-lang/crates-io-auth-action@v1
       id: auth
-    - run: cargo publish
+    - name: Publish to crates.io
+      run: cargo publish
       env:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Publishing version: $VERSION"
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## What's Changed
+          
+          This release includes the latest updates to cargo-fresh.
+          
+          ### Installation
+          
+          You can install cargo-fresh using:
+          
+          ```bash
+          cargo install cargo-fresh
+          ```
+          
+          Or download pre-built binaries from the assets below.
+          
+          ### Assets
+          
+          Pre-built binaries are available for:
+          - macOS (Intel and Apple Silicon)
+          - Linux (x86_64)
+          
+          See the [releases page](https://github.com/jenkinpan/cargo-fresh/releases) for more details.
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Trigger Release Workflow
+      uses: actions/github-script@v7
+      with:
+        script: |
+          console.log('Triggering release workflow...');
+          
+          // 使用 workflow_dispatch 触发 release.yml
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'release.yml',
+            ref: context.ref,
+            inputs: {
+              version: '${{ steps.version.outputs.version }}'
+            }
+          });
+          
+          console.log('Release workflow triggered successfully');
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
