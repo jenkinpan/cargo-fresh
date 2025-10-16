@@ -7,7 +7,7 @@ documentation = "https://docs.rs/cargo-fresh"
 readme = "README.md"
 homepage = "https://github.com/jenkinpan/cargo-fresh"
 repository = "https://github.com/jenkinpan/cargo-fresh"
-license = "MIT"
+license = "Apache-2.0"
 keywords = ["cargo", "manager", "package", "rust", "update"]
 categories = ["command-line-utilities", "development-tools"]
 

@@ -1,7 +1,7 @@
 # cargo-fresh
 
 [![Crates.io](https://img.shields.io/crates/v/cargo-fresh.svg)](https://crates.io/crates/cargo-fresh)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 
 <div align="center">
@@ -280,25 +280,29 @@ cargo fresh <TAB>  # 显示所有 fresh 选项和参数
 
 ## 许可证
 
-本项目采用 MIT 许可证。查看 [LICENSE](LICENSE) 文件了解完整的许可证条款。
+本项目采用 Apache 2.0 许可证。查看 [LICENSE](LICENSE) 文件了解完整的许可证条款。
 
 ### 许可证摘要
 
-MIT 许可证是一个宽松的开源许可证，允许您：
+Apache 2.0 许可证是一个宽松的开源许可证，允许您：
 
 - ✅ **商业使用** - 在商业项目中使用
 - ✅ **修改** - 修改源代码
 - ✅ **分发** - 分发原始或修改后的代码
 - ✅ **私人使用** - 私人使用
 - ✅ **专利使用** - 使用相关专利
+- ✅ **专利授权** - 自动授予专利许可
 
-**唯一要求**：在分发时必须包含原始许可证和版权声明。
+**主要要求**：
+- 在分发时必须包含原始许可证和版权声明
+- 必须说明对源代码的修改
+- 不能使用项目名称、商标或产品名称进行推广
 
 ### 版权信息
 
 Copyright (c) 2025 Jenkin Pan
 
-本项目基于 MIT 许可证开源，详见 [LICENSE](LICENSE) 文件。
+本项目基于 Apache 2.0 许可证开源，详见 [LICENSE](LICENSE) 文件。
 
 ## 相关链接
 

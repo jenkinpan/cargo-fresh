@@ -1,7 +1,7 @@
 # cargo-fresh
 
 [![Crates.io](https://img.shields.io/crates/v/cargo-fresh.svg)](https://crates.io/crates/cargo-fresh)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 <div align="center">
 
@@ -283,25 +283,29 @@ Contributions are welcome! Please follow these steps:
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for complete license terms.
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for complete license terms.
 
 ### License Summary
 
-The MIT License is a permissive open source license that allows you to:
+The Apache 2.0 License is a permissive open source license that allows you to:
 
 - ✅ **Commercial use** - Use in commercial projects
 - ✅ **Modification** - Modify the source code
 - ✅ **Distribution** - Distribute original or modified code
 - ✅ **Private use** - Use privately
 - ✅ **Patent use** - Use related patents
+- ✅ **Patent grant** - Automatic patent license grant
 
-**Only requirement**: Include the original license and copyright notice when distributing.
+**Main requirements**:
+- Include the original license and copyright notice when distributing
+- Must state changes made to the source code
+- Cannot use project name, trademarks, or product names for promotion
 
 ### Copyright Information
 
 Copyright (c) 2025 Jenkin Pan
 
-This project is open source under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is open source under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
 
 ## Related Links
 
