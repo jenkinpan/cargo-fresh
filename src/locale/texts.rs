@@ -88,6 +88,16 @@ pub fn get_english_text(key: &str) -> &'static str {
         "unable_to_get_latest_version" => "unable to get latest version information",
         "check_failed" => "check failed",
 
+        // Binstall相关文本
+        "binstall_not_found" => "cargo binstall not found",
+        "attempting_to_install_binstall" => "Attempting to install cargo binstall...",
+        "installing_binstall" => "Installing cargo binstall...",
+        "binstall_installed_successfully" => "cargo binstall installed successfully",
+        "binstall_install_failed" => "Failed to install cargo binstall",
+        "using_binstall" => "Using cargo binstall for faster installation",
+        "using_install_fallback" => "Using cargo install as fallback",
+        "binstall_failed_fallback" => "cargo binstall failed, falling back to cargo install",
+
         _ => "",
     }
 }
@@ -174,6 +184,16 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "checking_package" => "检查",
         "unable_to_get_latest_version" => "无法获取最新版本信息",
         "check_failed" => "检查失败",
+
+        // Binstall相关文本
+        "binstall_not_found" => "未找到 cargo binstall",
+        "attempting_to_install_binstall" => "正在尝试安装 cargo binstall...",
+        "installing_binstall" => "正在安装 cargo binstall...",
+        "binstall_installed_successfully" => "cargo binstall 安装成功",
+        "binstall_install_failed" => "安装 cargo binstall 失败",
+        "using_binstall" => "使用 cargo binstall 进行快速安装",
+        "using_install_fallback" => "使用 cargo install 作为回退方案",
+        "binstall_failed_fallback" => "cargo binstall 失败，回退到 cargo install",
 
         _ => "",
     }

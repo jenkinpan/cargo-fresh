@@ -5,6 +5,8 @@ module completions {
     --updates-only (-u) # only show packages with available updates
     --no-interactive # not interactive mode (default: interactive mode)
     --include-prerelease # include-prerelease（alpha、beta、rc等）
+    --batch # batch mode - automatically update all packages without confirmation
+    --filter: string # filter packages by name pattern (supports glob patterns)
     --help (-h) # Print help
     --version (-V) # Print version
     ...args: string

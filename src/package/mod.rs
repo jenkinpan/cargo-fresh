@@ -6,6 +6,82 @@ use std::process::Command;
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PRERELEASE_KEYWORDS};
 
+/// 检查 cargo binstall 是否可用
+pub fn is_binstall_available() -> bool {
+    Command::new("cargo")
+        .args(["binstall", "--version"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// 安装 cargo binstall
+pub async fn install_binstall() -> Result<bool> {
+    let language = detect_language();
+    println!("{}", language.get_text("installing_binstall").yellow());
+
+    let output = Command::new("cargo")
+        .args(["install", "cargo-binstall"])
+        .output()?;
+
+    if output.status.success() {
+        println!(
+            "{}",
+            language.get_text("binstall_installed_successfully").green()
+        );
+        Ok(true)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        println!(
+            "{}: {}",
+            language.get_text("binstall_install_failed").red(),
+            stderr
+        );
+        Ok(false)
+    }
+}
+
+/// 确保 cargo binstall 可用，如果不可用则尝试安装
+pub async fn ensure_binstall_available() -> Result<bool> {
+    if is_binstall_available() {
+        return Ok(true);
+    }
+
+    let language = detect_language();
+    println!("{}", language.get_text("binstall_not_found").yellow());
+    println!(
+        "{}",
+        language.get_text("attempting_to_install_binstall").cyan()
+    );
+
+    install_binstall().await
+}
+
+/// 根据模式过滤包
+pub fn filter_packages(packages: &mut Vec<PackageInfo>, pattern: &str) -> Result<()> {
+    if pattern.is_empty() {
+        return Ok(());
+    }
+
+    // 简单的通配符匹配实现
+    let pattern_lower = pattern.to_lowercase();
+    packages.retain(|package| {
+        let name_lower = package.name.to_lowercase();
+
+        // 支持 * 通配符
+        if pattern_lower.contains('*') {
+            // 简单的模式匹配
+            name_lower.contains(&pattern_lower.replace('*', ""))
+                || name_lower.starts_with(&pattern_lower.replace('*', ""))
+                || name_lower.ends_with(&pattern_lower.replace('*', ""))
+        } else {
+            name_lower.contains(&pattern_lower)
+        }
+    });
+
+    Ok(())
+}
+
 pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
     let output = Command::new("cargo").args(["install", "--list"]).output()?;
 
@@ -138,47 +214,68 @@ pub async fn check_package_updates(
 ) -> Result<()> {
     let language = detect_language();
 
-    for package in packages.iter_mut() {
-        if verbose {
-            println!(
-                "{} {}...",
-                language.get_text("checking_package"),
-                package.name.cyan()
-            );
-        }
+    // 创建并发任务来检查所有包
+    let mut handles = Vec::new();
 
-        match get_latest_version(&package.name, include_prerelease).await {
-            Ok(Some(version)) => {
-                package.latest_version = Some(version);
-                if verbose {
-                    println!(
-                        "  {} {}: {}",
-                        package.name,
-                        language.get_text("latest_version"),
-                        package.latest_version.as_ref().unwrap().green()
-                    );
-                }
+    for (index, package) in packages.iter().enumerate() {
+        let package_name = package.name.clone();
+        let handle = tokio::spawn(async move {
+            if verbose {
+                println!(
+                    "{} {}...",
+                    language.get_text("checking_package"),
+                    package_name.cyan()
+                );
             }
-            Ok(None) => {
-                if verbose {
-                    println!(
-                        "  {} {}",
-                        package.name.red(),
-                        language.get_text("unable_to_get_latest_version")
-                    );
+
+            let result = get_latest_version(&package_name, include_prerelease).await;
+            (index, package_name, result)
+        });
+        handles.push(handle);
+    }
+
+    // 等待所有任务完成
+    for handle in handles {
+        match handle.await {
+            Ok((index, package_name, result)) => match result {
+                Ok(Some(version)) => {
+                    packages[index].latest_version = Some(version.clone());
+                    if verbose {
+                        println!(
+                            "  {} {}: {}",
+                            package_name,
+                            language.get_text("latest_version"),
+                            version.green()
+                        );
+                    }
                 }
-            }
+                Ok(None) => {
+                    if verbose {
+                        println!(
+                            "  {} {}",
+                            package_name.red(),
+                            language.get_text("unable_to_get_latest_version")
+                        );
+                    }
+                }
+                Err(e) => {
+                    if verbose {
+                        println!(
+                            "  {} {}: {}",
+                            package_name.red(),
+                            language.get_text("check_failed"),
+                            e
+                        );
+                    }
+                }
+            },
             Err(e) => {
                 if verbose {
-                    println!(
-                        "  {} {}: {}",
-                        package.name.red(),
-                        language.get_text("check_failed"),
-                        e
-                    );
+                    println!("Task failed: {}", e);
                 }
             }
         }
     }
+
     Ok(())
 }

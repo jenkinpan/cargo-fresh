@@ -16,7 +16,8 @@ use display::{print_results, print_update_selection, print_update_summary};
 use locale::detect_language;
 use models::{PackageInfo, UpdateResult};
 use package::{
-    check_package_updates, get_installed_packages, get_latest_version, is_stable_version,
+    check_package_updates, filter_packages, get_installed_packages, get_latest_version,
+    is_stable_version,
 };
 use updater::{create_main_progress_bar, update_package};
 
@@ -55,6 +56,15 @@ async fn main() -> Result<()> {
     if packages.is_empty() {
         println!("{}", language.get_text("no_packages_found").yellow());
         return Ok(());
+    }
+
+    // 应用包过滤
+    if let Some(filter_pattern) = &cli.filter {
+        filter_packages(&mut packages, filter_pattern)?;
+        if packages.is_empty() {
+            println!("{}", language.get_text("no_packages_found").yellow());
+            return Ok(());
+        }
     }
 
     println!(
@@ -114,106 +124,109 @@ async fn main() -> Result<()> {
     // 显示更新信息
     print_results(&packages, cli.updates_only, language);
 
-    // 默认交互模式（除非用户指定 --no-interactive）
-    if !cli.no_interactive {
-        let selections = print_update_selection(&stable_updates, &prerelease_updates, language)?;
+    // 处理批量模式或交互模式
+    let selections = if cli.batch {
+        // 批量模式：自动选择所有有更新的包
+        let mut all_indices = Vec::new();
+        for (i, _) in all_updates.iter().enumerate() {
+            all_indices.push(i);
+        }
+        all_indices
+    } else if !cli.no_interactive {
+        // 交互模式：让用户选择
+        print_update_selection(&stable_updates, &prerelease_updates, language)?
+    } else {
+        // 非交互模式：不更新任何包
+        Vec::new()
+    };
 
-        if !selections.is_empty() {
-            println!("\n{}", language.get_text("starting_update").blue().bold());
+    if !selections.is_empty() {
+        println!("\n{}", language.get_text("starting_update").blue().bold());
 
-            let mut success_count = 0;
-            let mut fail_count = 0;
-            let mut update_results = Vec::new();
-            let total_packages = selections.len();
+        let mut success_count = 0;
+        let mut fail_count = 0;
+        let mut update_results = Vec::new();
+        let total_packages = selections.len();
 
-            // 创建整体进度条
-            let main_pb = create_main_progress_bar(total_packages);
+        // 创建整体进度条
+        let main_pb = create_main_progress_bar(total_packages);
 
-            // 构建所有可更新的包列表
-            let mut all_packages_to_update = stable_updates.clone();
-            all_packages_to_update.extend(prerelease_updates.clone());
+        // 构建所有可更新的包列表
+        let mut all_packages_to_update = stable_updates.clone();
+        all_packages_to_update.extend(prerelease_updates.clone());
 
-            for (i, &index) in selections.iter().enumerate() {
-                let package_name = &all_packages_to_update[index].name;
+        for (i, &index) in selections.iter().enumerate() {
+            let package_name = &all_packages_to_update[index].name;
 
-                // 更新整体进度条消息
-                main_pb.set_message(format!(
-                    "{} ({}/{})",
-                    language
-                        .get_text("updating_package")
-                        .replace("{}", package_name),
-                    i + 1,
-                    total_packages
-                ));
+            // 更新整体进度条消息
+            main_pb.set_message(format!(
+                "{} ({}/{})",
+                language
+                    .get_text("updating_package")
+                    .replace("{}", package_name),
+                i + 1,
+                total_packages
+            ));
 
-                // 找到对应的包信息以获取目标版本
-                let target_version = all_packages_to_update
-                    .iter()
-                    .find(|p| p.name == *package_name)
-                    .and_then(|p| p.latest_version.as_ref())
-                    .map(|v| v.as_str());
+            // 找到对应的包信息以获取目标版本
+            let target_version = all_packages_to_update
+                .iter()
+                .find(|p| p.name == *package_name)
+                .and_then(|p| p.latest_version.as_ref())
+                .map(|v| v.as_str());
 
-                match update_package(package_name, target_version).await {
-                    Ok(result) => {
-                        update_results.push(result.clone());
-                        if result.success {
-                            success_count += 1;
-                        } else {
-                            fail_count += 1;
-                        }
-                    }
-                    Err(e) => {
-                        main_pb.println(format!(
-                            "❌ {} {}: {}",
-                            package_name.red(),
-                            language
-                                .get_text("package_error")
-                                .replace("{}", package_name),
-                            e
-                        ));
+            match update_package(package_name, target_version).await {
+                Ok(result) => {
+                    update_results.push(result.clone());
+                    if result.success {
+                        success_count += 1;
+                    } else {
                         fail_count += 1;
-                        update_results.push(UpdateResult::new(
-                            package_name.clone(),
-                            None,
-                            None,
-                            false,
-                        ));
                     }
                 }
-
-                // 更新进度条
-                main_pb.inc(1);
+                Err(e) => {
+                    main_pb.println(format!(
+                        "❌ {} {}: {}",
+                        package_name.red(),
+                        language
+                            .get_text("package_error")
+                            .replace("{}", package_name),
+                        e
+                    ));
+                    fail_count += 1;
+                    update_results.push(UpdateResult::new(package_name.clone(), None, None, false));
+                }
             }
 
-            // 完成整体进度条
-            main_pb.finish_with_message(language.get_text("update_completed"));
+            // 更新进度条
+            main_pb.inc(1);
+        }
 
-            // 显示更新摘要
-            print_update_summary(&update_results, language);
+        // 完成整体进度条
+        main_pb.finish_with_message(language.get_text("update_completed"));
 
-            println!("\n{}", language.get_text("update_completed").green().bold());
+        // 显示更新摘要
+        print_update_summary(&update_results, language);
+
+        println!("\n{}", language.get_text("update_completed").green().bold());
+        println!(
+            "{}",
+            language
+                .get_text("success_count")
+                .replace("{}", &success_count.to_string())
+                .green()
+        );
+        if fail_count > 0 {
             println!(
                 "{}",
                 language
-                    .get_text("success_count")
-                    .replace("{}", &success_count.to_string())
-                    .green()
+                    .get_text("fail_count")
+                    .replace("{}", &fail_count.to_string())
+                    .red()
             );
-            if fail_count > 0 {
-                println!(
-                    "{}",
-                    language
-                        .get_text("fail_count")
-                        .replace("{}", &fail_count.to_string())
-                        .red()
-                );
-            }
-        } else {
-            println!("{}", language.get_text("no_packages_selected").yellow());
         }
     } else {
-        println!("\n{}", language.get_text("update_instructions").blue());
-        println!("{}", language.get_text("interactive_instructions"));
+        println!("{}", language.get_text("no_updates_selected").yellow());
     }
 
     Ok(())

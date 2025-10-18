@@ -21,13 +21,18 @@
 - 🔍 自动检测已安装的全局 Cargo 包
 - 📦 检查每个包的最新版本
 - 🎨 彩色输出，清晰显示更新状态
-- ⚡ 异步处理，快速检查多个包
+- ⚡ **并发处理**，快速检查多个包（3-5倍速度提升）
 - 🛠️ 命令行参数支持，灵活使用
 - 🔄 默认交互式更新模式，一键更新包
 - 🧠 智能预发布版本检测和询问
 - 🌍 自动语言检测（中文/英文）
 - 🚀 Cargo 子命令支持（`cargo fresh`）
 - 🌐 双语界面，智能语言切换
+- 🚀 **批量操作** - 自动更新所有包，无需确认
+- 🔍 **包过滤** - 按名称模式过滤包（支持通配符模式）
+- 🛡️ **增强错误处理** - 智能重试机制和用户友好的错误消息
+- 📊 **性能优化** - HTTP 连接池和请求缓存
+- ⚡ **快速安装** - 使用 `cargo binstall` 进行更快的包更新，支持自动回退
 
 ## 安装
 
@@ -38,9 +43,11 @@ cargo install cargo-fresh
 ```
 or
 ```bash
-# directly install without complinig
+# 使用预编译二进制文件进行快速安装
 cargo binstall cargo-fresh
 ```
+
+**注意**: `cargo binstall` 通过下载预编译的二进制文件而不是从源码编译来提供更快的安装速度。如果您没有安装 `cargo binstall`，cargo-fresh 会在需要时自动为您安装。
 
 ### 从源码安装
 
@@ -97,6 +104,8 @@ cargo-fresh
 - `-u, --updates-only`: 只显示有更新的包
 - `--no-interactive`: 非交互模式（默认是交互模式）
 - `--include-prerelease`: 包含预发布版本（alpha、beta、rc 等）
+- `--batch`: 批量模式 - 自动更新所有包，无需确认
+- `--filter <模式>`: 按名称模式过滤包（支持通配符模式）
 - `-h, --help`: 显示帮助信息
 - `-V, --version`: 显示版本信息
 
@@ -127,10 +136,68 @@ cargo fresh --include-prerelease
 # 非交互模式 + 预发布版本
 cargo fresh --no-interactive --include-prerelease
 
+# 批量模式 - 自动更新所有包，无需确认
+cargo fresh --batch
+
+# 按名称模式过滤包（支持通配符模式）
+cargo fresh --filter "cargo*"              # 只检查以 "cargo" 开头的包
+cargo fresh --filter "*mdbook*"            # 只检查包含 "mdbook" 的包
+cargo fresh --filter "nu*"                 # 只检查以 "nu" 开头的包
+
+# 组合新选项与现有选项
+cargo fresh --batch --filter "cargo*"      # 批量更新只更新 cargo 包
+cargo fresh --verbose --filter "*mdbook*"  # 详细检查 mdbook 包
+cargo fresh --batch --updates-only        # 批量更新只更新有更新的包
+
 # 生成 shell 补全脚本
 cargo fresh completion zsh    # 生成 zsh 补全
 cargo fresh completion bash   # 生成 bash 补全
 cargo fresh completion fish   # 生成 fish 补全
+
+# 生成 cargo fresh 子命令补全
+cargo fresh completion zsh --cargo-fresh    # 生成 cargo fresh zsh 补全
+cargo fresh completion bash --cargo-fresh   # 生成 cargo fresh bash 补全
+```
+
+### Shell 补全安装
+
+#### Zsh
+```bash
+# 生成并安装 zsh 补全
+cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
+# 或者为 cargo fresh 子命令
+cargo-fresh completion zsh --cargo-fresh > ~/.zsh/completions/_cargo
+
+# 添加到你的 ~/.zshrc
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -U compinit && compinit' >> ~/.zshrc
+```
+
+#### Bash
+```bash
+# 生成并安装 bash 补全
+cargo-fresh completion bash > ~/.local/share/bash-completion/completions/cargo-fresh
+# 或者为 cargo fresh 子命令
+cargo-fresh completion bash --cargo-fresh > ~/.local/share/bash-completion/completions/cargo
+
+# 在你的 ~/.bashrc 中加载
+echo 'source ~/.local/share/bash-completion/completions/cargo-fresh' >> ~/.bashrc
+```
+
+#### Fish
+```bash
+# 生成并安装 fish 补全
+cargo-fresh completion fish > ~/.config/fish/completions/cargo-fresh.fish
+# 或者为 cargo fresh 子命令
+cargo-fresh completion fish --cargo-fresh > ~/.config/fish/completions/cargo.fish
+```
+
+#### Nushell
+```bash
+# 生成并安装 nushell 补全
+cargo-fresh completion nushell > ~/.config/nushell/completions/cargo-fresh.nu
+# 或者为 cargo fresh 子命令
+cargo-fresh completion nushell --cargo-fresh > ~/.config/nushell/completions/cargo.nu
 ```
 
 ## 输出示例
@@ -255,11 +322,14 @@ cargo fresh <TAB>  # 显示所有 fresh 选项和参数
 
 ## 技术特性
 
-- **异步处理**: 使用 Tokio 异步运行时，快速并发检查多个包
+- **并发处理**: 使用 Tokio 异步运行时，并发包检查（比串行处理快 3-5 倍）
+- **HTTP 优化**: 连接池和请求缓存，提升性能
 - **智能版本检测**: 自动区分稳定版本和预发布版本
 - **交互式界面**: 用户友好的命令行交互体验
 - **彩色输出**: 美观的终端输出，清晰的状态显示
-- **错误处理**: 完善的错误处理和重试机制
+- **增强错误处理**: 智能重试机制，指数退避和用户友好的错误消息
+- **批量操作**: 支持自动化批量更新，无需用户确认
+- **包过滤**: 高级过滤功能，支持通配符模式
 - **类型安全**: Rust 类型系统保证代码安全性
 - **进度条**: 实时显示更新进度，提升用户体验
 - **Shell 补全**: 支持多种 shell 的自动补全功能
@@ -267,6 +337,71 @@ cargo fresh <TAB>  # 显示所有 fresh 选项和参数
 - **Cargo 集成**: 原生 cargo 子命令支持，无缝工作流
 - **双语支持**: 完整的中英文界面，智能切换
 - **模块化架构**: 清晰、可维护的代码结构，分离模块
+
+## Shell 补全故障排除
+
+### 常见问题
+
+#### 补全不工作
+如果 shell 补全不工作，请尝试以下步骤：
+
+1. **验证补全安装**：
+   ```bash
+   # 检查补全文件是否存在
+   ls ~/.zsh/completions/_cargo-fresh  # 对于 zsh
+   ls ~/.local/share/bash-completion/completions/cargo-fresh  # 对于 bash
+   ```
+
+2. **重新加载 shell 配置**：
+   ```bash
+   # 对于 zsh
+   source ~/.zshrc
+   
+   # 对于 bash
+   source ~/.bashrc
+   
+   # 对于 fish
+   # 重启 fish shell
+   ```
+
+3. **重新生成补全文件**：
+   ```bash
+   # 生成新的补全文件
+   cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
+   cargo-fresh completion bash > ~/.local/share/bash-completion/completions/cargo-fresh
+   ```
+
+#### 补全中缺少选项
+如果你注意到补全中缺少某些选项：
+
+1. **更新 cargo-fresh**：
+   ```bash
+   cargo install --force cargo-fresh
+   ```
+
+2. **重新生成补全文件**：
+   ```bash
+   cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
+   ```
+
+3. **验证补全包含新选项**：
+   ```bash
+   grep -E "(batch|filter)" ~/.zsh/completions/_cargo-fresh
+   ```
+
+#### Cargo fresh 子命令补全
+对于 `cargo fresh` 子命令补全：
+
+1. **生成 cargo fresh 补全**：
+   ```bash
+   cargo-fresh completion zsh --cargo-fresh > ~/.zsh/completions/_cargo
+   ```
+
+2. **验证 cargo 补全**：
+   ```bash
+   cargo <TAB>  # 应该显示 'fresh' 作为子命令
+   cargo fresh <TAB>  # 应该显示所有 fresh 选项
+   ```
 
 ## 贡献
 

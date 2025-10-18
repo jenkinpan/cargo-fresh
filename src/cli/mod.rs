@@ -23,6 +23,14 @@ pub struct Cli {
     #[arg(long)]
     pub include_prerelease: bool,
 
+    /// Batch mode - automatically update all packages without confirmation
+    #[arg(long)]
+    pub batch: bool,
+
+    /// Filter packages by name pattern (supports glob patterns)
+    #[arg(long)]
+    pub filter: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -82,6 +90,17 @@ impl Cli {
                 clap::Arg::new("include-prerelease")
                     .long("include-prerelease")
                     .help("Include prerelease versions (alpha, beta, rc, etc.)"),
+            )
+            .arg(
+                clap::Arg::new("batch")
+                    .long("batch")
+                    .help("Batch mode - automatically update all packages without confirmation"),
+            )
+            .arg(
+                clap::Arg::new("filter")
+                    .long("filter")
+                    .help("Filter packages by name pattern (supports glob patterns)")
+                    .value_name("PATTERN"),
             )
             .subcommand(
                 clap::Command::new("completion")

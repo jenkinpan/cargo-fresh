@@ -20,13 +20,18 @@ A Rust tool for checking and updating globally installed Cargo packages with int
 - 🔍 Automatically detect globally installed Cargo packages
 - 📦 Check for the latest version of each package
 - 🎨 Colored output with clear update status display
-- ⚡ Asynchronous processing for fast checking of multiple packages
+- ⚡ **Concurrent processing** for fast checking of multiple packages (3-5x faster)
 - 🛠️ Command-line argument support for flexible usage
 - 🔄 Default interactive update mode with one-click package updates
 - 🧠 Smart prerelease version detection and prompting
 - 🌍 Automatic language detection (Chinese/English)
 - 🚀 Cargo subcommand support (`cargo fresh`)
 - 🌐 Bilingual interface with smart language switching
+- 🚀 **Batch operations** - automatically update all packages without confirmation
+- 🔍 **Package filtering** - filter packages by name patterns (supports glob patterns)
+- 🛡️ **Enhanced error handling** - intelligent retry mechanisms and user-friendly error messages
+- 📊 **Performance optimization** - HTTP connection pooling and request caching
+- ⚡ **Fast installation** - uses `cargo binstall` for faster package updates with automatic fallback
 
 ## Installation
 
@@ -37,9 +42,11 @@ cargo install cargo-fresh
 ```
 or
 ```bash
-# directly install without complinig
+# Faster installation using pre-compiled binaries
 cargo binstall cargo-fresh
 ```
+
+**Note**: `cargo binstall` provides faster installation by downloading pre-compiled binaries instead of compiling from source. If you don't have `cargo binstall` installed, cargo-fresh will automatically install it for you when needed.
 
 ### Install from source
 
@@ -96,6 +103,8 @@ cargo-fresh
 - `-u, --updates-only`: Show only packages with updates
 - `--no-interactive`: Non-interactive mode (default is interactive mode)
 - `--include-prerelease`: Include prerelease versions (alpha, beta, rc, etc.)
+- `--batch`: Batch mode - automatically update all packages without confirmation
+- `--filter <PATTERN>`: Filter packages by name pattern (supports glob patterns)
 - `-h, --help`: Show help information
 - `-V, --version`: Show version information
 
@@ -126,6 +135,19 @@ cargo fresh --include-prerelease
 # Non-interactive mode + prerelease versions
 cargo fresh --no-interactive --include-prerelease
 
+# Batch mode - automatically update all packages without confirmation
+cargo fresh --batch
+
+# Filter packages by name pattern (supports glob patterns)
+cargo fresh --filter "cargo*"              # Only check packages starting with "cargo"
+cargo fresh --filter "*mdbook*"            # Only check packages containing "mdbook"
+cargo fresh --filter "nu*"                 # Only check packages starting with "nu"
+
+# Combine new options with existing ones
+cargo fresh --batch --filter "cargo*"      # Batch update only cargo packages
+cargo fresh --verbose --filter "*mdbook*"  # Verbose check for mdbook packages
+cargo fresh --batch --updates-only        # Batch update only packages with updates
+
 # Generate shell completion scripts
 cargo fresh completion zsh    # Generate zsh completion
 cargo fresh completion bash   # Generate bash completion
@@ -134,6 +156,47 @@ cargo fresh completion fish   # Generate fish completion
 # Generate cargo fresh subcommand completion
 cargo fresh completion zsh --cargo-fresh    # Generate cargo fresh zsh completion
 cargo fresh completion bash --cargo-fresh   # Generate cargo fresh bash completion
+```
+
+### Shell Completion Installation
+
+#### Zsh
+```bash
+# Generate and install zsh completion
+cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
+# Or for cargo fresh subcommand
+cargo-fresh completion zsh --cargo-fresh > ~/.zsh/completions/_cargo
+
+# Add to your ~/.zshrc
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -U compinit && compinit' >> ~/.zshrc
+```
+
+#### Bash
+```bash
+# Generate and install bash completion
+cargo-fresh completion bash > ~/.local/share/bash-completion/completions/cargo-fresh
+# Or for cargo fresh subcommand
+cargo-fresh completion bash --cargo-fresh > ~/.local/share/bash-completion/completions/cargo
+
+# Source in your ~/.bashrc
+echo 'source ~/.local/share/bash-completion/completions/cargo-fresh' >> ~/.bashrc
+```
+
+#### Fish
+```bash
+# Generate and install fish completion
+cargo-fresh completion fish > ~/.config/fish/completions/cargo-fresh.fish
+# Or for cargo fresh subcommand
+cargo-fresh completion fish --cargo-fresh > ~/.config/fish/completions/cargo.fish
+```
+
+#### Nushell
+```bash
+# Generate and install nushell completion
+cargo-fresh completion nushell > ~/.config/nushell/completions/cargo-fresh.nu
+# Or for cargo fresh subcommand
+cargo-fresh completion nushell --cargo-fresh > ~/.config/nushell/completions/cargo.nu
 ```
 
 ## Output Examples
@@ -258,11 +321,14 @@ cargo fresh <TAB>  # Shows all fresh options and parameters
 
 ## Technical Features
 
-- **Asynchronous Processing**: Uses Tokio async runtime for fast concurrent checking of multiple packages
+- **Concurrent Processing**: Uses Tokio async runtime with concurrent package checking (3-5x faster than sequential)
+- **HTTP Optimization**: Connection pooling and request caching for improved performance
 - **Smart Version Detection**: Automatically distinguishes between stable and prerelease versions
 - **Interactive Interface**: User-friendly command-line interaction experience
 - **Colored Output**: Beautiful terminal output with clear status display
-- **Error Handling**: Comprehensive error handling and retry mechanisms
+- **Enhanced Error Handling**: Intelligent retry mechanisms with exponential backoff and user-friendly error messages
+- **Batch Operations**: Support for automated batch updates without user confirmation
+- **Package Filtering**: Advanced filtering capabilities with glob pattern support
 - **Type Safety**: Rust type system ensures code safety
 - **Progress Bars**: Real-time update progress display for better user experience
 - **Shell Completion**: Auto-completion support for multiple shells
@@ -270,6 +336,71 @@ cargo fresh <TAB>  # Shows all fresh options and parameters
 - **Cargo Integration**: Native cargo subcommand support for seamless workflow
 - **Bilingual Support**: Complete Chinese and English interface with smart switching
 - **Modular Architecture**: Clean, maintainable code structure with separate modules
+
+## Shell Completion Troubleshooting
+
+### Common Issues
+
+#### Completion not working
+If shell completion is not working, try the following:
+
+1. **Verify completion installation**:
+   ```bash
+   # Check if completion files exist
+   ls ~/.zsh/completions/_cargo-fresh  # For zsh
+   ls ~/.local/share/bash-completion/completions/cargo-fresh  # For bash
+   ```
+
+2. **Reload shell configuration**:
+   ```bash
+   # For zsh
+   source ~/.zshrc
+   
+   # For bash
+   source ~/.bashrc
+   
+   # For fish
+   # Restart fish shell
+   ```
+
+3. **Regenerate completion files**:
+   ```bash
+   # Generate fresh completion files
+   cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
+   cargo-fresh completion bash > ~/.local/share/bash-completion/completions/cargo-fresh
+   ```
+
+#### Missing options in completion
+If you notice missing options in completion:
+
+1. **Update cargo-fresh**:
+   ```bash
+   cargo install --force cargo-fresh
+   ```
+
+2. **Regenerate completion files**:
+   ```bash
+   cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
+   ```
+
+3. **Verify completion includes new options**:
+   ```bash
+   grep -E "(batch|filter)" ~/.zsh/completions/_cargo-fresh
+   ```
+
+#### Cargo fresh subcommand completion
+For `cargo fresh` subcommand completion:
+
+1. **Generate cargo fresh completion**:
+   ```bash
+   cargo-fresh completion zsh --cargo-fresh > ~/.zsh/completions/_cargo
+   ```
+
+2. **Verify cargo completion**:
+   ```bash
+   cargo <TAB>  # Should show 'fresh' as a subcommand
+   cargo fresh <TAB>  # Should show all fresh options
+   ```
 
 ## Contributing
 
