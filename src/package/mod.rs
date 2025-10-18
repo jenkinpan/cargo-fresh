@@ -14,7 +14,7 @@ static BINSTALL_AVAILABLE: OnceLock<bool> = OnceLock::new();
 pub fn is_binstall_available() -> bool {
     *BINSTALL_AVAILABLE.get_or_init(|| {
         Command::new("cargo")
-            .args(["binstall", "--version"])
+            .args(["binstall", "--help"])
             .output()
             .map(|output| output.status.success())
             .unwrap_or(false)
@@ -49,19 +49,19 @@ pub async fn install_binstall() -> Result<bool> {
 
 /// 确保 cargo binstall 可用，如果不可用则尝试安装
 pub async fn ensure_binstall_available() -> Result<bool> {
+    // 首先检查 cargo binstall 是否已经可用
     if is_binstall_available() {
         return Ok(true);
     }
 
     let language = detect_language();
-    // 只在第一次检查时显示提示
-    if BINSTALL_AVAILABLE.get().is_none() {
-        println!("🔍 {}", language.get_text("binstall_not_found").yellow());
-        println!(
-            "⚡ {}",
-            language.get_text("attempting_to_install_binstall").cyan()
-        );
-    }
+
+    // 只有在 cargo binstall 确实不可用时才显示安装提示
+    println!("🔍 {}", language.get_text("binstall_not_found").yellow());
+    println!(
+        "⚡ {}",
+        language.get_text("attempting_to_install_binstall").cyan()
+    );
 
     let result = install_binstall().await?;
 

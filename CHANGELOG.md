@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+## [0.9.8] - 2025-10-18
+
+### Fixed
+- **cargo binstall 缓存逻辑修复**: 修复了 cargo binstall 检查逻辑中的命令参数错误
+- **重复安装提示问题**: 解决了即使 cargo binstall 已安装仍显示"正在安装 cargo binstall"的问题
+- **缓存机制优化**: 改进了 `is_binstall_available()` 函数，使用正确的命令检查可用性
+
+### Enhanced
+- **用户体验优化**: 避免重复的安装提示，提供更清晰的状态反馈
+- **性能提升**: 避免不必要的系统调用和重复操作
+- **缓存效率**: 确保 cargo binstall 状态只检查一次，提升响应速度
+
+### Technical
+- 修复 `is_binstall_available()` 函数中的命令参数错误（`--version` → `--help`）
+- 优化 `ensure_binstall_available()` 函数的逻辑流程
+- 改进缓存机制，确保正确的状态管理
+- 提升 cargo binstall 集成稳定性和可靠性
+
 ## [0.9.7] - 2025-10-18
 
 ### Added
