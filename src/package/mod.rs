@@ -2,17 +2,23 @@ use anyhow::Result;
 use colored::*;
 use std::collections::HashSet;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PRERELEASE_KEYWORDS};
 
-/// 检查 cargo binstall 是否可用
+// 缓存 cargo binstall 的可用性状态
+static BINSTALL_AVAILABLE: OnceLock<bool> = OnceLock::new();
+
+/// 检查 cargo binstall 是否可用（使用缓存）
 pub fn is_binstall_available() -> bool {
-    Command::new("cargo")
-        .args(["binstall", "--version"])
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    *BINSTALL_AVAILABLE.get_or_init(|| {
+        Command::new("cargo")
+            .args(["binstall", "--version"])
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    })
 }
 
 /// 安装 cargo binstall
@@ -26,14 +32,14 @@ pub async fn install_binstall() -> Result<bool> {
 
     if output.status.success() {
         println!(
-            "{}",
+            "✅ {}",
             language.get_text("binstall_installed_successfully").green()
         );
         Ok(true)
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         println!(
-            "{}: {}",
+            "❌ {}: {}",
             language.get_text("binstall_install_failed").red(),
             stderr
         );
@@ -48,13 +54,23 @@ pub async fn ensure_binstall_available() -> Result<bool> {
     }
 
     let language = detect_language();
-    println!("{}", language.get_text("binstall_not_found").yellow());
-    println!(
-        "{}",
-        language.get_text("attempting_to_install_binstall").cyan()
-    );
+    // 只在第一次检查时显示提示
+    if BINSTALL_AVAILABLE.get().is_none() {
+        println!("🔍 {}", language.get_text("binstall_not_found").yellow());
+        println!(
+            "⚡ {}",
+            language.get_text("attempting_to_install_binstall").cyan()
+        );
+    }
 
-    install_binstall().await
+    let result = install_binstall().await?;
+
+    // 如果安装成功，更新缓存
+    if result {
+        let _ = BINSTALL_AVAILABLE.set(true);
+    }
+
+    Ok(result)
 }
 
 /// 根据模式过滤包

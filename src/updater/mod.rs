@@ -36,11 +36,12 @@ pub fn create_main_progress_bar(total: usize) -> ProgressBar {
     pb.set_style(
         ProgressStyle::default_bar()
             .template(&format!(
-                "{{bar:{}.green/blue}} {{pos}}/{{len}} {{msg}}",
+                "{{spinner:.green}} {{bar:{}.green/blue}} {{pos}}/{{len}} {{msg}}",
                 PROGRESS_BAR_WIDTH
             ))
             .unwrap()
-            .progress_chars("█▉▊▋▌▍▎▏  "),
+            .progress_chars("█▉▊▋▌▍▎▏  ")
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
     );
     pb.set_message(
         language
@@ -71,7 +72,7 @@ pub async fn update_package(
     let use_binstall = ensure_binstall_available().await.unwrap_or(false);
 
     let (command, args) = if use_binstall {
-        pb.println(language.get_text("using_binstall").cyan().to_string());
+        pb.println(format!("⚡ {}", language.get_text("using_binstall").cyan()));
         if let Some(version) = target_version {
             (
                 "cargo",
@@ -81,12 +82,10 @@ pub async fn update_package(
             ("cargo", vec!["binstall", "--force", package_name])
         }
     } else {
-        pb.println(
-            language
-                .get_text("using_install_fallback")
-                .yellow()
-                .to_string(),
-        );
+        pb.println(format!(
+            "🔄 {}",
+            language.get_text("using_install_fallback").yellow()
+        ));
         if let Some(version) = target_version {
             (
                 "cargo",
@@ -136,9 +135,11 @@ pub async fn update_package(
         }
 
         if output.status.success() {
-            pb.println(language
+            pb.println(
+                language
                     .get_text("package_update_success")
-                    .replace("{}", &package_name.green().to_string()));
+                    .replace("{}", &package_name.green().to_string()),
+            );
 
             // 等待系统更新
             tokio::time::sleep(tokio::time::Duration::from_millis(VERSION_UPDATE_DELAY_MS)).await;
@@ -146,7 +147,8 @@ pub async fn update_package(
             // 验证更新是否真的成功
             if let Ok(Some(new_version)) = get_installed_version(package_name).await {
                 if old_version.as_ref() != Some(&new_version) {
-                    pb.println(language
+                    pb.println(
+                        language
                             .get_text("package_updated_version")
                             .replace("{}", &package_name.green().to_string())
                             .replace(
@@ -155,9 +157,10 @@ pub async fn update_package(
                                     .as_ref()
                                     .unwrap_or(&language.get_text("unknown_version").to_string())
                                     .red()
-                                    .to_string()
+                                    .to_string(),
                             )
-                            .replace("{}", &new_version.green().to_string()));
+                            .replace("{}", &new_version.green().to_string()),
+                    );
                     return Ok(UpdateResult::new(
                         package_name.to_string(),
                         old_version.clone(),
@@ -165,9 +168,11 @@ pub async fn update_package(
                         true,
                     ));
                 } else {
-                    pb.println(language
+                    pb.println(
+                        language
                             .get_text("package_version_unchanged")
-                            .replace("{}", &package_name.yellow().to_string()));
+                            .replace("{}", &package_name.yellow().to_string()),
+                    );
                     return Ok(UpdateResult::new(
                         package_name.to_string(),
                         old_version.clone(),
@@ -176,9 +181,11 @@ pub async fn update_package(
                     ));
                 }
             } else {
-                pb.println(language
+                pb.println(
+                    language
                         .get_text("package_update_verification_failed")
-                        .replace("{}", &package_name.yellow().to_string()));
+                        .replace("{}", &package_name.yellow().to_string()),
+                );
                 if attempt < MAX_RETRY_ATTEMPTS {
                     pb.println(language.get_text("waiting_retry"));
                     tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
@@ -227,9 +234,11 @@ pub async fn update_package(
 
                 if fallback_output.status.success() {
                     // 回退成功，继续正常的成功处理流程
-                    pb.println(language
+                    pb.println(
+                        language
                             .get_text("package_update_success")
-                            .replace("{}", &package_name.green().to_string()));
+                            .replace("{}", &package_name.green().to_string()),
+                    );
 
                     // 等待系统更新
                     tokio::time::sleep(tokio::time::Duration::from_millis(VERSION_UPDATE_DELAY_MS))
@@ -238,7 +247,8 @@ pub async fn update_package(
                     // 验证更新是否真的成功
                     if let Ok(Some(new_version)) = get_installed_version(package_name).await {
                         if old_version.as_ref() != Some(&new_version) {
-                            pb.println(language
+                            pb.println(
+                                language
                                     .get_text("package_updated_version")
                                     .replace("{}", &package_name.green().to_string())
                                     .replace(
@@ -246,12 +256,13 @@ pub async fn update_package(
                                         &old_version
                                             .as_ref()
                                             .unwrap_or(
-                                                &language.get_text("unknown_version").to_string()
+                                                &language.get_text("unknown_version").to_string(),
                                             )
                                             .red()
-                                            .to_string()
+                                            .to_string(),
                                     )
-                                    .replace("{}", &new_version.green().to_string()));
+                                    .replace("{}", &new_version.green().to_string()),
+                            );
                             return Ok(UpdateResult::new(
                                 package_name.to_string(),
                                 old_version.clone(),
@@ -259,9 +270,11 @@ pub async fn update_package(
                                 true,
                             ));
                         } else {
-                            pb.println(language
+                            pb.println(
+                                language
                                     .get_text("package_version_unchanged")
-                                    .replace("{}", &package_name.yellow().to_string()));
+                                    .replace("{}", &package_name.yellow().to_string()),
+                            );
                             return Ok(UpdateResult::new(
                                 package_name.to_string(),
                                 old_version.clone(),
@@ -270,9 +283,11 @@ pub async fn update_package(
                             ));
                         }
                     } else {
-                        pb.println(language
+                        pb.println(
+                            language
                                 .get_text("package_update_verification_failed")
-                                .replace("{}", &package_name.yellow().to_string()));
+                                .replace("{}", &package_name.yellow().to_string()),
+                        );
                         return Ok(UpdateResult::new(
                             package_name.to_string(),
                             old_version.clone(),
@@ -283,13 +298,15 @@ pub async fn update_package(
                 } else {
                     // 回退也失败，继续正常的失败处理流程
                     let fallback_stderr = String::from_utf8_lossy(&fallback_output.stderr);
-                    pb.println(language
+                    pb.println(
+                        language
                             .get_text("package_update_failed")
                             .replace("{}", &package_name.red().to_string())
                             .replace(
                                 "{}",
-                                &fallback_output.status.code().unwrap_or(-1).to_string()
-                            ));
+                                &fallback_output.status.code().unwrap_or(-1).to_string(),
+                            ),
+                    );
                     if !fallback_stderr.is_empty() {
                         pb.println(format!(
                             "{} {}",
@@ -299,10 +316,12 @@ pub async fn update_package(
                     }
                 }
             } else {
-                pb.println(language
+                pb.println(
+                    language
                         .get_text("package_update_failed")
                         .replace("{}", &package_name.red().to_string())
-                        .replace("{}", &output.status.code().unwrap_or(-1).to_string()));
+                        .replace("{}", &output.status.code().unwrap_or(-1).to_string()),
+                );
                 if !stderr.is_empty() {
                     pb.println(format!(
                         "{} {}",

@@ -143,6 +143,9 @@ async fn main() -> Result<()> {
     if !selections.is_empty() {
         println!("\n{}", language.get_text("starting_update").blue().bold());
 
+        // 记录更新开始时间
+        let start_time = std::time::Instant::now();
+
         let mut success_count = 0;
         let mut fail_count = 0;
         let mut update_results = Vec::new();
@@ -203,12 +206,19 @@ async fn main() -> Result<()> {
         }
 
         // 完成整体进度条
-        main_pb.finish_with_message(language.get_text("update_completed"));
+        main_pb.finish_and_clear();
+        println!(
+            "✅ {}",
+            language.get_text("update_completed").green().bold()
+        );
+
+        // 计算总耗时
+        let total_duration = start_time.elapsed();
+        let duration_seconds = total_duration.as_secs();
+        let duration_millis = total_duration.as_millis();
 
         // 显示更新摘要
         print_update_summary(&update_results, language);
-
-        println!("\n{}", language.get_text("update_completed").green().bold());
         println!(
             "{}",
             language
@@ -223,6 +233,25 @@ async fn main() -> Result<()> {
                     .get_text("fail_count")
                     .replace("{}", &fail_count.to_string())
                     .red()
+            );
+        }
+
+        // 显示总耗时
+        if duration_seconds > 0 {
+            println!(
+                "{}",
+                language
+                    .get_text("total_time_seconds")
+                    .replace("{}", &duration_seconds.to_string())
+                    .cyan()
+            );
+        } else {
+            println!(
+                "{}",
+                language
+                    .get_text("total_time_millis")
+                    .replace("{}", &duration_millis.to_string())
+                    .cyan()
             );
         }
     } else {

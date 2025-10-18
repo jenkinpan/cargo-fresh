@@ -97,6 +97,10 @@ pub fn get_english_text(key: &str) -> &'static str {
         "using_binstall" => "Using cargo binstall for faster installation",
         "using_install_fallback" => "Using cargo install as fallback",
         "binstall_failed_fallback" => "cargo binstall failed, falling back to cargo install",
+        
+        // 时间统计相关文本
+        "total_time_seconds" => "Total time: {} seconds",
+        "total_time_millis" => "Total time: {} milliseconds",
 
         _ => "",
     }
@@ -194,6 +198,10 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "using_binstall" => "使用 cargo binstall 进行快速安装",
         "using_install_fallback" => "使用 cargo install 作为回退方案",
         "binstall_failed_fallback" => "cargo binstall 失败，回退到 cargo install",
+        
+        // 时间统计相关文本
+        "total_time_seconds" => "总耗时: {} 秒",
+        "total_time_millis" => "总耗时: {} 毫秒",
 
         _ => "",
     }
