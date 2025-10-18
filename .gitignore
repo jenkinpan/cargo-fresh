@@ -21,3 +21,7 @@ Thumbs.db
 
 # GitHub Action generated files
 release_notes.md
+
+# OpenSpec and Cursor
+openspec/
+.cursor/
