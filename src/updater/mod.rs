@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::process::Command;
+use std::process::{Command, Output};
 
 use crate::locale::detection::detect_language;
 use crate::models::{
@@ -51,6 +51,114 @@ pub fn create_main_progress_bar(total: usize) -> ProgressBar {
     pb
 }
 
+fn build_args<'a>(use_binstall: bool, package_name: &'a str, version: Option<&'a str>) -> Vec<&'a str> {
+    let subcmd = if use_binstall { "binstall" } else { "install" };
+    match version {
+        Some(v) => vec![subcmd, "--force", package_name, "--version", v],
+        None => vec![subcmd, "--force", package_name],
+    }
+}
+
+fn run_cargo(pb: &ProgressBar, args: &[&str]) -> Result<Output> {
+    let language = detect_language();
+    pb.println(format!(
+        "{} cargo {}",
+        language.get_text("executing_command"),
+        args.join(" ")
+    ));
+    pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
+    let output = Command::new("cargo")
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()?;
+    pb.disable_steady_tick();
+    Ok(output)
+}
+
+/// 命令执行成功后，确认安装版本并打印对应文案，返回 UpdateResult。
+///
+/// `new_version: None` 表示命令成功但无法读到安装后的版本（例：cargo install --list 失败）。
+/// 调用方可据此决定是否重试。
+async fn verify_and_report_update(
+    pb: &ProgressBar,
+    package_name: &str,
+    old_version: &Option<String>,
+) -> UpdateResult {
+    let language = detect_language();
+    pb.println(
+        language.format_text(
+            "package_update_success",
+            &[("name", &package_name.green().to_string())],
+        ),
+    );
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(VERSION_UPDATE_DELAY_MS)).await;
+
+    match get_installed_version(package_name).await {
+        Ok(Some(new_version)) if old_version.as_ref() != Some(&new_version) => {
+            let unknown = language.get_text("unknown_version").to_string();
+            let old_str = old_version.as_ref().unwrap_or(&unknown);
+            pb.println(language.format_text(
+                "package_updated_version",
+                &[
+                    ("name", &package_name.green().to_string()),
+                    ("old", &old_str.red().to_string()),
+                    ("new", &new_version.green().to_string()),
+                ],
+            ));
+            UpdateResult::new(
+                package_name.to_string(),
+                old_version.clone(),
+                Some(new_version),
+                true,
+            )
+        }
+        Ok(Some(_)) => {
+            pb.println(
+                language.format_text(
+                    "package_version_unchanged",
+                    &[("name", &package_name.yellow().to_string())],
+                ),
+            );
+            UpdateResult::new(
+                package_name.to_string(),
+                old_version.clone(),
+                old_version.clone(),
+                true,
+            )
+        }
+        _ => {
+            pb.println(
+                language.format_text(
+                    "package_update_verification_failed",
+                    &[("name", &package_name.yellow().to_string())],
+                ),
+            );
+            UpdateResult::new(package_name.to_string(), old_version.clone(), None, true)
+        }
+    }
+}
+
+fn report_command_failure(pb: &ProgressBar, package_name: &str, output: &Output) {
+    let language = detect_language();
+    pb.println(language.format_text(
+        "package_update_failed",
+        &[
+            ("name", &package_name.red().to_string()),
+            ("code", &output.status.code().unwrap_or(-1).to_string()),
+        ],
+    ));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stderr.is_empty() {
+        pb.println(format!(
+            "{} {}",
+            language.get_text("error_details"),
+            stderr.red()
+        ));
+    }
+}
+
 pub async fn update_package(
     package_name: &str,
     target_version: Option<&str>,
@@ -58,7 +166,6 @@ pub async fn update_package(
     let language = detect_language();
     let pb = create_progress_bar(package_name);
 
-    // 获取更新前的版本
     let old_version = get_installed_version(package_name).await.ok().flatten();
     if let Some(ref version) = old_version {
         pb.println(format!(
@@ -68,286 +175,83 @@ pub async fn update_package(
         ));
     }
 
-    // 尝试使用 binstall，如果不可用则回退到 install
     let use_binstall = ensure_binstall_available().await.unwrap_or(false);
 
-    let (command, args) = if use_binstall {
+    if use_binstall {
         pb.println(format!("⚡ {}", language.get_text("using_binstall").cyan()));
-        if let Some(version) = target_version {
-            (
-                "cargo",
-                vec!["binstall", "--force", package_name, "--version", version],
-            )
-        } else {
-            ("cargo", vec!["binstall", "--force", package_name])
-        }
     } else {
         pb.println(format!(
             "🔄 {}",
             language.get_text("using_install_fallback").yellow()
         ));
-        if let Some(version) = target_version {
-            (
-                "cargo",
-                vec!["install", "--force", package_name, "--version", version],
-            )
-        } else {
-            ("cargo", vec!["install", "--force", package_name])
-        }
+    }
+
+    let primary_args = build_args(use_binstall, package_name, target_version);
+    // 只有走 binstall 时才有 install 回退；纯 install 路径失败就只能重试。
+    let fallback_args = if use_binstall {
+        Some(build_args(false, package_name, target_version))
+    } else {
+        None
     };
 
-    pb.println(format!(
-        "{} {} {}",
-        language.get_text("executing_command"),
-        command,
-        args.join(" ")
-    ));
-
-    // 尝试更新，最多重试3次
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
         if attempt > 1 {
-            pb.set_message(format!(
-                "{} {} {}",
-                language.get_text("retry_attempt").replace("{}", "").trim(),
-                attempt,
-                package_name.cyan()
+            pb.set_message(language.format_text(
+                "retry_attempt",
+                &[
+                    ("attempt", &attempt.to_string()),
+                    ("name", &package_name.cyan().to_string()),
+                ],
             ));
         }
 
-        // 启动进度条
-        pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
-
-        let output = Command::new(command)
-            .args(&args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()?;
-
-        // 停止进度条
-        pb.finish_and_clear();
-
-        // 检查是否有真正的错误（非编译输出）
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        // 只有在命令失败时才显示错误信息
-        if !output.status.success() && !stderr.is_empty() {
-            pb.println(format!("{} {}", language.get_text("error_message"), stderr));
-        }
+        let output = run_cargo(&pb, &primary_args)?;
 
         if output.status.success() {
-            pb.println(
-                language
-                    .get_text("package_update_success")
-                    .replace("{}", &package_name.green().to_string()),
-            );
-
-            // 等待系统更新
-            tokio::time::sleep(tokio::time::Duration::from_millis(VERSION_UPDATE_DELAY_MS)).await;
-
-            // 验证更新是否真的成功
-            if let Ok(Some(new_version)) = get_installed_version(package_name).await {
-                if old_version.as_ref() != Some(&new_version) {
-                    pb.println(
-                        language
-                            .get_text("package_updated_version")
-                            .replace("{}", &package_name.green().to_string())
-                            .replace(
-                                "{}",
-                                &old_version
-                                    .as_ref()
-                                    .unwrap_or(&language.get_text("unknown_version").to_string())
-                                    .red()
-                                    .to_string(),
-                            )
-                            .replace("{}", &new_version.green().to_string()),
-                    );
-                    return Ok(UpdateResult::new(
-                        package_name.to_string(),
-                        old_version.clone(),
-                        Some(new_version),
-                        true,
-                    ));
-                } else {
-                    pb.println(
-                        language
-                            .get_text("package_version_unchanged")
-                            .replace("{}", &package_name.yellow().to_string()),
-                    );
-                    return Ok(UpdateResult::new(
-                        package_name.to_string(),
-                        old_version.clone(),
-                        old_version,
-                        true,
-                    ));
-                }
-            } else {
-                pb.println(
-                    language
-                        .get_text("package_update_verification_failed")
-                        .replace("{}", &package_name.yellow().to_string()),
-                );
-                if attempt < MAX_RETRY_ATTEMPTS {
-                    pb.println(language.get_text("waiting_retry"));
-                    tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
-                    continue;
-                }
-                return Ok(UpdateResult::new(
-                    package_name.to_string(),
-                    old_version.clone(),
-                    None,
-                    true,
-                ));
-            }
-        } else {
-            // 如果使用 binstall 失败，尝试回退到 install
-            if use_binstall && attempt == 1 {
-                pb.println(
-                    language
-                        .get_text("binstall_failed_fallback")
-                        .yellow()
-                        .to_string(),
-                );
-
-                // 重新构建 install 命令
-                let (fallback_command, fallback_args) = if let Some(version) = target_version {
-                    (
-                        "cargo",
-                        vec!["install", "--force", package_name, "--version", version],
-                    )
-                } else {
-                    ("cargo", vec!["install", "--force", package_name])
-                };
-
-                pb.println(format!(
-                    "{} {} {}",
-                    language.get_text("executing_command"),
-                    fallback_command,
-                    fallback_args.join(" ")
-                ));
-
-                // 使用回退命令重试
-                let fallback_output = Command::new(fallback_command)
-                    .args(&fallback_args)
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .output()?;
-
-                if fallback_output.status.success() {
-                    // 回退成功，继续正常的成功处理流程
-                    pb.println(
-                        language
-                            .get_text("package_update_success")
-                            .replace("{}", &package_name.green().to_string()),
-                    );
-
-                    // 等待系统更新
-                    tokio::time::sleep(tokio::time::Duration::from_millis(VERSION_UPDATE_DELAY_MS))
-                        .await;
-
-                    // 验证更新是否真的成功
-                    if let Ok(Some(new_version)) = get_installed_version(package_name).await {
-                        if old_version.as_ref() != Some(&new_version) {
-                            pb.println(
-                                language
-                                    .get_text("package_updated_version")
-                                    .replace("{}", &package_name.green().to_string())
-                                    .replace(
-                                        "{}",
-                                        &old_version
-                                            .as_ref()
-                                            .unwrap_or(
-                                                &language.get_text("unknown_version").to_string(),
-                                            )
-                                            .red()
-                                            .to_string(),
-                                    )
-                                    .replace("{}", &new_version.green().to_string()),
-                            );
-                            return Ok(UpdateResult::new(
-                                package_name.to_string(),
-                                old_version.clone(),
-                                Some(new_version),
-                                true,
-                            ));
-                        } else {
-                            pb.println(
-                                language
-                                    .get_text("package_version_unchanged")
-                                    .replace("{}", &package_name.yellow().to_string()),
-                            );
-                            return Ok(UpdateResult::new(
-                                package_name.to_string(),
-                                old_version.clone(),
-                                old_version,
-                                true,
-                            ));
-                        }
-                    } else {
-                        pb.println(
-                            language
-                                .get_text("package_update_verification_failed")
-                                .replace("{}", &package_name.yellow().to_string()),
-                        );
-                        return Ok(UpdateResult::new(
-                            package_name.to_string(),
-                            old_version.clone(),
-                            None,
-                            true,
-                        ));
-                    }
-                } else {
-                    // 回退也失败，继续正常的失败处理流程
-                    let fallback_stderr = String::from_utf8_lossy(&fallback_output.stderr);
-                    pb.println(
-                        language
-                            .get_text("package_update_failed")
-                            .replace("{}", &package_name.red().to_string())
-                            .replace(
-                                "{}",
-                                &fallback_output.status.code().unwrap_or(-1).to_string(),
-                            ),
-                    );
-                    if !fallback_stderr.is_empty() {
-                        pb.println(format!(
-                            "{} {}",
-                            language.get_text("error_details"),
-                            fallback_stderr.red()
-                        ));
-                    }
-                }
-            } else {
-                pb.println(
-                    language
-                        .get_text("package_update_failed")
-                        .replace("{}", &package_name.red().to_string())
-                        .replace("{}", &output.status.code().unwrap_or(-1).to_string()),
-                );
-                if !stderr.is_empty() {
-                    pb.println(format!(
-                        "{} {}",
-                        language.get_text("error_details"),
-                        stderr.red()
-                    ));
-                }
-            }
-
-            if attempt < MAX_RETRY_ATTEMPTS {
+            let result = verify_and_report_update(&pb, package_name, &old_version).await;
+            // 命令成功但读不到新版本时，给主路径一次重试机会（保留原行为）
+            if result.new_version.is_none() && attempt < MAX_RETRY_ATTEMPTS {
                 pb.println(language.get_text("waiting_retry"));
                 tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                 continue;
             }
-            return Ok(UpdateResult::new(
-                package_name.to_string(),
-                old_version.clone(),
-                None,
-                false,
-            ));
+            return Ok(result);
         }
+
+        // binstall 第一次失败：立刻尝试 install 回退（不消耗 attempt 计数器中的剩余次数）
+        if let (Some(args), 1) = (fallback_args.as_ref(), attempt) {
+            pb.println(
+                language
+                    .get_text("binstall_failed_fallback")
+                    .yellow()
+                    .to_string(),
+            );
+            let fb_output = run_cargo(&pb, args)?;
+            if fb_output.status.success() {
+                return Ok(verify_and_report_update(&pb, package_name, &old_version).await);
+            }
+            report_command_failure(&pb, package_name, &fb_output);
+        } else {
+            report_command_failure(&pb, package_name, &output);
+        }
+
+        if attempt < MAX_RETRY_ATTEMPTS {
+            pb.println(language.get_text("waiting_retry"));
+            tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+            continue;
+        }
+
+        return Ok(UpdateResult::new(
+            package_name.to_string(),
+            old_version,
+            None,
+            false,
+        ));
     }
 
     Ok(UpdateResult::new(
         package_name.to_string(),
-        old_version.clone(),
+        old_version,
         None,
         false,
     ))

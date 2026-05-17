@@ -28,6 +28,23 @@ impl Language {
         }
     }
 
+    /// 用命名占位符填充本地化模板
+    ///
+    /// 模板中形如 `{name}` 的占位符会被 `args` 中对应键的值替换。
+    /// 相比反复链式 `replace("{}", x)`（会一次性替换所有 `{}`），
+    /// 命名占位符保证每个变量只替换到自己的位置。
+    ///
+    /// 已知限制：实现按 `args` 顺序串行替换，所以一个变量的值若包含后续变量的
+    /// 占位符字面量（如 value 里写 `{error}`），会被再次展开。本项目中所有
+    /// 实际取值都是包名/版本号/错误信息，不含此模式，因此不做防御。
+    pub fn format_text(&self, key: &str, args: &[(&str, &str)]) -> String {
+        let mut s = self.get_text(key).to_string();
+        for (name, value) in args {
+            s = s.replace(&format!("{{{}}}", name), value);
+        }
+        s
+    }
+
     /// 获取语言名称
     ///
     /// # Returns
@@ -109,5 +126,48 @@ mod tests {
     fn test_language_display() {
         assert_eq!(format!("{}", Language::English), "English");
         assert_eq!(format!("{}", Language::Chinese), "Chinese");
+    }
+
+    #[test]
+    fn test_format_text_single_named_placeholder() {
+        // 单个命名占位符替换
+        let out = Language::English.format_text("package_error", &[
+            ("name", "ripgrep"),
+            ("error", "boom"),
+        ]);
+        assert_eq!(out, "❌ ripgrep update error: boom");
+    }
+
+    #[test]
+    fn test_format_text_multi_named_placeholders_no_collision() {
+        // 这是修复 i18n bug 的关键回归测试：
+        // 旧代码用链式 .replace("{}", x) 会把所有 {} 都替换成第一个值。
+        // 命名占位符必须保证 {name}/{old}/{new} 各自只替换到自己的位置。
+        let out = Language::English.format_text("package_updated_version", &[
+            ("name", "ripgrep"),
+            ("old", "13.0.0"),
+            ("new", "14.1.0"),
+        ]);
+        assert_eq!(out, "✅ ripgrep updated: 13.0.0 → 14.1.0");
+    }
+
+    #[test]
+    fn test_format_text_missing_arg_leaves_placeholder() {
+        // 缺失参数时占位符原样保留，便于及时发现遗漏的 key
+        let out = Language::English.format_text("package_update_failed", &[
+            ("name", "tokei"),
+            // 故意不传 code
+        ]);
+        assert_eq!(out, "❌ tokei update failed (exit code: {code})");
+    }
+
+    #[test]
+    fn test_format_text_works_for_chinese_template() {
+        // 中文模板同样使用命名占位符
+        let out = Language::Chinese.format_text("retry_attempt", &[
+            ("attempt", "2"),
+            ("name", "cargo-fresh"),
+        ]);
+        assert_eq!(out, "重试第 2 次更新 cargo-fresh...");
     }
 }

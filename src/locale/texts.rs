@@ -34,9 +34,8 @@ pub fn get_english_text(key: &str) -> &'static str {
         // 更新过程文本
         "starting_update" => "Starting to update selected packages...",
         "updating_package" => "Updating {}...",
-        "package_updated" => "✅ {} updated: {} → {}",
         "package_failed" => "❌ {} update failed",
-        "package_error" => "❌ {} update error: {}",
+        "package_error" => "❌ {name} update error: {error}",
         "update_completed" => "Update completed!",
 
         // 统计信息文本
@@ -70,15 +69,15 @@ pub fn get_english_text(key: &str) -> &'static str {
         "updating_package_progress" => "Updating {}...",
         "current_version_label" => "Current version:",
         "executing_command" => "Executing command:",
-        "retry_attempt" => "Retry attempt {} for {}...",
+        "retry_attempt" => "Retry attempt {attempt} for {name}...",
         "error_message" => "Error message:",
         "package_update_success" => "✅ {} update command executed successfully",
-        "package_updated_version" => "✅ {} updated: {} → {}",
+        "package_updated_version" => "✅ {name} updated: {old} → {new}",
         "package_version_unchanged" => "⚠️ {} version unchanged, may already be the latest version",
         "package_update_verification_failed" => {
             "⚠️ {} update command successful but unable to verify new version"
         }
-        "package_update_failed" => "❌ {} update failed (exit code: {})",
+        "package_update_failed" => "❌ {name} update failed (exit code: {code})",
         "error_details" => "Error details:",
         "waiting_retry" => "Waiting before retry...",
 
@@ -137,9 +136,8 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         // 更新过程文本
         "starting_update" => "开始更新选中的包...",
         "updating_package" => "正在更新 {}...",
-        "package_updated" => "✅ {} 已更新: {} → {}",
         "package_failed" => "❌ {} 更新失败",
-        "package_error" => "❌ {} 更新出错: {}",
+        "package_error" => "❌ {name} 更新出错: {error}",
         "update_completed" => "更新完成！",
 
         // 统计信息文本
@@ -173,13 +171,13 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "updating_package_progress" => "正在更新 {}...",
         "current_version_label" => "当前版本:",
         "executing_command" => "执行命令:",
-        "retry_attempt" => "重试第 {} 次更新 {}...",
+        "retry_attempt" => "重试第 {attempt} 次更新 {name}...",
         "error_message" => "错误信息:",
         "package_update_success" => "✅ {} 更新命令执行成功",
-        "package_updated_version" => "✅ {} 已更新: {} → {}",
+        "package_updated_version" => "✅ {name} 已更新: {old} → {new}",
         "package_version_unchanged" => "⚠️ {} 版本未改变，可能已经是最新版本",
         "package_update_verification_failed" => "⚠️ {} 更新命令成功但无法验证新版本",
-        "package_update_failed" => "❌ {} 更新失败 (退出码: {})",
+        "package_update_failed" => "❌ {name} 更新失败 (退出码: {code})",
         "error_details" => "错误详情:",
         "waiting_retry" => "等待后重试...",
 
@@ -250,7 +248,6 @@ mod tests {
             "select_packages",
             "starting_update",
             "updating_package",
-            "package_updated",
             "package_failed",
             "package_error",
             "update_completed",

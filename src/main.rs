@@ -188,13 +188,12 @@ async fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    main_pb.println(format!(
-                        "❌ {} {}: {}",
-                        package_name.red(),
-                        language
-                            .get_text("package_error")
-                            .replace("{}", package_name),
-                        e
+                    main_pb.println(language.format_text(
+                        "package_error",
+                        &[
+                            ("name", &package_name.red().to_string()),
+                            ("error", &e.to_string()),
+                        ],
                     ));
                     fail_count += 1;
                     update_results.push(UpdateResult::new(package_name.clone(), None, None, false));
