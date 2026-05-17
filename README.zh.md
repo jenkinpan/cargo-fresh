@@ -29,9 +29,11 @@
 - 🚀 Cargo 子命令支持（`cargo fresh`）
 - 🌐 双语界面，智能语言切换
 - 🚀 **批量操作** - 自动更新所有包，无需确认
-- 🔍 **包过滤** - 按名称模式过滤包（支持通配符模式）
+- 🔍 **包过滤** - 用 `--filter` 保留匹配的包，用 `--exclude`（可重复）剔除，均支持通配符
+- 🧪 **预演模式** - 用 `--dry-run` 预览将要执行的 cargo 命令，不做任何改动
+- 📦 **来源感知更新** - 支持 crates.io、`git`（`--git URL [--rev]`）和本地 `path` 安装，带 `[git]` / `[path]` 标记
 - 🛡️ **增强错误处理** - 智能重试机制和用户友好的错误消息
-- 📊 **性能优化** - HTTP 连接池和请求缓存
+- 📊 **快速版本检查** - 直连 crates.io sparse index，连接池 + 并发限流（失败时回退 `cargo search`）
 - ⚡ **快速安装** - 使用 `cargo binstall` 进行更快的包更新，支持自动回退
 
 ## 安装
@@ -105,7 +107,9 @@ cargo-fresh
 - `--no-interactive`: 非交互模式（默认是交互模式）
 - `--include-prerelease`: 包含预发布版本（alpha、beta、rc 等）
 - `--batch`: 批量模式 - 自动更新所有包，无需确认
-- `--filter <模式>`: 按名称模式过滤包（支持通配符模式）
+- `--filter <模式>`: 仅保留匹配该通配符模式的包（`*`、`?`、`[abc]`）
+- `--exclude <模式>`: 剔除匹配该通配符模式的包；可重复，在 `--filter` 之后应用
+- `--dry-run`: 打印将要执行的 cargo 命令但不实际执行
 - `-h, --help`: 显示帮助信息
 - `-V, --version`: 显示版本信息
 
@@ -143,6 +147,15 @@ cargo fresh --batch
 cargo fresh --filter "cargo*"              # 只检查以 "cargo" 开头的包
 cargo fresh --filter "*mdbook*"            # 只检查包含 "mdbook" 的包
 cargo fresh --filter "nu*"                 # 只检查以 "nu" 开头的包
+
+# 按通配符模式排除包（可重复，在 --filter 之后应用）
+cargo fresh --exclude "cargo-fresh"                  # 检查除 cargo-fresh 外的所有包
+cargo fresh --exclude "ripgrep" --exclude "tokei"    # 跳过多个包
+cargo fresh --filter "cargo*" --exclude "cargo-fresh"  # cargo* 包，但排除 cargo-fresh
+
+# 预演：预览将要执行的 cargo 命令，不做任何改动
+cargo fresh --dry-run                      # 预览所有包的更新
+cargo fresh --dry-run --batch              # 预览完整的批量更新
 
 # 组合新选项与现有选项
 cargo fresh --batch --filter "cargo*"      # 批量更新只更新 cargo 包
@@ -202,49 +215,72 @@ cargo-fresh completion nushell --cargo-fresh > ~/.config/nushell/completions/car
 
 ## 输出示例
 
+cargo-fresh 采用 cargo 风格的状态格式：12 字符右对齐的加粗动词 + 内容。
+颜色承载语义——绿色（成功）、黄色（警告）、红色（失败）、灰色（次要信息）。
+全程无 emoji。
+
 ### 交互模式（默认）
 
 ```text
-检查全局安装的 Cargo 包更新...
-找到 5 个已安装的包
+    Checking 全局 cargo 包更新
+       Found 5 个已安装的包
+       Fresh ripgrep 14.1.1
+    Updating cargo-outdated 0.16.0 -> 0.17.0
+    Updating devtool 0.2.4 -> 0.2.5
 
-检测到以下包有更新:
-稳定版本更新:
-  • cargo-outdated (0.16.0 → 0.17.0)
-  • devtool (0.2.4 → 0.2.5)
+可用更新：
+稳定版更新：
+    Updating cargo-outdated 0.16.0 -> 0.17.0
+    Updating devtool 0.2.4 -> 0.2.5
+预发布版更新：
+  Prerelease mdbook 0.4.52 -> 0.5.0-alpha.1
 
-预发布版本更新:
-  • mdbook (0.4.52 → 0.5.0-alpha.1) ⚠️ 预发布版本
-
-是否要更新这些包？ [Y/n]: y
-是否包含预发布版本更新？ [y/N]: n
-
-选择要更新的包（使用空格选择，回车确认）
+更新这些包？ y
+是否包含预发布版？ n
+选择要更新的包（空格切换，回车确认）
 > [x] cargo-outdated
 > [x] devtool
 
-开始更新选中的包...
-正在更新 cargo-outdated...
-✅ cargo-outdated 已更新: 0.16.0 → 0.17.0
-正在更新 devtool...
-✅ devtool 已更新: 0.2.4 → 0.2.5
+    Updating 选中的包
+   Running cargo binstall --force cargo-outdated --version 0.17.0
+    Updated cargo-outdated 0.16.0 -> 0.17.0
+   Running cargo binstall --force devtool --version 0.2.5
+    Updated devtool 0.2.4 -> 0.2.5
 
-更新完成！
-成功: 2 个包
+更新摘要
+    Updated cargo-outdated 0.16.0 -> 0.17.0
+    Updated devtool 0.2.4 -> 0.2.5
+    Finished 2 个成功, 耗时 4.2s
+```
+
+### 预演模式
+
+`--dry-run` 打印将要执行的 cargo 命令（含 binstall→install 回退），但不做任何改动：
+
+```text
+    Checking 全局 cargo 包更新
+       Found 5 个已安装的包
+    Updating cargo-outdated 0.16.0 -> 0.17.0
+
+     Dry run 不会实际修改任何包
+   Would run cargo-outdated: cargo binstall --force cargo-outdated --version 0.17.0
+    Fallback cargo install --force cargo-outdated --version 0.17.0
 ```
 
 ### 非交互模式
 
-```text
-检查全局安装的 Cargo 包更新...
-找到 5 个已安装的包
-mdbook 有更新可用
-  当前版本: 0.4.52
-  最新版本: 0.5.0-alpha.1
+`--no-interactive` 模式只列出可用更新，不更新任何包（用 `--batch` 自动更新）：
 
-要更新包，请使用: cargo install --force <package_name>
-或者移除 --no-interactive 参数进行交互式更新
+```text
+    Checking 全局 cargo 包更新
+       Found 5 个已安装的包
+       Fresh ripgrep 14.1.1
+    Updating mdbook 0.4.52 -> 0.5.0-alpha.1
+       Note 未选择任何包
 ```
+
+git 和 path 安装会带一个灰色的 `[git]` / `[path]` 标记，例如
+`    Updating my-tool 0.1.0 -> 0.2.0 [git]`。
 
 ## Shell 补全支持
 
@@ -257,6 +293,7 @@ mdbook 有更新可用
 - **Fish** - 原生补全支持
 - **PowerShell** - Windows 补全支持
 - **Elvish** - 现代 shell 补全支持
+- **Nushell** - Nushell 补全支持
 
 ### 安装补全
 
@@ -310,8 +347,8 @@ cargo fresh completion powershell > cargo-fresh.ps1
 ```bash
 cargo fresh <TAB>
 # 显示所有可用选项：
-# --completion  --help  --include-prerelease  --no-interactive
-# --updates-only  --verbose  --version
+# --batch  --dry-run  --exclude  --filter  --help  --include-prerelease
+# --no-interactive  --updates-only  --verbose  --version
 ```
 
 #### Cargo 子命令补全
@@ -322,8 +359,10 @@ cargo fresh <TAB>  # 显示所有 fresh 选项和参数
 
 ## 技术特性
 
-- **并发处理**: 使用 Tokio 异步运行时，并发包检查（比串行处理快 3-5 倍）
-- **HTTP 优化**: 连接池和请求缓存，提升性能
+- **Sparse Index 检查**: 直接通过 HTTP 查询 crates.io sparse index（共享连接池、并发限流），不再为每个包启动 `cargo search`；仅在索引不可达时回退到 `cargo search`
+- **并发处理**: 使用 Tokio 异步运行时并发检查包
+- **基于 semver 的比较**: 使用真正的 semver 排序，被 yank 的版本回滚不会误报为更新，而 `1.0.0+build` 重新发布会
+- **来源感知更新**: 检测 crates.io / git / path 安装来源，为每种来源选择正确的 `cargo install` 策略
 - **智能版本检测**: 自动区分稳定版本和预发布版本
 - **交互式界面**: 用户友好的命令行交互体验
 - **彩色输出**: 美观的终端输出，清晰的状态显示
@@ -442,5 +481,5 @@ Copyright (c) 2025 Jenkin Pan
 ## 相关链接
 
 - [Crates.io](https://crates.io/crates/cargo-fresh)
-- [GitHub Repository](https://github.com/jenkinpan/pkg-checker-rs)
-- [Issues](https://github.com/jenkinpan/pkg-checker-rs/issues)
+- [GitHub Repository](https://github.com/jenkinpan/cargo-fresh)
+- [Issues](https://github.com/jenkinpan/cargo-fresh/issues)
