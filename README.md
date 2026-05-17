@@ -28,9 +28,11 @@ A Rust tool for checking and updating globally installed Cargo packages with int
 - 🚀 Cargo subcommand support (`cargo fresh`)
 - 🌐 Bilingual interface with smart language switching
 - 🚀 **Batch operations** - automatically update all packages without confirmation
-- 🔍 **Package filtering** - filter packages by name patterns (supports glob patterns)
+- 🔍 **Package filtering** - keep packages with `--filter` and drop them with `--exclude` (repeatable, glob patterns)
+- 🧪 **Dry-run mode** - preview the exact cargo commands with `--dry-run` without changing anything
+- 📦 **Source-aware updates** - handles crates.io, `git` (`--git URL [--rev]`), and local `path` installs, with `[git]` / `[path]` markers
 - 🛡️ **Enhanced error handling** - intelligent retry mechanisms and user-friendly error messages
-- 📊 **Performance optimization** - HTTP connection pooling and request caching
+- 📊 **Fast version checks** - crates.io sparse index with connection pooling and a concurrency-limited request pool (`cargo search` fallback)
 - ⚡ **Fast installation** - uses `cargo binstall` for faster package updates with automatic fallback
 
 ## Installation
@@ -104,7 +106,9 @@ cargo-fresh
 - `--no-interactive`: Non-interactive mode (default is interactive mode)
 - `--include-prerelease`: Include prerelease versions (alpha, beta, rc, etc.)
 - `--batch`: Batch mode - automatically update all packages without confirmation
-- `--filter <PATTERN>`: Filter packages by name pattern (supports glob patterns)
+- `--filter <PATTERN>`: Keep only packages matching the glob pattern (`*`, `?`, `[abc]`)
+- `--exclude <PATTERN>`: Drop packages matching the glob pattern; repeatable, applied after `--filter`
+- `--dry-run`: Print the cargo commands that would run without executing them
 - `-h, --help`: Show help information
 - `-V, --version`: Show version information
 
@@ -142,6 +146,15 @@ cargo fresh --batch
 cargo fresh --filter "cargo*"              # Only check packages starting with "cargo"
 cargo fresh --filter "*mdbook*"            # Only check packages containing "mdbook"
 cargo fresh --filter "nu*"                 # Only check packages starting with "nu"
+
+# Exclude packages by glob pattern (repeatable, applied after --filter)
+cargo fresh --exclude "cargo-fresh"                  # Check everything except cargo-fresh
+cargo fresh --exclude "ripgrep" --exclude "tokei"    # Skip multiple packages
+cargo fresh --filter "cargo*" --exclude "cargo-fresh"  # cargo* packages, minus cargo-fresh
+
+# Dry-run: preview the exact cargo commands without changing anything
+cargo fresh --dry-run                      # Preview updates for all packages
+cargo fresh --dry-run --batch              # Preview a full batch update
 
 # Combine new options with existing ones
 cargo fresh --batch --filter "cargo*"      # Batch update only cargo packages
@@ -201,49 +214,74 @@ cargo-fresh completion nushell --cargo-fresh > ~/.config/nushell/completions/car
 
 ## Output Examples
 
+cargo-fresh uses a cargo-style status format: a 12-char right-aligned bold verb
+followed by the message. Colors carry the meaning — green (success), yellow
+(warning), red (failure), dim (secondary). There are no emojis.
+
 ### Interactive Mode (Default)
 
 ```text
-Checking for updates to globally installed Cargo packages...
-Found 5 installed packages
+    Checking for updates to globally installed packages
+       Found 5 installed package(s)
+       Fresh ripgrep 14.1.1
+    Updating cargo-outdated 0.16.0 -> 0.17.0
+    Updating devtool 0.2.4 -> 0.2.5
 
-The following packages have updates available:
-Stable version updates:
-  • cargo-outdated (0.16.0 → 0.17.0)
-  • devtool (0.2.4 → 0.2.5)
+Updates available:
+Stable updates:
+    Updating cargo-outdated 0.16.0 -> 0.17.0
+    Updating devtool 0.2.4 -> 0.2.5
+Prerelease updates:
+  Prerelease mdbook 0.4.52 -> 0.5.0-alpha.1
 
-Prerelease version updates:
-  • mdbook (0.4.52 → 0.5.0-alpha.1) ⚠️ Prerelease version
-
-Do you want to update these packages? [Y/n]: y
-Include prerelease version updates? [y/N]: n
-
-Select packages to update (use space to select, enter to confirm)
+Update these packages? y
+Include prerelease updates? n
+Select packages (space to toggle, enter to confirm)
 > [x] cargo-outdated
 > [x] devtool
 
-Starting to update selected packages...
-Updating cargo-outdated...
-✅ cargo-outdated updated: 0.16.0 → 0.17.0
-Updating devtool...
-✅ devtool updated: 0.2.4 → 0.2.5
+    Updating selected packages
+   Running cargo binstall --force cargo-outdated --version 0.17.0
+    Updated cargo-outdated 0.16.0 -> 0.17.0
+   Running cargo binstall --force devtool --version 0.2.5
+    Updated devtool 0.2.4 -> 0.2.5
 
-Update completed!
-Success: 2 packages
+Update Summary
+    Updated cargo-outdated 0.16.0 -> 0.17.0
+    Updated devtool 0.2.4 -> 0.2.5
+    Finished 2 succeeded, in 4.2s
+```
+
+### Dry-run Mode
+
+`--dry-run` prints the exact cargo commands (including the binstall→install
+fallback) without modifying anything:
+
+```text
+    Checking for updates to globally installed packages
+       Found 5 installed package(s)
+    Updating cargo-outdated 0.16.0 -> 0.17.0
+
+    Dry run no packages will be modified
+   Would run cargo-outdated: cargo binstall --force cargo-outdated --version 0.17.0
+    Fallback cargo install --force cargo-outdated --version 0.17.0
 ```
 
 ### Non-Interactive Mode
 
-```text
-Checking for updates to globally installed Cargo packages...
-Found 5 installed packages
-mdbook has updates available
-  Current version: 0.4.52
-  Latest version: 0.5.0-alpha.1
+In `--no-interactive` mode the available updates are listed but nothing is
+updated (use `--batch` to update automatically):
 
-To update packages, use: cargo install --force <package_name>
-Or remove --no-interactive flag for interactive updates
+```text
+    Checking for updates to globally installed packages
+       Found 5 installed package(s)
+       Fresh ripgrep 14.1.1
+    Updating mdbook 0.4.52 -> 0.5.0-alpha.1
+       Note no packages selected
 ```
+
+Git and path installs are shown with a dimmed `[git]` / `[path]` marker, e.g.
+`    Updating my-tool 0.1.0 -> 0.2.0 [git]`.
 
 ## Shell Completion Support
 
@@ -256,6 +294,7 @@ Or remove --no-interactive flag for interactive updates
 - **Fish** - Native completion support
 - **PowerShell** - Windows completion support
 - **Elvish** - Modern shell completion support
+- **Nushell** - Nushell completion support
 
 ### Installing Completions
 
@@ -309,8 +348,8 @@ After installation, you can use auto-completion in two ways:
 ```bash
 cargo fresh <TAB>
 # Shows all available options:
-# --completion  --help  --include-prerelease  --no-interactive
-# --updates-only  --verbose  --version
+# --batch  --dry-run  --exclude  --filter  --help  --include-prerelease
+# --no-interactive  --updates-only  --verbose  --version
 ```
 
 #### Cargo Subcommand Completion
@@ -321,8 +360,10 @@ cargo fresh <TAB>  # Shows all fresh options and parameters
 
 ## Technical Features
 
-- **Concurrent Processing**: Uses Tokio async runtime with concurrent package checking (3-5x faster than sequential)
-- **HTTP Optimization**: Connection pooling and request caching for improved performance
+- **Sparse Index Checks**: Queries the crates.io sparse index directly over HTTP (single shared connection pool, concurrency-limited) instead of spawning `cargo search`; falls back to `cargo search` only when the index is unreachable
+- **Concurrent Processing**: Uses the Tokio async runtime to check packages concurrently
+- **Semver-based Comparison**: Uses real semver ordering so yanked-version rollbacks aren't flagged as updates and `1.0.0+build` re-publishes are
+- **Source-aware Updates**: Detects crates.io / git / path install sources and picks the right `cargo install` strategy for each
 - **Smart Version Detection**: Automatically distinguishes between stable and prerelease versions
 - **Interactive Interface**: User-friendly command-line interaction experience
 - **Colored Output**: Beautiful terminal output with clear status display
@@ -441,5 +482,5 @@ This project is open source under the Apache 2.0 License. See the [LICENSE](LICE
 ## Related Links
 
 - [Crates.io](https://crates.io/crates/cargo-fresh)
-- [GitHub Repository](https://github.com/jenkinpan/pkg-checker-rs)
-- [Issues](https://github.com/jenkinpan/pkg-checker-rs/issues)
+- [GitHub Repository](https://github.com/jenkinpan/cargo-fresh)
+- [Issues](https://github.com/jenkinpan/cargo-fresh/issues)
