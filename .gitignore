@@ -1,6 +1,5 @@
 # Rust
 /target/
-Cargo.lock
 
 # IDE
 .vscode/
@@ -28,3 +27,5 @@ openspec/
 
 # Claude Code
 .claude/
+/plan.html
+/plan.md

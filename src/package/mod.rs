@@ -4,8 +4,10 @@ use std::collections::HashSet;
 use std::process::Command;
 use std::sync::OnceLock;
 
+use semver::Version;
+
 use crate::locale::detection::detect_language;
-use crate::models::{PackageInfo, PRERELEASE_KEYWORDS};
+use crate::models::PackageInfo;
 
 // 缓存 cargo binstall 的可用性状态
 static BINSTALL_AVAILABLE: OnceLock<bool> = OnceLock::new();
@@ -174,10 +176,14 @@ pub fn extract_version_from_line(line: &str) -> Option<String> {
     })
 }
 
+/// 判断版本字符串是否为稳定版（无预发布标签）。
+///
+/// 使用 semver 标准：稳定版 = `Version.pre.is_empty()`。
+/// 解析失败时保守返回 true（视为稳定版），避免把无法解析的合法版本号误归为预发布。
 pub fn is_stable_version(version: &str) -> bool {
-    !PRERELEASE_KEYWORDS
-        .iter()
-        .any(|&keyword| version.contains(keyword))
+    Version::parse(version)
+        .map(|v| v.pre.is_empty())
+        .unwrap_or(true)
 }
 
 pub async fn get_latest_version(
@@ -294,4 +300,229 @@ pub async fn check_package_updates(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---------- parse_package_line ----------
+
+    #[test]
+    fn parse_package_line_standard() {
+        let line = "ripgrep v14.1.1:";
+        assert_eq!(parse_package_line(line), Some(("ripgrep", "14.1.1")));
+    }
+
+    #[test]
+    fn parse_package_line_with_build_metadata() {
+        // semver 允许 +build 元数据，解析必须保留完整版本号
+        let line = "some-tool v1.2.3+arch64:";
+        assert_eq!(parse_package_line(line), Some(("some-tool", "1.2.3+arch64")));
+    }
+
+    #[test]
+    fn parse_package_line_with_prerelease() {
+        let line = "cargo-fresh v0.9.10-rc.1:";
+        assert_eq!(parse_package_line(line), Some(("cargo-fresh", "0.9.10-rc.1")));
+    }
+
+    #[test]
+    fn parse_package_line_empty() {
+        assert_eq!(parse_package_line(""), None);
+    }
+
+    #[test]
+    fn parse_package_line_missing_colon() {
+        assert_eq!(parse_package_line("ripgrep v14.1.1"), None);
+    }
+
+    #[test]
+    fn parse_package_line_missing_v_prefix() {
+        assert_eq!(parse_package_line("ripgrep 14.1.1:"), None);
+    }
+
+    #[test]
+    fn parse_package_line_binary_subline_returns_none() {
+        // cargo install --list 的第二行通常是缩进的二进制名，没有 " v" 也没有 ":"
+        assert_eq!(parse_package_line("    rg"), None);
+    }
+
+    // ---------- extract_version_from_line ----------
+
+    #[test]
+    fn extract_version_from_line_standard() {
+        let line = r#"ripgrep = "14.1.1"    # ripgrep recursively searches..."#;
+        assert_eq!(extract_version_from_line(line), Some("14.1.1".to_string()));
+    }
+
+    #[test]
+    fn extract_version_from_line_missing_quotes() {
+        let line = "ripgrep = 14.1.1";
+        assert_eq!(extract_version_from_line(line), None);
+    }
+
+    #[test]
+    fn extract_version_from_line_prerelease() {
+        let line = r#"my-crate = "1.0.0-beta.2"  # description"#;
+        assert_eq!(extract_version_from_line(line), Some("1.0.0-beta.2".to_string()));
+    }
+
+    // ---------- is_stable_version ----------
+
+    #[test]
+    fn is_stable_version_stable() {
+        assert!(is_stable_version("1.0.0"));
+        assert!(is_stable_version("14.1.1"));
+        assert!(is_stable_version("0.9.10"));
+    }
+
+    #[test]
+    fn is_stable_version_prerelease() {
+        assert!(!is_stable_version("1.0.0-alpha"));
+        assert!(!is_stable_version("1.0.0-beta.2"));
+        assert!(!is_stable_version("2.0.0-rc.1"));
+    }
+
+    #[test]
+    fn is_stable_version_with_build_metadata_is_stable() {
+        // +build 元数据不是预发布
+        assert!(is_stable_version("1.0.0+arch64"));
+        assert!(is_stable_version("2.3.4+20240101"));
+    }
+
+    #[test]
+    fn is_stable_version_substring_rc_is_not_misidentified() {
+        // 关键回归测试：旧实现用 contains("rc") 会把这些误判为预发布
+        // semver 标准下它们都是 valid 的稳定版本（pre 段为空）
+        assert!(is_stable_version("1.0.0+arc-build"));
+        assert!(is_stable_version("1.0.0+rc-meta"));
+    }
+
+    // ---------- filter_packages ----------
+
+    fn pkg(name: &str) -> PackageInfo {
+        PackageInfo::new(name.to_string(), Some("1.0.0".to_string()))
+    }
+
+    #[test]
+    fn filter_packages_empty_pattern_no_op() {
+        let mut pkgs = vec![pkg("cargo-edit"), pkg("ripgrep")];
+        filter_packages(&mut pkgs, "").unwrap();
+        assert_eq!(pkgs.len(), 2);
+    }
+
+    #[test]
+    fn filter_packages_exact_substring_match() {
+        let mut pkgs = vec![pkg("cargo-edit"), pkg("ripgrep"), pkg("cargo-update")];
+        filter_packages(&mut pkgs, "cargo").unwrap();
+        assert_eq!(pkgs.len(), 2);
+        assert!(pkgs.iter().all(|p| p.name.contains("cargo")));
+    }
+
+    #[test]
+    fn filter_packages_no_match_clears_list() {
+        let mut pkgs = vec![pkg("ripgrep"), pkg("tokei")];
+        filter_packages(&mut pkgs, "nonexistent").unwrap();
+        assert!(pkgs.is_empty());
+    }
+
+    #[test]
+    fn filter_packages_case_insensitive() {
+        let mut pkgs = vec![pkg("CargoEdit"), pkg("RIPGREP")];
+        filter_packages(&mut pkgs, "cargo").unwrap();
+        assert_eq!(pkgs.len(), 1);
+        assert_eq!(pkgs[0].name, "CargoEdit");
+    }
+
+    // ---------- PackageInfo::has_update ----------
+
+    fn pkg_with_latest(name: &str, current: &str, latest: &str) -> PackageInfo {
+        PackageInfo {
+            name: name.to_string(),
+            current_version: Some(current.to_string()),
+            latest_version: Some(latest.to_string()),
+        }
+    }
+
+    #[test]
+    fn has_update_normal_upgrade() {
+        let p = pkg_with_latest("x", "1.0.0", "1.1.0");
+        assert!(p.has_update());
+    }
+
+    #[test]
+    fn has_update_same_version() {
+        let p = pkg_with_latest("x", "1.0.0", "1.0.0");
+        assert!(!p.has_update());
+    }
+
+    #[test]
+    fn has_update_rollback_returns_false() {
+        // 关键回归测试：current > latest（yank 回滚场景）必须返回 false，
+        // 旧实现用字符串 != 会误报需要更新
+        let p = pkg_with_latest("x", "2.0.0", "1.9.0");
+        assert!(!p.has_update());
+    }
+
+    #[test]
+    fn has_update_major_upgrade() {
+        let p = pkg_with_latest("x", "1.9.0", "2.0.0");
+        assert!(p.has_update());
+    }
+
+    #[test]
+    fn has_update_prerelease_to_stable() {
+        // semver: 1.0.0-rc.1 < 1.0.0
+        let p = pkg_with_latest("x", "1.0.0-rc.1", "1.0.0");
+        assert!(p.has_update());
+    }
+
+    #[test]
+    fn has_update_build_metadata_differs_is_treated_as_update() {
+        // semver 规范说 build metadata "不参与版本优先级判断"，但 semver crate 的
+        // Ord 为了提供全序仍会比较 build 段。对 cargo-fresh 来说这恰好对路：
+        // 同语义版本但 build 不同通常意味着上游重新发布了 artifact，值得 `cargo install`。
+        let p = pkg_with_latest("x", "1.0.0", "1.0.0+xyz");
+        assert!(p.has_update());
+    }
+
+    #[test]
+    fn has_update_unparseable_falls_back_to_string_compare() {
+        // 任一版本无法解析时，fallback 到字符串 != 比较
+        let p = pkg_with_latest("x", "git-abc123", "git-def456");
+        assert!(p.has_update());
+        let same = pkg_with_latest("x", "git-abc123", "git-abc123");
+        assert!(!same.has_update());
+    }
+
+    #[test]
+    fn has_update_missing_versions_returns_false() {
+        let p = PackageInfo::new("x".to_string(), Some("1.0.0".to_string()));
+        assert!(!p.has_update());
+
+        let p2 = PackageInfo::new("x".to_string(), None);
+        assert!(!p2.has_update());
+    }
+
+    // ---------- PackageInfo::is_prerelease ----------
+
+    #[test]
+    fn is_prerelease_detects_pre_segment() {
+        let p = pkg_with_latest("x", "1.0.0", "2.0.0-alpha.1");
+        assert!(p.is_prerelease());
+    }
+
+    #[test]
+    fn is_prerelease_stable_returns_false() {
+        let p = pkg_with_latest("x", "1.0.0", "2.0.0");
+        assert!(!p.is_prerelease());
+    }
+
+    #[test]
+    fn is_prerelease_build_metadata_is_not_prerelease() {
+        // 关键回归测试：含 "rc" 字面量但 pre 段为空的稳定版不再误判
+        let p = pkg_with_latest("x", "1.0.0", "1.0.0+rc-meta");
+        assert!(!p.is_prerelease());
+    }
 }

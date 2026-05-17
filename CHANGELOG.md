@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+## [0.9.10] - 2026-05-17
+
+### Fixed
+- **yank 回滚场景误报需要更新**: `PackageInfo::has_update` 旧实现用字符串 `!=` 比较，当本地版本高于 crates.io 最新版本（例如上游 yank 后回滚）时会被误报需要更新。现在改用 `semver::Version` 比较，仅在 `latest > current` 时返回 true
+- **含 "rc" 字面量的稳定版被误判为预发布**: `is_stable_version` / `PackageInfo::is_prerelease` 旧实现用 `contains("rc")`，会把 `1.0.0+rc-meta`、`1.0.0+arc-build` 等含子串 "rc" 的合法稳定版误判为预发布。现在改用 semver 标准 `Version.pre.is_empty()` 判断
+
+### Changed
+- **引入 `semver = "1"` 依赖**: 用 semver crate 替代字符串关键字匹配做版本判断和预发布检测
+- **删除 `PRERELEASE_KEYWORDS` 常量**: 改用 semver 标准 API
+- **`Cargo.lock` 入库**: 二进制 crate 必须提交 `Cargo.lock` 以保证可复现构建。从 `.gitignore` 移除
+
+### Technical
+- 新增 29 个单元测试覆盖核心纯函数：`parse_package_line`（7 个）、`extract_version_from_line`（3 个）、`is_stable_version`（4 个含关键回归）、`filter_packages`（4 个）、`PackageInfo::has_update`（8 个含 yank 回滚、major upgrade、build metadata、不可解析字串等场景）、`PackageInfo::is_prerelease`（3 个）
+- 测试数从 14 增加到 43，`cargo clippy --all-targets -- -D warnings` 零警告
+- 关于 semver crate 的 `Ord` 实现：会比较 build metadata 提供全序（虽然 SemVer 规范说应忽略）。对 cargo-fresh 来说这恰好对路——同语义版本但 build 不同通常意味着上游重发了 artifact，值得 `cargo install`
+
 ## [0.9.9] - 2026-05-17
 
 ### Fixed
