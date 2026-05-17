@@ -25,3 +25,6 @@ release_notes.md
 # OpenSpec and Cursor
 openspec/
 .cursor/
+
+# Claude Code
+.claude/
