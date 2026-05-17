@@ -5,7 +5,6 @@ pub const MAX_RETRY_ATTEMPTS: u32 = 3;
 pub const RETRY_DELAY_MS: u64 = 2000;
 pub const VERSION_UPDATE_DELAY_MS: u64 = 1000;
 pub const PROGRESS_TICK_MS: u64 = 100;
-pub const PROGRESS_BAR_WIDTH: usize = 40;
 
 /// 包的安装来源。
 ///

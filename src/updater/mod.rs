@@ -6,16 +6,19 @@ use std::process::{Command, Output};
 use crate::display::{pb_status, pb_status_dim, pb_status_err, pb_status_warn, status, status_dim};
 use crate::locale::detection::detect_language;
 use crate::models::{
-    PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_BAR_WIDTH, PROGRESS_TICK_MS,
-    RETRY_DELAY_MS, VERSION_UPDATE_DELAY_MS,
+    PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_TICK_MS, RETRY_DELAY_MS,
+    VERSION_UPDATE_DELAY_MS,
 };
 use crate::package::{
     ensure_binstall_available, get_installed_version, invalidate_installed_version,
     is_binstall_available,
 };
 
+/// 创建当前正在更新的包的 spinner。
+///
+/// 必须配合 [`PbGuard`] 使用——guard drop 时自动调用 `finish_and_clear()`，
+/// 保证 spinner 残留不会污染输出（任何提前 return 也覆盖到）。
 pub fn create_progress_bar(package_name: &str) -> ProgressBar {
-    let language = detect_language();
     let pb = ProgressBar::new_spinner();
     pb.set_style(
         ProgressStyle::default_spinner()
@@ -23,36 +26,20 @@ pub fn create_progress_bar(package_name: &str) -> ProgressBar {
             .unwrap()
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
     );
-    pb.set_message(format!(
-        "{} {}",
-        language
-            .get_text("updating_package_progress")
-            .replace("{}", "")
-            .trim(),
-        package_name.cyan()
-    ));
+    pb.set_message(package_name.cyan().to_string());
     pb
 }
 
-pub fn create_main_progress_bar(total: usize) -> ProgressBar {
-    let language = detect_language();
-    let pb = ProgressBar::new(total as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template(&format!(
-                "{{spinner:.green}} {{bar:{}.green/blue}} {{pos}}/{{len}} {{msg}}",
-                PROGRESS_BAR_WIDTH
-            ))
-            .unwrap()
-            .progress_chars("█▉▊▋▌▍▎▏  ")
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-    );
-    pb.set_message(
-        language
-            .get_text("updating_package_progress")
-            .replace("{}", "packages"),
-    );
-    pb
+/// Drop 守卫：保证 spinner 在 `update_package` 任何返回路径都被 `finish_and_clear`。
+///
+/// 旧版本依赖手动调用，多个 return 分支容易漏写，导致 spinner 帧残留在
+/// 用户终端（已报告的"转圈进度残留"bug 的根因之一）。
+struct PbGuard<'a>(&'a ProgressBar);
+
+impl Drop for PbGuard<'_> {
+    fn drop(&mut self) {
+        self.0.finish_and_clear();
+    }
 }
 
 /// 根据来源类型构造 cargo 子命令参数。
@@ -253,6 +240,7 @@ pub async fn update_package(
     }
 
     let pb = create_progress_bar(package_name);
+    let _pb_guard = PbGuard(&pb);
     if let Some(ref version) = old_version {
         pb_status_dim(
             &pb,

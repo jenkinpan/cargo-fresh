@@ -22,7 +22,7 @@ use package::{
     check_package_updates, exclude_packages, filter_packages, get_installed_packages,
     is_stable_version,
 };
-use updater::{create_main_progress_bar, update_package};
+use updater::update_package;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -147,25 +147,12 @@ async fn main() -> Result<()> {
         let mut update_results = Vec::new();
         let total_packages = selections.len();
 
-        // 创建整体进度条
-        let main_pb = create_main_progress_bar(total_packages);
-
         // 构建所有可更新的包列表
         let mut all_packages_to_update = stable_updates.clone();
         all_packages_to_update.extend(prerelease_updates.clone());
 
         for (i, &index) in selections.iter().enumerate() {
             let package_name = &all_packages_to_update[index].name;
-
-            // 更新整体进度条消息
-            main_pb.set_message(format!(
-                "{} ({}/{})",
-                language
-                    .get_text("updating_package")
-                    .replace("{}", package_name),
-                i + 1,
-                total_packages
-            ));
 
             // 找到对应的包信息以获取目标版本和来源
             let selected_pkg = all_packages_to_update
@@ -178,6 +165,19 @@ async fn main() -> Result<()> {
                 .map(|p| p.source.clone())
                 .unwrap_or(models::PackageSource::Crates);
 
+            // 多包时给个 N/M 提示头，单包不冗余
+            if total_packages > 1 {
+                status_dim(
+                    "Package",
+                    &format!(
+                        "{}/{} {}",
+                        i + 1,
+                        total_packages,
+                        package_name.cyan()
+                    ),
+                );
+            }
+
             match update_package(package_name, target_version, &source, cli.dry_run).await {
                 Ok(result) => {
                     update_results.push(result.clone());
@@ -188,24 +188,21 @@ async fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    main_pb.println(language.format_text(
-                        "package_error",
-                        &[
-                            ("name", &package_name.red().to_string()),
-                            ("error", &e.to_string()),
-                        ],
-                    ));
+                    status_err(
+                        "Error",
+                        &language.format_text(
+                            "package_error",
+                            &[
+                                ("name", &package_name.red().to_string()),
+                                ("error", &e.to_string()),
+                            ],
+                        ),
+                    );
                     fail_count += 1;
                     update_results.push(UpdateResult::new(package_name.clone(), None, None, false));
                 }
             }
-
-            // 更新进度条
-            main_pb.inc(1);
         }
-
-        // 完成整体进度条
-        main_pb.finish_and_clear();
 
         // 计算总耗时
         let total_duration = start_time.elapsed();

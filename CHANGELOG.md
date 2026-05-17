@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [0.9.14] - 2026-05-17
+
+### Fixed
+- **进度条残留污染输出**: 旧版同时活着两个进度条——`create_main_progress_bar` 的 `0/1 cargo-fresh (1/1)` 总进度条 + 每包 spinner——两者在终端互相覆盖，且 spinner 在 `update_package` 多条 return 分支漏写 `finish_and_clear`，留下 `⠋` 帧残留污染后续输出。修复后输出干净
+
+### Changed
+- **删除主进度条**: `create_main_progress_bar` 整个函数移除。包数 N/M 提示改用单行 `   Package 3/18 cargo-fresh` 状态行，仅在多包升级时显示
+- **引入 `PbGuard` RAII 守卫**: `update_package` 持有 spinner pb 后立刻包进守卫，Drop 时自动 `finish_and_clear()`，保证从任何 return 分支（成功 / 失败 / 重试用尽 / dry-run）退出都不会留下 spinner 帧
+- 删除 `models::PROGRESS_BAR_WIDTH` 常量（主进度条移除后已无人使用）
+
+### Technical
+- 全部 63 个单元测试通过；`cargo clippy --all-targets -- -D warnings` 零警告
+- 实测验证：本机降级到 0.9.11 再用 0.9.14 二进制升回 0.9.13，输出无 spinner 残留
+
 ## [0.9.13] - 2026-05-17
 
 ### Changed
