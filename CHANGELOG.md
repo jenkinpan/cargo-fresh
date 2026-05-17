@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-05-17
+
+### Fixed
+- **i18n 多占位符模板渲染 bug**: 修复 `package_updated_version`、`package_update_failed`、`package_error`、`retry_attempt` 等模板的渲染问题。旧代码使用链式 `.replace("{}", x).replace("{}", y)`，第一次调用就会替换掉模板中所有 `{}`，导致第二、第三个变量永远不显示
+- **`retry_attempt` 模板未生效**: 原实现 `.replace("{}", "").trim()` 抹空模板再手动拼接，现在能正确显示 "Retry attempt N for X..."
+- **进度条生命周期**: 不再在 `pb.finish_and_clear()` 后继续使用进度条，改用 `enable_steady_tick` / `disable_steady_tick` 配对
+
+### Changed
+- **新增 `Language::format_text(key, &[(name, value)])`**: 使用命名占位符（`{name}` / `{old}` / `{new}` / `{code}` / `{error}` / `{attempt}`）替代位置占位符，每个变量只替换到自己的位置
+- **`updater::update_package` 重构去重**: 抽出 `build_args` / `run_cargo` / `verify_and_report_update` / `report_command_failure` 四个辅助函数，消除 binstall → install 回退路径中约 80 行的"验证安装结果 + 打印 + 返回 UpdateResult"重复代码。`src/updater/mod.rs` 从 355 行降到 219 行（-38%）
+- **`executing_command` 日志改为每次重试都打印**: 便于排查重试时实际执行的命令
+
+### Technical
+- 新增 4 个 `Language::format_text` 单元测试，关键回归测试锁死 `package_updated_version` 三个变量不再串扰
+- 删除未使用的 `package_updated` 文本键
+- 全部 14 个单元测试通过，`cargo clippy -- -D warnings` 零警告
+
 ## [0.9.8] - 2025-10-18
 
 ### Fixed
