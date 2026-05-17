@@ -135,7 +135,7 @@ mod tests {
             ("name", "ripgrep"),
             ("error", "boom"),
         ]);
-        assert_eq!(out, "❌ ripgrep update error: boom");
+        assert_eq!(out, "ripgrep: boom");
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
             ("old", "13.0.0"),
             ("new", "14.1.0"),
         ]);
-        assert_eq!(out, "✅ ripgrep updated: 13.0.0 → 14.1.0");
+        assert_eq!(out, "ripgrep 13.0.0 -> 14.1.0");
     }
 
     #[test]
@@ -158,7 +158,7 @@ mod tests {
             ("name", "tokei"),
             // 故意不传 code
         ]);
-        assert_eq!(out, "❌ tokei update failed (exit code: {code})");
+        assert_eq!(out, "tokei failed (exit code: {code})");
     }
 
     #[test]
@@ -168,6 +168,6 @@ mod tests {
             ("attempt", "2"),
             ("name", "cargo-fresh"),
         ]);
-        assert_eq!(out, "重试第 2 次更新 cargo-fresh...");
+        assert_eq!(out, "第 2 次重试 cargo-fresh");
     }
 }

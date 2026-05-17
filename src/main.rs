@@ -12,7 +12,10 @@ mod updater;
 
 // 导入模块
 use cli::{Cli, Commands};
-use display::{print_results, print_update_selection, print_update_summary};
+use display::{
+    print_results, print_update_selection, print_update_summary, status, status_dim, status_err,
+    status_warn,
+};
 use locale::detect_language;
 use models::{PackageInfo, UpdateResult};
 use package::{
@@ -49,12 +52,12 @@ async fn main() -> Result<()> {
         }
     }
 
-    println!("{}", language.get_text("checking_packages").blue().bold());
+    status("Checking", language.get_text("checking_packages"));
 
     let mut packages = get_installed_packages().await?;
 
     if packages.is_empty() {
-        println!("{}", language.get_text("no_packages_found").yellow());
+        status_warn("Note", language.get_text("no_packages_found"));
         return Ok(());
     }
 
@@ -66,15 +69,15 @@ async fn main() -> Result<()> {
         exclude_packages(&mut packages, &cli.exclude)?;
     }
     if (cli.filter.is_some() || !cli.exclude.is_empty()) && packages.is_empty() {
-        println!("{}", language.get_text("no_packages_found").yellow());
+        status_warn("Note", language.get_text("no_packages_found"));
         return Ok(());
     }
 
-    println!(
-        "{}",
-        language
+    status(
+        "Found",
+        &language
             .get_text("found_packages")
-            .replace("{}", &packages.len().to_string())
+            .replace("{}", &packages.len().to_string()),
     );
 
     // 一次性拿稳定版 + 预发布版（sparse index 单次请求带回两者，
@@ -105,7 +108,7 @@ async fn main() -> Result<()> {
     all_updates.extend(prerelease_updates.clone());
 
     if all_updates.is_empty() {
-        println!("{}", language.get_text("all_up_to_date").green().bold());
+        status("Finished", language.get_text("all_up_to_date"));
         return Ok(());
     }
 
@@ -129,10 +132,12 @@ async fn main() -> Result<()> {
     };
 
     if !selections.is_empty() {
+        println!();
         if cli.dry_run {
-            println!("\n{}", language.get_text("dry_run_summary").cyan().bold());
+            status("Dry run", language.get_text("dry_run_summary"));
+        } else {
+            status("Updating", language.get_text("starting_update"));
         }
-        println!("\n{}", language.get_text("starting_update").blue().bold());
 
         // 记录更新开始时间
         let start_time = std::time::Instant::now();
@@ -201,10 +206,6 @@ async fn main() -> Result<()> {
 
         // 完成整体进度条
         main_pb.finish_and_clear();
-        println!(
-            "✅ {}",
-            language.get_text("update_completed").green().bold()
-        );
 
         // 计算总耗时
         let total_duration = start_time.elapsed();
@@ -213,43 +214,35 @@ async fn main() -> Result<()> {
 
         // 显示更新摘要
         print_update_summary(&update_results, language);
-        println!(
-            "{}",
-            language
-                .get_text("success_count")
-                .replace("{}", &success_count.to_string())
-                .green()
-        );
-        if fail_count > 0 {
-            println!(
-                "{}",
-                language
-                    .get_text("fail_count")
-                    .replace("{}", &fail_count.to_string())
-                    .red()
-            );
-        }
 
-        // 显示总耗时
-        if duration_seconds > 0 {
-            println!(
-                "{}",
-                language
-                    .get_text("total_time_seconds")
-                    .replace("{}", &duration_seconds.to_string())
-                    .cyan()
-            );
+        // 单行 Finished 收尾，cargo 风格："X succeeded, Y failed in 3.4s"
+        let success_text = language
+            .get_text("success_count")
+            .replace("{}", &success_count.to_string());
+        let time_text = if duration_seconds > 0 {
+            language
+                .get_text("total_time_seconds")
+                .replace("{}", &duration_seconds.to_string())
         } else {
-            println!(
-                "{}",
-                language
-                    .get_text("total_time_millis")
-                    .replace("{}", &duration_millis.to_string())
-                    .cyan()
-            );
+            language
+                .get_text("total_time_millis")
+                .replace("{}", &duration_millis.to_string())
+        };
+        let summary = if fail_count > 0 {
+            let fail_text = language
+                .get_text("fail_count")
+                .replace("{}", &fail_count.to_string());
+            format!("{}, {}, {}", success_text, fail_text, time_text)
+        } else {
+            format!("{}, {}", success_text, time_text)
+        };
+        if fail_count > 0 {
+            status_err("Finished", &summary);
+        } else {
+            status("Finished", &summary);
         }
     } else {
-        println!("{}", language.get_text("no_updates_selected").yellow());
+        status_dim("Note", language.get_text("no_packages_selected"));
     }
 
     Ok(())

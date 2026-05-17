@@ -1,11 +1,73 @@
 use colored::*;
 use dialoguer::{Confirm, MultiSelect};
+use indicatif::ProgressBar;
 
 use crate::locale::Language;
 use crate::models::{PackageInfo, UpdateResult};
 
-/// 格式化包版本信息
-fn format_package_version(package: &PackageInfo, language: Language) -> String {
+/// Cargo 风格状态行的右对齐宽度。
+///
+/// 与 `cargo build` 输出对齐——12 字符容得下 `Compiling` / `Installing` / `Finished` 等
+/// 主要动词。所有 status 系列函数共用这个宽度，保持视觉上整齐成列。
+const STATUS_WIDTH: usize = 12;
+
+/// 用 cargo 风格输出一行状态："{右对齐12字符绿色加粗动词} {描述}"。
+///
+/// 颜色变体：`status_warn` 黄、`status_err` 红、`status_dim` 灰（用于次要信息）。
+/// 颜色码不计入宽度——必须先 pad 再上色，否则 ANSI 序列被算进宽度导致错位。
+pub fn status(verb: &str, msg: &str) {
+    println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(), msg);
+}
+
+pub fn status_warn(verb: &str, msg: &str) {
+    println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(), msg);
+}
+
+pub fn status_err(verb: &str, msg: &str) {
+    println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(), msg);
+}
+
+pub fn status_dim(verb: &str, msg: &str) {
+    println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(), msg);
+}
+
+/// 同 `status`，但把输出送到指定的 ProgressBar（避免与活动进度条冲突）。
+pub fn pb_status(pb: &ProgressBar, verb: &str, msg: &str) {
+    pb.println(format!(
+        "{} {}",
+        format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(),
+        msg
+    ));
+}
+
+pub fn pb_status_warn(pb: &ProgressBar, verb: &str, msg: &str) {
+    pb.println(format!(
+        "{} {}",
+        format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(),
+        msg
+    ));
+}
+
+pub fn pb_status_err(pb: &ProgressBar, verb: &str, msg: &str) {
+    pb.println(format!(
+        "{} {}",
+        format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(),
+        msg
+    ));
+}
+
+pub fn pb_status_dim(pb: &ProgressBar, verb: &str, msg: &str) {
+    pb.println(format!(
+        "{} {}",
+        format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(),
+        msg
+    ));
+}
+
+/// 拼装单包的"名字 旧版本 -> 新版本 [来源]"展示字符串。
+///
+/// 颜色约定：包名 cyan、旧版本 red、新版本 green、来源标记 dimmed。
+fn package_transition(package: &PackageInfo, language: Language) -> String {
     let current = package
         .current_version
         .as_deref()
@@ -14,15 +76,22 @@ fn format_package_version(package: &PackageInfo, language: Language) -> String {
         .latest_version
         .as_deref()
         .unwrap_or(language.get_text("unknown"));
-
+    let marker = package.source.marker();
+    let suffix = if marker.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", marker.dimmed())
+    };
     format!(
-        "{} ({} → {})",
+        "{} {} -> {}{}",
         package.name.cyan(),
         current.red(),
-        latest.green()
+        latest.green(),
+        suffix
     )
 }
 
+/// 把 (old, new) 渲染成 "old -> new"（带颜色），或 "old (unchanged)"。
 pub fn format_version_info(
     old: &Option<String>,
     new: &Option<String>,
@@ -30,37 +99,37 @@ pub fn format_version_info(
 ) -> String {
     match (old, new) {
         (Some(old), Some(new)) if old != new => {
-            format!("{} → {}", old.red(), new.green())
+            format!("{} -> {}", old.red(), new.green())
         }
         (Some(old), Some(_)) => {
             format!(
                 "{} ({})",
                 old.yellow(),
-                language.get_text("version_unchanged")
+                language.get_text("version_unchanged").dimmed()
             )
         }
         (Some(old), None) => {
-            format!("{} → {}", old.red(), language.get_text("unknown_version"))
+            format!("{} -> {}", old.red(), language.get_text("unknown_version").dimmed())
         }
         (None, Some(new)) => {
-            format!("{} → {}", language.get_text("unknown_version"), new.green())
+            format!("{} -> {}", language.get_text("unknown_version").dimmed(), new.green())
         }
-        _ => language.get_text("version_info_unknown").to_string(),
+        _ => language.get_text("version_info_unknown").dimmed().to_string(),
     }
 }
 
-/// 给名字附加来源标记，例如 "some-tool [git]"。crates.io 来源不加标记。
-fn name_with_source(package: &PackageInfo) -> String {
+fn package_with_source(package: &PackageInfo) -> String {
     let marker = package.source.marker();
     if marker.is_empty() {
-        package.name.clone()
+        package.name.cyan().to_string()
     } else {
-        format!("{} {}", package.name, marker.dimmed())
+        format!("{} {}", package.name.cyan(), marker.dimmed())
     }
 }
 
 pub fn print_results(packages: &[PackageInfo], updates_only: bool, language: Language) {
     let mut has_updates = false;
+    let mut fresh_count = 0;
 
     for package in packages {
         if updates_only && !package.has_update() {
@@ -69,44 +138,24 @@ pub fn print_results(packages: &[PackageInfo], updates_only: bool, language: Lan
 
         if package.has_update() {
             has_updates = true;
-            println!(
-                "{}",
-                language
-                    .get_text("package_has_update")
-                    .replace("{}", &name_with_source(package))
-                    .yellow()
-                    .bold()
-            );
-            if let Some(current) = &package.current_version {
-                println!(
-                    "  {} {}",
-                    language.get_text("current_version"),
-                    current.red()
-                );
-            }
-            if let Some(latest) = &package.latest_version {
-                println!(
-                    "  {} {}",
-                    language.get_text("latest_version"),
-                    latest.green()
-                );
-            }
+            status("Updating", &package_transition(package, language));
         } else if !updates_only {
-            println!(
-                "{}",
-                language
-                    .get_text("package_up_to_date")
-                    .replace("{}", &name_with_source(package))
-                    .green()
+            let version = package.current_version.as_deref().unwrap_or("?");
+            status_dim(
+                "Fresh",
+                &format!("{} {}", package_with_source(package), version.dimmed()),
             );
-            if let Some(current) = &package.current_version {
-                println!("  {} {}", language.get_text("version"), current.green());
-            }
+            fresh_count += 1;
+        } else {
+            fresh_count += 1;
         }
     }
 
     if updates_only && !has_updates {
-        println!("{}", language.get_text("all_up_to_date").green().bold());
+        status("Finished", language.get_text("all_up_to_date"));
+    } else if !has_updates && fresh_count > 0 {
+        // 列了所有包但没有更新时给个汇总尾行
+        status("Finished", language.get_text("all_up_to_date"));
     }
 }
 
@@ -114,9 +163,6 @@ pub fn print_update_summary(update_results: &[UpdateResult], language: Language)
     if update_results.is_empty() {
         return;
     }
-
-    println!("\n{}", language.get_text("update_summary").blue().bold());
-    println!("{}", "=".repeat(50).blue());
 
     let mut success_updates = Vec::new();
     let mut failed_updates = Vec::new();
@@ -129,43 +175,40 @@ pub fn print_update_summary(update_results: &[UpdateResult], language: Language)
         }
     }
 
-    // 显示成功的更新
+    println!();
+    println!("{}", language.get_text("update_summary").bold());
+
     if !success_updates.is_empty() {
-        println!(
-            "\n{}",
-            language.get_text("successful_updates").green().bold()
-        );
         for result in &success_updates {
-            println!(
-                "  • {}: {}",
-                result.package_name.cyan(),
-                format_version_info(&result.old_version, &result.new_version, language)
+            status(
+                "Updated",
+                &format!(
+                    "{} {}",
+                    result.package_name.cyan(),
+                    format_version_info(&result.old_version, &result.new_version, language)
+                ),
             );
         }
     }
 
-    // 显示失败的更新
     if !failed_updates.is_empty() {
-        println!("\n{}", language.get_text("failed_updates").red().bold());
         for result in &failed_updates {
-            if let Some(old) = &result.old_version {
-                println!(
-                    "  • {}: {} ({})",
+            let detail = match &result.old_version {
+                Some(old) => format!(
+                    "{} {} ({})",
                     result.package_name.cyan(),
                     old.red(),
                     language.get_text("update_failed")
-                );
-            } else {
-                println!(
-                    "  • {}: {}",
+                ),
+                None => format!(
+                    "{} ({})",
                     result.package_name.cyan(),
                     language.get_text("update_failed")
-                );
-            }
+                ),
+            };
+            status_err("Failed", &detail);
         }
     }
-
-    println!("{}", "=".repeat(50).blue());
 }
 
 pub fn print_update_selection(
@@ -173,45 +216,40 @@ pub fn print_update_selection(
     prerelease_updates: &[&PackageInfo],
     language: Language,
 ) -> Result<Vec<usize>, anyhow::Error> {
-    println!(
-        "\n{}",
-        language.get_text("updates_detected").yellow().bold()
-    );
+    println!();
+    println!("{}", language.get_text("updates_detected").bold());
 
-    // 显示稳定版本更新
     if !stable_updates.is_empty() {
-        println!("{}", language.get_text("stable_updates").green().bold());
+        println!("{}", language.get_text("stable_updates").dimmed());
         for package in stable_updates {
-            println!("  • {}", format_package_version(package, language));
+            status("Updating", &package_transition(package, language));
         }
     }
 
-    // 显示预发布版本更新
     if !prerelease_updates.is_empty() {
-        println!(
-            "{}",
-            language.get_text("prerelease_updates").yellow().bold()
-        );
+        println!("{}", language.get_text("prerelease_updates").dimmed());
         for package in prerelease_updates {
-            println!(
-                "  • {} ({} → {}) {}",
-                package.name.cyan(),
-                package
-                    .current_version
-                    .as_ref()
-                    .unwrap_or(&language.get_text("unknown").to_string())
-                    .red(),
-                package
-                    .latest_version
-                    .as_ref()
-                    .unwrap_or(&language.get_text("unknown").to_string())
-                    .yellow(),
-                language.get_text("prerelease_warning").yellow()
+            status_warn(
+                "Prerelease",
+                &format!(
+                    "{} {} -> {}",
+                    package.name.cyan(),
+                    package
+                        .current_version
+                        .as_deref()
+                        .unwrap_or(language.get_text("unknown"))
+                        .red(),
+                    package
+                        .latest_version
+                        .as_deref()
+                        .unwrap_or(language.get_text("unknown"))
+                        .yellow(),
+                ),
             );
         }
     }
 
-    // 询问是否要更新
+    println!();
     let should_update = match Confirm::new()
         .with_prompt(language.get_text("update_question"))
         .default(true)
@@ -220,9 +258,8 @@ pub fn print_update_selection(
     {
         Ok(choice) => choice,
         Err(e) => {
-            // 如果不是终端环境，默认选择不更新
             if e.to_string().contains("not a terminal") {
-                println!("{}", language.get_text("no_interactive_mode").yellow());
+                status_warn("Note", language.get_text("no_interactive_mode"));
                 return Ok(vec![]);
             }
             return Err(e.into());
@@ -246,7 +283,7 @@ pub fn print_update_selection(
             Err(e) => {
                 // 如果不是终端环境，默认不包含预发布版本
                 if e.to_string().contains("not a terminal") {
-                    println!("{}", language.get_text("no_interactive_mode").yellow());
+                    status_warn("Note", language.get_text("no_interactive_mode"));
                     false
                 } else {
                     return Err(e.into());

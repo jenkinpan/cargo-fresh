@@ -44,25 +44,22 @@ pub fn is_binstall_available() -> bool {
 
 /// 安装 cargo binstall
 pub async fn install_binstall() -> Result<bool> {
+    use crate::display::{status, status_err};
     let language = detect_language();
-    println!("{}", language.get_text("installing_binstall").yellow());
+    status("Installing", language.get_text("installing_binstall"));
 
     let output = Command::new("cargo")
         .args(["install", "cargo-binstall"])
         .output()?;
 
     if output.status.success() {
-        println!(
-            "✅ {}",
-            language.get_text("binstall_installed_successfully").green()
-        );
+        status("Installed", language.get_text("binstall_installed_successfully"));
         Ok(true)
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        println!(
-            "❌ {}: {}",
-            language.get_text("binstall_install_failed").red(),
-            stderr
+        status_err(
+            "Failed",
+            &format!("{}: {}", language.get_text("binstall_install_failed"), stderr.trim()),
         );
         Ok(false)
     }
@@ -70,27 +67,18 @@ pub async fn install_binstall() -> Result<bool> {
 
 /// 确保 cargo binstall 可用，如果不可用则尝试安装
 pub async fn ensure_binstall_available() -> Result<bool> {
-    // 首先检查 cargo binstall 是否已经可用
+    use crate::display::status_dim;
     if is_binstall_available() {
         return Ok(true);
     }
-
     let language = detect_language();
-
-    // 只有在 cargo binstall 确实不可用时才显示安装提示
-    println!("🔍 {}", language.get_text("binstall_not_found").yellow());
-    println!(
-        "⚡ {}",
-        language.get_text("attempting_to_install_binstall").cyan()
-    );
+    status_dim("Note", language.get_text("binstall_not_found"));
+    status_dim("Installing", language.get_text("attempting_to_install_binstall"));
 
     let result = install_binstall().await?;
-
-    // 如果安装成功，更新缓存
     if result {
         let _ = BINSTALL_AVAILABLE.set(true);
     }
-
     Ok(result)
 }
 

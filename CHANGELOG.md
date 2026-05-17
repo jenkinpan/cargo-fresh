@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+## [0.9.13] - 2026-05-17
+
+### Changed
+- **CLI 输出重做为 cargo 风格**: 全面剥离 emoji（✅❌⚠️📋🧪🔍⚡🔄📦），改用 cargo 自身的 `   Verb message` 风格——12 字符右对齐绿色加粗动词 + 内容。视觉风格与 `cargo build` / `rustup` 一致，更专业
+- **多行展示压缩为单行**: 旧版每个升级包要 3 行（`xxx 有更新可用\n  当前版本: 0.9.8\n  最新版本: 0.9.10`），现在一行搞定（`    Updating cargo-fresh 0.9.8 -> 0.9.12`）
+- **统一的状态动词词典**: `Checking` / `Found` / `Updating` / `Updated` / `Fresh` / `Running` / `Installing` / `Installed` / `Would run` / `Fallback` / `Unchanged` / `Failed` / `Note` / `Finished` 等。绿色（成功）/ 黄色（警告）/ 红色（失败）/ dim 灰（次要信息）四种语义颜色
+- **摘要尾行合并**: 旧版三行 `✅ Update completed!\n成功: 1 个包\n总耗时: 63 毫秒` 压缩为 cargo 风格单行 `    Finished 1 个成功, 耗时 63ms`
+
+### Added
+- **`display::status*` 系列辅助函数**: `status` / `status_warn` / `status_err` / `status_dim` 用于直接 println；`pb_status*` 四个对应版本用于进度条上下文。所有用户面输出都走这 8 个函数，保证视觉一致性
+
+### Fixed
+- **`no_updates_selected` 键名拼写错误**: 老代码引用的 key 不存在，导致 `--no-interactive` 走完后那行提示永远是空字符串。改成正确的 `no_packages_selected`
+
+### Technical
+- `cargo install --list` 解析的箭头从 `→` 改为 ASCII `->`，避免 mono 字体下宽度估算不一致
+- 4 个 `format_text` 单元测试的硬编码断言更新以匹配新模板（断言文本去除 emoji 前缀）
+- 全部 63 个单元测试通过，`cargo clippy --all-targets -- -D warnings` 零警告
+
 ## [0.9.12] - 2026-05-17
 
 ### Added

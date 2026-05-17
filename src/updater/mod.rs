@@ -3,6 +3,7 @@ use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::process::{Command, Output};
 
+use crate::display::{pb_status, pb_status_dim, pb_status_err, pb_status_warn, status, status_dim};
 use crate::locale::detection::detect_language;
 use crate::models::{
     PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_BAR_WIDTH, PROGRESS_TICK_MS,
@@ -90,12 +91,7 @@ fn build_args<'a>(
 }
 
 fn run_cargo(pb: &ProgressBar, args: &[&str]) -> Result<Output> {
-    let language = detect_language();
-    pb.println(format!(
-        "{} cargo {}",
-        language.get_text("executing_command"),
-        args.join(" ")
-    ));
+    pb_status_dim(pb, "Running", &format!("cargo {}", args.join(" ")));
     pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
     let output = Command::new("cargo")
         .args(args)
@@ -116,13 +112,6 @@ async fn verify_and_report_update(
     old_version: &Option<String>,
 ) -> UpdateResult {
     let language = detect_language();
-    pb.println(
-        language.format_text(
-            "package_update_success",
-            &[("name", &package_name.green().to_string())],
-        ),
-    );
-
     // 升级成功后让该包的版本缓存失效，下次 get_installed_version 重新查 cargo
     invalidate_installed_version(package_name);
 
@@ -132,14 +121,16 @@ async fn verify_and_report_update(
         Ok(Some(new_version)) if old_version.as_ref() != Some(&new_version) => {
             let unknown = language.get_text("unknown_version").to_string();
             let old_str = old_version.as_ref().unwrap_or(&unknown);
-            pb.println(language.format_text(
-                "package_updated_version",
-                &[
-                    ("name", &package_name.green().to_string()),
-                    ("old", &old_str.red().to_string()),
-                    ("new", &new_version.green().to_string()),
-                ],
-            ));
+            pb_status(
+                pb,
+                "Updated",
+                &format!(
+                    "{} {} -> {}",
+                    package_name.cyan(),
+                    old_str.red(),
+                    new_version.green()
+                ),
+            );
             UpdateResult::new(
                 package_name.to_string(),
                 old_version.clone(),
@@ -148,10 +139,13 @@ async fn verify_and_report_update(
             )
         }
         Ok(Some(_)) => {
-            pb.println(
-                language.format_text(
-                    "package_version_unchanged",
-                    &[("name", &package_name.yellow().to_string())],
+            pb_status_warn(
+                pb,
+                "Unchanged",
+                &format!(
+                    "{} {}",
+                    package_name.cyan(),
+                    language.get_text("version_unchanged").dimmed()
                 ),
             );
             UpdateResult::new(
@@ -162,10 +156,16 @@ async fn verify_and_report_update(
             )
         }
         _ => {
-            pb.println(
-                language.format_text(
-                    "package_update_verification_failed",
-                    &[("name", &package_name.yellow().to_string())],
+            pb_status_warn(
+                pb,
+                "Warning",
+                &format!(
+                    "{} {}",
+                    package_name.cyan(),
+                    detect_language()
+                        .get_text("package_update_verification_failed")
+                        .replace("{} ", "")
+                        .dimmed()
                 ),
             );
             UpdateResult::new(package_name.to_string(), old_version.clone(), None, true)
@@ -174,21 +174,22 @@ async fn verify_and_report_update(
 }
 
 fn report_command_failure(pb: &ProgressBar, package_name: &str, output: &Output) {
-    let language = detect_language();
-    pb.println(language.format_text(
-        "package_update_failed",
-        &[
-            ("name", &package_name.red().to_string()),
-            ("code", &output.status.code().unwrap_or(-1).to_string()),
-        ],
-    ));
+    pb_status_err(
+        pb,
+        "Failed",
+        &format!(
+            "{} (exit code: {})",
+            package_name.red(),
+            output.status.code().unwrap_or(-1)
+        ),
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !stderr.is_empty() {
-        pb.println(format!(
-            "{} {}",
-            language.get_text("error_details"),
-            stderr.red()
-        ));
+        pb_status_dim(
+            pb,
+            "stderr",
+            &format!("{}", stderr.trim().dimmed()),
+        );
     }
 }
 
@@ -233,17 +234,14 @@ pub async fn update_package(
         } else {
             format!("{} {}", package_name.cyan().bold(), marker.dimmed())
         };
-        println!(
-            "🧪 {} {} cargo {}",
-            header,
-            language.get_text("dry_run_label").cyan(),
-            primary_args.join(" ")
+        status(
+            "Would run",
+            &format!("{}: cargo {}", header, primary_args.join(" ")),
         );
         if let Some(fb) = &fallback_args {
-            println!(
-                "    {} cargo {}",
-                language.get_text("dry_run_fallback_label").dimmed(),
-                fb.join(" ")
+            status_dim(
+                "Fallback",
+                &format!("cargo {}", fb.join(" ")),
             );
         }
         return Ok(UpdateResult::new(
@@ -256,28 +254,28 @@ pub async fn update_package(
 
     let pb = create_progress_bar(package_name);
     if let Some(ref version) = old_version {
-        pb.println(format!(
-            "{} {}",
+        pb_status_dim(
+            &pb,
             language.get_text("current_version_label"),
-            version.blue()
-        ));
+            &version.blue().to_string(),
+        );
     }
 
     match (source, use_binstall) {
         (PackageSource::Crates, true) => {
-            pb.println(format!("⚡ {}", language.get_text("using_binstall").cyan()));
+            pb_status_dim(&pb, "Using", language.get_text("using_binstall"));
         }
         (PackageSource::Crates, false) => {
-            pb.println(format!(
-                "🔄 {}",
-                language.get_text("using_install_fallback").yellow()
-            ));
+            pb_status_dim(&pb, "Using", language.get_text("using_install_fallback"));
         }
         (PackageSource::Git { .. }, _) | (PackageSource::Path { .. }, _) => {
-            pb.println(format!(
-                "📦 {} {}",
-                language.get_text("using_install_fallback").yellow(),
-                source.marker().dimmed(),
+            pb_status_dim(
+                &pb,
+                "Using",
+                &format!(
+                    "{} {}",
+                    language.get_text("using_install_fallback"),
+                    source.marker().dimmed(),
             ));
         }
     }
@@ -299,7 +297,7 @@ pub async fn update_package(
             let result = verify_and_report_update(&pb, package_name, &old_version).await;
             // 命令成功但读不到新版本时，给主路径一次重试机会（保留原行为）
             if result.new_version.is_none() && attempt < MAX_RETRY_ATTEMPTS {
-                pb.println(language.get_text("waiting_retry"));
+                pb_status_dim(&pb, "Retry", language.get_text("waiting_retry"));
                 tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                 continue;
             }
@@ -308,12 +306,7 @@ pub async fn update_package(
 
         // binstall 第一次失败：立刻尝试 install 回退（不消耗 attempt 计数器中的剩余次数）
         if let (Some(args), 1) = (fallback_args.as_ref(), attempt) {
-            pb.println(
-                language
-                    .get_text("binstall_failed_fallback")
-                    .yellow()
-                    .to_string(),
-            );
+            pb_status_warn(&pb, "Fallback", language.get_text("binstall_failed_fallback"));
             let fb_output = run_cargo(&pb, args)?;
             if fb_output.status.success() {
                 return Ok(verify_and_report_update(&pb, package_name, &old_version).await);
@@ -324,7 +317,7 @@ pub async fn update_package(
         }
 
         if attempt < MAX_RETRY_ATTEMPTS {
-            pb.println(language.get_text("waiting_retry"));
+            pb_status_dim(&pb, "Retry", language.get_text("waiting_retry"));
             tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
             continue;
         }

@@ -16,95 +16,93 @@
 /// 返回对应的英文文本，如果找不到则返回空字符串
 pub fn get_english_text(key: &str) -> &'static str {
     match key {
-        // 主要功能文本
-        "checking_packages" => "Checking for updates to globally installed Cargo packages...",
-        "no_packages_found" => "No installed packages found",
-        "found_packages" => "Found {} installed packages",
-        "all_up_to_date" => "All packages are up to date!",
+        // Headers / summaries
+        "checking_packages" => "for updates to globally installed packages",
+        "no_packages_found" => "no installed packages match",
+        "found_packages" => "{} installed package(s)",
+        "all_up_to_date" => "all packages are up to date",
 
-        // 更新相关文本
-        "stable_updates" => "Stable version updates:",
-        "prerelease_updates" => "Prerelease version updates:",
-        "prerelease_warning" => "⚠️ Prerelease version",
-        "update_question" => "Do you want to update these packages?",
-        "include_prerelease_question" => "Include prerelease version updates?",
-        "select_packages" => "Select packages to update (use space to select, enter to confirm)",
-        "no_interactive_mode" => "Non-interactive mode detected. Skipping update selection.",
+        // Selection prompts (dialoguer body — kept as full sentences)
+        "stable_updates" => "Stable updates:",
+        "prerelease_updates" => "Prerelease updates:",
+        "prerelease_warning" => "prerelease",
+        "update_question" => "Update these packages?",
+        "include_prerelease_question" => "Include prerelease updates?",
+        "select_packages" => "Select packages (space to toggle, enter to confirm)",
+        "no_interactive_mode" => "non-interactive mode; skipping selection",
 
-        // 更新过程文本
-        "starting_update" => "Starting to update selected packages...",
-        "updating_package" => "Updating {}...",
-        "package_failed" => "❌ {} update failed",
-        "package_error" => "❌ {name} update error: {error}",
-        "update_completed" => "Update completed!",
+        // Update flow
+        "starting_update" => "selected packages",
+        "updating_package" => "{}",
+        "package_failed" => "{}",
+        "package_error" => "{name}: {error}",
+        "update_completed" => "update completed",
 
-        // 统计信息文本
-        "success_count" => "Success: {} packages",
-        "fail_count" => "Failed: {} packages",
-        "no_packages_selected" => "No packages selected for update",
+        // Stats (used inside summary)
+        "success_count" => "{} succeeded",
+        "fail_count" => "{} failed",
+        "no_packages_selected" => "no packages selected",
 
-        // 帮助文本
-        "update_instructions" => "To update packages, use: cargo install --force <package_name>",
-        "interactive_instructions" => "Or remove --no-interactive flag for interactive updates",
+        // Hint text
+        "update_instructions" => "To update manually: cargo install --force <name>",
+        "interactive_instructions" => "Or drop --no-interactive for interactive selection",
 
-        // 版本信息文本
+        // Version labels
         "version_unchanged" => "version unchanged",
-        "unknown_version" => "unknown version",
-        "version_info_unknown" => "version info unknown",
-        "package_has_update" => "{} has updates available",
-        "current_version" => "Current version:",
-        "latest_version" => "Latest version:",
-        "package_up_to_date" => "{} is up to date",
-        "version" => "Version:",
+        "unknown_version" => "unknown",
+        "version_info_unknown" => "version unknown",
+        "package_has_update" => "{}",
+        "current_version" => "current",
+        "latest_version" => "latest",
+        "package_up_to_date" => "{}",
+        "version" => "version",
 
-        // 更新摘要文本
-        "update_summary" => "📋 Update Summary",
-        "successful_updates" => "✅ Successfully updated packages:",
-        "failed_updates" => "❌ Failed to update packages:",
-        "update_failed" => "update failed",
-        "updates_detected" => "The following packages have updates available:",
+        // Summary headers / labels
+        "update_summary" => "Update Summary",
+        "successful_updates" => "Successful:",
+        "failed_updates" => "Failed:",
+        "update_failed" => "failed",
+        "updates_detected" => "Updates available:",
         "unknown" => "unknown",
 
-        // Updater模块文本
-        "updating_package_progress" => "Updating {}...",
-        "current_version_label" => "Current version:",
-        "executing_command" => "Executing command:",
-        "retry_attempt" => "Retry attempt {attempt} for {name}...",
-        "error_message" => "Error message:",
-        "package_update_success" => "✅ {} update command executed successfully",
-        "package_updated_version" => "✅ {name} updated: {old} → {new}",
-        "package_version_unchanged" => "⚠️ {} version unchanged, may already be the latest version",
-        "package_update_verification_failed" => {
-            "⚠️ {} update command successful but unable to verify new version"
-        }
-        "package_update_failed" => "❌ {name} update failed (exit code: {code})",
-        "error_details" => "Error details:",
-        "waiting_retry" => "Waiting before retry...",
+        // Updater progress text
+        "updating_package_progress" => "{}",
+        "current_version_label" => "currently",
+        "executing_command" => "cargo",
+        "retry_attempt" => "attempt {attempt} for {name}",
+        "error_message" => "stderr:",
+        "package_update_success" => "{} install command succeeded",
+        "package_updated_version" => "{name} {old} -> {new}",
+        "package_version_unchanged" => "{} version unchanged",
+        "package_update_verification_failed" => "{} command succeeded but version not verified",
+        "package_update_failed" => "{name} failed (exit code: {code})",
+        "error_details" => "details:",
+        "waiting_retry" => "waiting before retry",
 
-        // Package模块文本
-        "cargo_install_list_failed" => "Failed to execute cargo install --list",
-        "checking_package" => "Checking",
-        "unable_to_get_latest_version" => "unable to get latest version information",
+        // Package module
+        "cargo_install_list_failed" => "failed to execute cargo install --list",
+        "checking_package" => "checking",
+        "unable_to_get_latest_version" => "no latest version available",
         "check_failed" => "check failed",
 
-        // Binstall相关文本
-        "binstall_not_found" => "cargo binstall not found",
-        "attempting_to_install_binstall" => "Attempting to install cargo binstall...",
-        "installing_binstall" => "Installing cargo binstall...",
-        "binstall_installed_successfully" => "cargo binstall installed successfully",
-        "binstall_install_failed" => "Failed to install cargo binstall",
-        "using_binstall" => "Using cargo binstall for faster installation",
-        "using_install_fallback" => "Using cargo install as fallback",
-        "binstall_failed_fallback" => "cargo binstall failed, falling back to cargo install",
-        
-        // 时间统计相关文本
-        "total_time_seconds" => "Total time: {} seconds",
-        "total_time_millis" => "Total time: {} milliseconds",
+        // Binstall
+        "binstall_not_found" => "cargo binstall not installed",
+        "attempting_to_install_binstall" => "cargo-binstall (will speed up future updates)",
+        "installing_binstall" => "cargo-binstall",
+        "binstall_installed_successfully" => "cargo-binstall",
+        "binstall_install_failed" => "to install cargo-binstall",
+        "using_binstall" => "cargo binstall",
+        "using_install_fallback" => "cargo install",
+        "binstall_failed_fallback" => "binstall failed, falling back to cargo install",
 
-        // Dry-run 相关文本
-        "dry_run_label" => "Would run:",
-        "dry_run_fallback_label" => "(fallback would run:)",
-        "dry_run_summary" => "🧪 Dry run — no packages were modified",
+        // Timing
+        "total_time_seconds" => "in {}s",
+        "total_time_millis" => "in {}ms",
+
+        // Dry-run
+        "dry_run_label" => "cargo",
+        "dry_run_fallback_label" => "(fallback)",
+        "dry_run_summary" => "no packages will be modified",
 
         _ => "",
     }
@@ -124,92 +122,92 @@ pub fn get_english_text(key: &str) -> &'static str {
 pub fn get_chinese_text(key: &str) -> &'static str {
     match key {
         // 主要功能文本
-        "checking_packages" => "检查全局安装的 Cargo 包更新...",
-        "no_packages_found" => "没有找到已安装的包",
-        "found_packages" => "找到 {} 个已安装的包",
-        "all_up_to_date" => "所有包都已是最新版本！",
+        "checking_packages" => "全局 cargo 包更新",
+        "no_packages_found" => "未找到匹配的已安装包",
+        "found_packages" => "{} 个已安装的包",
+        "all_up_to_date" => "所有包均为最新",
 
-        // 更新相关文本
-        "stable_updates" => "稳定版本更新:",
-        "prerelease_updates" => "预发布版本更新:",
-        "prerelease_warning" => "⚠️ 预发布版本",
-        "update_question" => "是否要更新这些包？",
-        "include_prerelease_question" => "是否包含预发布版本更新？",
-        "select_packages" => "选择要更新的包（使用空格选择，回车确认）",
-        "no_interactive_mode" => "检测到非交互模式。跳过更新选择。",
+        // 选择提示（dialoguer 正文，保留完整句子）
+        "stable_updates" => "稳定版更新：",
+        "prerelease_updates" => "预发布版更新：",
+        "prerelease_warning" => "预发布",
+        "update_question" => "更新这些包？",
+        "include_prerelease_question" => "是否包含预发布版？",
+        "select_packages" => "选择要更新的包（空格切换，回车确认）",
+        "no_interactive_mode" => "非交互模式，跳过选择",
 
-        // 更新过程文本
-        "starting_update" => "开始更新选中的包...",
-        "updating_package" => "正在更新 {}...",
-        "package_failed" => "❌ {} 更新失败",
-        "package_error" => "❌ {name} 更新出错: {error}",
-        "update_completed" => "更新完成！",
+        // 更新流程
+        "starting_update" => "选中的包",
+        "updating_package" => "{}",
+        "package_failed" => "{}",
+        "package_error" => "{name}：{error}",
+        "update_completed" => "更新完成",
 
-        // 统计信息文本
-        "success_count" => "成功: {} 个包",
-        "fail_count" => "失败: {} 个包",
-        "no_packages_selected" => "未选择任何包进行更新",
+        // 统计（摘要内使用）
+        "success_count" => "{} 个成功",
+        "fail_count" => "{} 个失败",
+        "no_packages_selected" => "未选择任何包",
 
-        // 帮助文本
-        "update_instructions" => "要更新包，请使用: cargo install --force <package_name>",
-        "interactive_instructions" => "或者移除 --no-interactive 参数进行交互式更新",
+        // 提示
+        "update_instructions" => "手动更新：cargo install --force <name>",
+        "interactive_instructions" => "或去掉 --no-interactive 进入交互模式",
 
-        // 版本信息文本
-        "version_unchanged" => "版本未改变",
-        "unknown_version" => "未知版本",
-        "version_info_unknown" => "版本信息未知",
-        "package_has_update" => "{} 有更新可用",
-        "current_version" => "当前版本:",
-        "latest_version" => "最新版本:",
-        "package_up_to_date" => "{} 已是最新版本",
-        "version" => "版本:",
+        // 版本标签
+        "version_unchanged" => "版本未变",
+        "unknown_version" => "未知",
+        "version_info_unknown" => "版本未知",
+        "package_has_update" => "{}",
+        "current_version" => "当前",
+        "latest_version" => "最新",
+        "package_up_to_date" => "{}",
+        "version" => "版本",
 
-        // 更新摘要文本
-        "update_summary" => "📋 更新摘要",
-        "successful_updates" => "✅ 成功更新的包:",
-        "failed_updates" => "❌ 更新失败的包:",
-        "update_failed" => "更新失败",
-        "updates_detected" => "检测到以下包有更新:",
+        // 摘要
+        "update_summary" => "更新摘要",
+        "successful_updates" => "成功：",
+        "failed_updates" => "失败：",
+        "update_failed" => "失败",
+        "updates_detected" => "可用更新：",
         "unknown" => "未知",
 
-        // Updater模块文本
-        "updating_package_progress" => "正在更新 {}...",
-        "current_version_label" => "当前版本:",
-        "executing_command" => "执行命令:",
-        "retry_attempt" => "重试第 {attempt} 次更新 {name}...",
-        "error_message" => "错误信息:",
-        "package_update_success" => "✅ {} 更新命令执行成功",
-        "package_updated_version" => "✅ {name} 已更新: {old} → {new}",
-        "package_version_unchanged" => "⚠️ {} 版本未改变，可能已经是最新版本",
-        "package_update_verification_failed" => "⚠️ {} 更新命令成功但无法验证新版本",
-        "package_update_failed" => "❌ {name} 更新失败 (退出码: {code})",
-        "error_details" => "错误详情:",
-        "waiting_retry" => "等待后重试...",
+        // Updater 进度
+        "updating_package_progress" => "{}",
+        "current_version_label" => "当前",
+        "executing_command" => "cargo",
+        "retry_attempt" => "第 {attempt} 次重试 {name}",
+        "error_message" => "stderr：",
+        "package_update_success" => "{} 安装命令成功",
+        "package_updated_version" => "{name} {old} -> {new}",
+        "package_version_unchanged" => "{} 版本未变",
+        "package_update_verification_failed" => "{} 命令成功但版本未验证",
+        "package_update_failed" => "{name} 失败（退出码：{code}）",
+        "error_details" => "详情：",
+        "waiting_retry" => "等待重试",
 
-        // Package模块文本
+        // Package 模块
         "cargo_install_list_failed" => "执行 cargo install --list 失败",
         "checking_package" => "检查",
-        "unable_to_get_latest_version" => "无法获取最新版本信息",
+        "unable_to_get_latest_version" => "无最新版本信息",
         "check_failed" => "检查失败",
 
-        // Binstall相关文本
-        "binstall_not_found" => "未找到 cargo binstall",
-        "attempting_to_install_binstall" => "正在尝试安装 cargo binstall...",
-        "installing_binstall" => "正在安装 cargo binstall...",
-        "binstall_installed_successfully" => "cargo binstall 安装成功",
-        "binstall_install_failed" => "安装 cargo binstall 失败",
-        "using_binstall" => "使用 cargo binstall 进行快速安装",
-        "using_install_fallback" => "使用 cargo install 作为回退方案",
-        "binstall_failed_fallback" => "cargo binstall 失败，回退到 cargo install",
-        
-        // 时间统计相关文本
-        "total_time_seconds" => "总耗时: {} 秒",
-        "total_time_millis" => "总耗时: {} 毫秒",
+        // Binstall
+        "binstall_not_found" => "未安装 cargo-binstall",
+        "attempting_to_install_binstall" => "cargo-binstall（加速后续更新）",
+        "installing_binstall" => "cargo-binstall",
+        "binstall_installed_successfully" => "cargo-binstall",
+        "binstall_install_failed" => "安装 cargo-binstall 失败",
+        "using_binstall" => "cargo binstall",
+        "using_install_fallback" => "cargo install",
+        "binstall_failed_fallback" => "binstall 失败，回退到 cargo install",
 
-        // Dry-run 相关文本
-        "dry_run_label" => "将执行:",
-        "dry_run_fallback_label" => "(回退命令:)",
-        "dry_run_summary" => "🧪 Dry run — 未实际修改任何包",
+        // 时间
+        "total_time_seconds" => "耗时 {}s",
+        "total_time_millis" => "耗时 {}ms",
+
+        // Dry-run
+        "dry_run_label" => "cargo",
+        "dry_run_fallback_label" => "（回退）",
+        "dry_run_summary" => "不会实际修改任何包",
 
         _ => "",
     }
@@ -223,11 +221,11 @@ mod tests {
     fn test_english_texts() {
         assert_eq!(
             get_english_text("checking_packages"),
-            "Checking for updates to globally installed Cargo packages..."
+            "for updates to globally installed packages"
         );
         assert_eq!(
             get_english_text("all_up_to_date"),
-            "All packages are up to date!"
+            "all packages are up to date"
         );
         assert_eq!(get_english_text("nonexistent_key"), "");
     }
@@ -236,9 +234,9 @@ mod tests {
     fn test_chinese_texts() {
         assert_eq!(
             get_chinese_text("checking_packages"),
-            "检查全局安装的 Cargo 包更新..."
+            "全局 cargo 包更新"
         );
-        assert_eq!(get_chinese_text("all_up_to_date"), "所有包都已是最新版本！");
+        assert_eq!(get_chinese_text("all_up_to_date"), "所有包均为最新");
         assert_eq!(get_chinese_text("nonexistent_key"), "");
     }
 
