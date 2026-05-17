@@ -5,10 +5,10 @@ use std::process::{Command, Output};
 
 use crate::locale::detection::detect_language;
 use crate::models::{
-    UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_BAR_WIDTH, PROGRESS_TICK_MS, RETRY_DELAY_MS,
-    VERSION_UPDATE_DELAY_MS,
+    PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_BAR_WIDTH, PROGRESS_TICK_MS,
+    RETRY_DELAY_MS, VERSION_UPDATE_DELAY_MS,
 };
-use crate::package::{ensure_binstall_available, get_installed_version};
+use crate::package::{ensure_binstall_available, get_installed_version, is_binstall_available};
 
 pub fn create_progress_bar(package_name: &str) -> ProgressBar {
     let language = detect_language();
@@ -51,11 +51,38 @@ pub fn create_main_progress_bar(total: usize) -> ProgressBar {
     pb
 }
 
-fn build_args<'a>(use_binstall: bool, package_name: &'a str, version: Option<&'a str>) -> Vec<&'a str> {
-    let subcmd = if use_binstall { "binstall" } else { "install" };
-    match version {
-        Some(v) => vec![subcmd, "--force", package_name, "--version", v],
-        None => vec![subcmd, "--force", package_name],
+/// 根据来源类型构造 cargo 子命令参数。
+///
+/// - `Crates`：`install`/`binstall --force <pkg> [--version V]`
+/// - `Git`：`install --git URL [--rev REV] --force <pkg>`（binstall 不支持 git，强制 install）
+/// - `Path`：`install --path DIR --force <pkg>`
+fn build_args<'a>(
+    use_binstall: bool,
+    package_name: &'a str,
+    version: Option<&'a str>,
+    source: &'a PackageSource,
+) -> Vec<&'a str> {
+    match source {
+        PackageSource::Crates => {
+            let subcmd = if use_binstall { "binstall" } else { "install" };
+            match version {
+                Some(v) => vec![subcmd, "--force", package_name, "--version", v],
+                None => vec![subcmd, "--force", package_name],
+            }
+        }
+        PackageSource::Git { url, rev } => {
+            let mut args = vec!["install", "--git", url.as_str()];
+            if let Some(r) = rev {
+                args.push("--rev");
+                args.push(r.as_str());
+            }
+            args.push("--force");
+            args.push(package_name);
+            args
+        }
+        PackageSource::Path { dir } => {
+            vec!["install", "--path", dir.as_str(), "--force", package_name]
+        }
     }
 }
 
@@ -162,11 +189,66 @@ fn report_command_failure(pb: &ProgressBar, package_name: &str, output: &Output)
 pub async fn update_package(
     package_name: &str,
     target_version: Option<&str>,
+    source: &PackageSource,
+    dry_run: bool,
 ) -> Result<UpdateResult> {
     let language = detect_language();
-    let pb = create_progress_bar(package_name);
-
     let old_version = get_installed_version(package_name).await.ok().flatten();
+
+    // 决定主命令的来源策略：
+    // - Crates 源在非 dry-run 下确保 binstall 可用（必要时安装它）
+    // - Crates 源在 dry-run 下用只读探测，避免副作用
+    // - Git / Path 源不走 binstall（binstall 仅支持 crates.io）
+    let use_binstall = match source {
+        PackageSource::Crates => {
+            if dry_run {
+                is_binstall_available()
+            } else {
+                ensure_binstall_available().await.unwrap_or(false)
+            }
+        }
+        _ => false,
+    };
+
+    let primary_args = build_args(use_binstall, package_name, target_version, source);
+    // 只有 Crates 源走 binstall 时才有 install 回退
+    let fallback_args = if use_binstall {
+        Some(build_args(false, package_name, target_version, source))
+    } else {
+        None
+    };
+
+    // dry-run：直接打印到 stdout（绕过 progress bar 避免 finish 时被清掉），
+    // 立即返回成功结果，不调用 cargo。
+    if dry_run {
+        let marker = source.marker();
+        let header = if marker.is_empty() {
+            package_name.cyan().bold().to_string()
+        } else {
+            format!("{} {}", package_name.cyan().bold(), marker.dimmed())
+        };
+        println!(
+            "🧪 {} {} cargo {}",
+            header,
+            language.get_text("dry_run_label").cyan(),
+            primary_args.join(" ")
+        );
+        if let Some(fb) = &fallback_args {
+            println!(
+                "    {} cargo {}",
+                language.get_text("dry_run_fallback_label").dimmed(),
+                fb.join(" ")
+            );
+        }
+        return Ok(UpdateResult::new(
+            package_name.to_string(),
+            old_version.clone(),
+            old_version,
+            true,
+        ));
+    }
+
+    let pb = create_progress_bar(package_name);
     if let Some(ref version) = old_version {
         pb.println(format!(
             "{} {}",
@@ -175,24 +257,24 @@ pub async fn update_package(
         ));
     }
 
-    let use_binstall = ensure_binstall_available().await.unwrap_or(false);
-
-    if use_binstall {
-        pb.println(format!("⚡ {}", language.get_text("using_binstall").cyan()));
-    } else {
-        pb.println(format!(
-            "🔄 {}",
-            language.get_text("using_install_fallback").yellow()
-        ));
+    match (source, use_binstall) {
+        (PackageSource::Crates, true) => {
+            pb.println(format!("⚡ {}", language.get_text("using_binstall").cyan()));
+        }
+        (PackageSource::Crates, false) => {
+            pb.println(format!(
+                "🔄 {}",
+                language.get_text("using_install_fallback").yellow()
+            ));
+        }
+        (PackageSource::Git { .. }, _) | (PackageSource::Path { .. }, _) => {
+            pb.println(format!(
+                "📦 {} {}",
+                language.get_text("using_install_fallback").yellow(),
+                source.marker().dimmed(),
+            ));
+        }
     }
-
-    let primary_args = build_args(use_binstall, package_name, target_version);
-    // 只有走 binstall 时才有 install 回退；纯 install 路径失败就只能重试。
-    let fallback_args = if use_binstall {
-        Some(build_args(false, package_name, target_version))
-    } else {
-        None
-    };
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
         if attempt > 1 {

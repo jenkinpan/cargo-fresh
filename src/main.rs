@@ -16,8 +16,8 @@ use display::{print_results, print_update_selection, print_update_summary};
 use locale::detect_language;
 use models::{PackageInfo, UpdateResult};
 use package::{
-    check_package_updates, filter_packages, get_installed_packages, get_latest_version,
-    is_stable_version,
+    check_package_updates, exclude_packages, filter_packages, get_installed_packages,
+    get_latest_version, is_stable_version,
 };
 use updater::{create_main_progress_bar, update_package};
 
@@ -58,13 +58,16 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // 应用包过滤
+    // 应用包过滤（先 filter 后 exclude）
     if let Some(filter_pattern) = &cli.filter {
         filter_packages(&mut packages, filter_pattern)?;
-        if packages.is_empty() {
-            println!("{}", language.get_text("no_packages_found").yellow());
-            return Ok(());
-        }
+    }
+    if !cli.exclude.is_empty() {
+        exclude_packages(&mut packages, &cli.exclude)?;
+    }
+    if (cli.filter.is_some() || !cli.exclude.is_empty()) && packages.is_empty() {
+        println!("{}", language.get_text("no_packages_found").yellow());
+        return Ok(());
     }
 
     println!(
@@ -141,6 +144,9 @@ async fn main() -> Result<()> {
     };
 
     if !selections.is_empty() {
+        if cli.dry_run {
+            println!("\n{}", language.get_text("dry_run_summary").cyan().bold());
+        }
         println!("\n{}", language.get_text("starting_update").blue().bold());
 
         // 记录更新开始时间
@@ -171,14 +177,18 @@ async fn main() -> Result<()> {
                 total_packages
             ));
 
-            // 找到对应的包信息以获取目标版本
-            let target_version = all_packages_to_update
+            // 找到对应的包信息以获取目标版本和来源
+            let selected_pkg = all_packages_to_update
                 .iter()
-                .find(|p| p.name == *package_name)
+                .find(|p| p.name == *package_name);
+            let target_version = selected_pkg
                 .and_then(|p| p.latest_version.as_ref())
                 .map(|v| v.as_str());
+            let source = selected_pkg
+                .map(|p| p.source.clone())
+                .unwrap_or(models::PackageSource::Crates);
 
-            match update_package(package_name, target_version).await {
+            match update_package(package_name, target_version, &source, cli.dry_run).await {
                 Ok(result) => {
                     update_results.push(result.clone());
                     if result.success {

@@ -7,6 +7,28 @@
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-05-17
+
+### Added
+- **真正的 glob 过滤**: `--filter` 改用 `globset` crate，支持标准 glob 语义（`*` / `?` / `[abc]`）。无 glob 字符的纯词自动包裹为 `*p*` 保留旧版"模糊匹配"友好行为
+- **`--exclude PATTERN`**（可重复）: 从过滤后的列表再剔除匹配的包。先 filter 后 exclude，支持完整 glob 语法
+- **`--dry-run`**: 打印将要执行的 cargo 命令但不实际执行。绕过进度条直接 println 保证命令清晰可见；连 binstall 安装副作用都避免（用只读 `is_binstall_available` 探测而非 `ensure_binstall_available`）
+- **支持 git 和 path 安装源**: 解析 `cargo install --list` 的 `(git+URL#rev)` 和 `(path+file:///DIR)` 后缀，在显示时附加 `[git]` / `[path]` 标记。更新策略按来源分流：crates.io 走 binstall→install fallback；git 用 `cargo install --git URL [--rev REV] --force`；path 用 `cargo install --path DIR --force`
+
+### Fixed
+- **`parse_package_line` 误切 git URL**: 旧实现用 `split(':').next()` 找版本字段边界，但 git URL 中的 `https://` 含 `:`，会被错误截断成 `url = "https"`。改用先 `strip_suffix(':')` 剥掉行尾冒号再 `split_once(" v")`
+
+### Changed
+- 引入 `globset = "0.4"` 依赖
+- `PackageInfo` 加 `source: PackageSource` 字段，新增 `PackageInfo::with_source` 构造器
+- `check_package_updates` 跳过非 crates.io 源（git/path 在 crates.io 上查不到"最新版本"）
+- `update_package` 签名扩展为 `(name, version, source, dry_run)`
+
+### Technical
+- 新增 9 个单元测试（52 总数）：3 个 PackageSource 解析（registry / git±rev / path）、2 个 glob 过滤（prefix / suffix）、3 个 exclude（空列表 / 单模式 / 多模式）、原有 7 个 parse_package_line 测试更新为新签名
+- `cargo clippy --all-targets -- -D warnings` 零警告
+- 实测验证：`--filter cargo-fresh --dry-run --batch` 在 100ms 内打印 `cargo binstall --force cargo-fresh --version 0.9.10` 命令且未修改本地安装
+
 ## [0.9.10] - 2026-05-17
 
 ### Fixed

@@ -27,9 +27,17 @@ pub struct Cli {
     #[arg(long)]
     pub batch: bool,
 
-    /// Filter packages by name pattern (supports glob patterns)
+    /// Filter packages by name pattern (supports glob patterns: *, ?, [abc])
     #[arg(long)]
     pub filter: Option<String>,
+
+    /// Exclude packages by glob pattern (repeatable)
+    #[arg(long, action = clap::ArgAction::Append)]
+    pub exclude: Vec<String>,
+
+    /// Print commands that would run but don't execute them
+    #[arg(long)]
+    pub dry_run: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -99,8 +107,21 @@ impl Cli {
             .arg(
                 clap::Arg::new("filter")
                     .long("filter")
-                    .help("Filter packages by name pattern (supports glob patterns)")
+                    .help("Filter packages by name pattern (supports glob patterns: *, ?, [abc])")
                     .value_name("PATTERN"),
+            )
+            .arg(
+                clap::Arg::new("exclude")
+                    .long("exclude")
+                    .help("Exclude packages by glob pattern (repeatable)")
+                    .value_name("PATTERN")
+                    .action(clap::ArgAction::Append),
+            )
+            .arg(
+                clap::Arg::new("dry-run")
+                    .long("dry-run")
+                    .help("Print commands that would run but don't execute them")
+                    .action(clap::ArgAction::SetTrue),
             )
             .subcommand(
                 clap::Command::new("completion")

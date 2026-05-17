@@ -49,6 +49,16 @@ pub fn format_version_info(
     }
 }
 
+/// 给名字附加来源标记，例如 "some-tool [git]"。crates.io 来源不加标记。
+fn name_with_source(package: &PackageInfo) -> String {
+    let marker = package.source.marker();
+    if marker.is_empty() {
+        package.name.clone()
+    } else {
+        format!("{} {}", package.name, marker.dimmed())
+    }
+}
+
 pub fn print_results(packages: &[PackageInfo], updates_only: bool, language: Language) {
     let mut has_updates = false;
 
@@ -63,7 +73,7 @@ pub fn print_results(packages: &[PackageInfo], updates_only: bool, language: Lan
                 "{}",
                 language
                     .get_text("package_has_update")
-                    .replace("{}", &package.name)
+                    .replace("{}", &name_with_source(package))
                     .yellow()
                     .bold()
             );
@@ -86,7 +96,7 @@ pub fn print_results(packages: &[PackageInfo], updates_only: bool, language: Lan
                 "{}",
                 language
                     .get_text("package_up_to_date")
-                    .replace("{}", &package.name)
+                    .replace("{}", &name_with_source(package))
                     .green()
             );
             if let Some(current) = &package.current_version {

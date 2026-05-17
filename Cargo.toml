@@ -1,6 +1,6 @@
 [package]
 name = "cargo-fresh"
-version = "0.9.10"
+version = "0.9.11"
 edition = "2021"
 description = "A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection"
 documentation = "https://docs.rs/cargo-fresh"
@@ -22,6 +22,7 @@ clap_complete = "4.5.58"
 clap_complete_nushell = "4.5"
 colored = "3.0.0"
 dialoguer = "0.12.0"
+globset = "0.4"
 indicatif = "0.18"
 semver = "1"
 serde = { version = "1.0.228", features = ["derive"] }

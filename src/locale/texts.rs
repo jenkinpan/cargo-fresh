@@ -101,6 +101,11 @@ pub fn get_english_text(key: &str) -> &'static str {
         "total_time_seconds" => "Total time: {} seconds",
         "total_time_millis" => "Total time: {} milliseconds",
 
+        // Dry-run 相关文本
+        "dry_run_label" => "Would run:",
+        "dry_run_fallback_label" => "(fallback would run:)",
+        "dry_run_summary" => "🧪 Dry run — no packages were modified",
+
         _ => "",
     }
 }
@@ -200,6 +205,11 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         // 时间统计相关文本
         "total_time_seconds" => "总耗时: {} 秒",
         "total_time_millis" => "总耗时: {} 毫秒",
+
+        // Dry-run 相关文本
+        "dry_run_label" => "将执行:",
+        "dry_run_fallback_label" => "(回退命令:)",
+        "dry_run_summary" => "🧪 Dry run — 未实际修改任何包",
 
         _ => "",
     }
