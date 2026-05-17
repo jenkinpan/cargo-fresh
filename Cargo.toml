@@ -1,6 +1,6 @@
 [package]
 name = "cargo-fresh"
-version = "0.9.11"
+version = "0.9.12"
 edition = "2021"
 description = "A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection"
 documentation = "https://docs.rs/cargo-fresh"
@@ -24,6 +24,7 @@ colored = "3.0.0"
 dialoguer = "0.12.0"
 globset = "0.4"
 indicatif = "0.18"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 semver = "1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

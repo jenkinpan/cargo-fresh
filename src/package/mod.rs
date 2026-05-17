@@ -3,12 +3,30 @@ use colored::*;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use std::collections::HashSet;
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Semaphore;
 
 use semver::Version;
 
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
+
+pub mod sparse_index;
+
+/// 单进程共享的 HTTP 客户端，启用 connection pool。
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .user_agent(concat!("cargo-fresh/", env!("CARGO_PKG_VERSION")))
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .expect("build reqwest client")
+    })
+}
+
+/// 同时拿稳定版与最新预发布版的并发上限，避免 crates.io 限流 / 本地 fd 耗尽
+const MAX_CONCURRENT_INDEX_REQUESTS: usize = 16;
 
 // 缓存 cargo binstall 的可用性状态
 static BINSTALL_AVAILABLE: OnceLock<bool> = OnceLock::new();
@@ -134,11 +152,14 @@ pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
 
     let output_str = String::from_utf8(output.stdout)?;
     let mut packages = Vec::new();
+    let mut version_map: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     let mut seen_packages = HashSet::new();
 
     for line in output_str.lines() {
         if let Some((name, version, source)) = parse_package_line(line) {
             if !name.is_empty() && !version.is_empty() && seen_packages.insert(name.to_string()) {
+                version_map.insert(name.to_string(), version.to_string());
                 packages.push(PackageInfo::with_source(
                     name.to_string(),
                     Some(version.to_string()),
@@ -148,7 +169,26 @@ pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
         }
     }
 
+    // 缓存版本表，供 get_installed_version 复用，避免每次升级后 N+1 次 `cargo install --list`
+    let _ = INSTALLED_VERSION_CACHE.set(std::sync::Mutex::new(version_map));
+
     Ok(packages)
+}
+
+/// 缓存 `cargo install --list` 解析结果的版本表（name -> version）。
+///
+/// 在 `get_installed_packages` 首次运行时填充；`get_installed_version` 优先读缓存。
+/// 升级后通过 `invalidate_installed_version` 让对应条目下次重新查询。
+static INSTALLED_VERSION_CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
+    OnceLock::new();
+
+/// 升级一个包后调用：从版本表里移除该条目，强制下次重新查询真实安装版本。
+pub fn invalidate_installed_version(package_name: &str) {
+    if let Some(mutex) = INSTALLED_VERSION_CACHE.get() {
+        if let Ok(mut map) = mutex.lock() {
+            map.remove(package_name);
+        }
+    }
 }
 
 /// 解析 `cargo install --list` 的包行。
@@ -213,24 +253,36 @@ fn parse_source(s: &str) -> PackageSource {
 }
 
 pub async fn get_installed_version(package_name: &str) -> Result<Option<String>> {
-    let output = Command::new("cargo").args(["install", "--list"]).output()?;
+    // 命中缓存直接返回，避免重复 `cargo install --list`（一次启动里通常调用 N+1 次）
+    if let Some(mutex) = INSTALLED_VERSION_CACHE.get() {
+        if let Ok(map) = mutex.lock() {
+            if let Some(v) = map.get(package_name) {
+                return Ok(Some(v.clone()));
+            }
+        }
+    }
 
+    // 缓存未命中：cache 被 invalidate 后的查询走这里，去读真实状态并回填
+    let output = Command::new("cargo").args(["install", "--list"]).output()?;
     if !output.status.success() {
         return Ok(None);
     }
-
     let output_str = String::from_utf8(output.stdout)?;
-
     for line in output_str.lines() {
         if line.contains(package_name) {
             if let Some((name, version, _)) = parse_package_line(line) {
                 if name == package_name {
+                    // 回填缓存
+                    if let Some(mutex) = INSTALLED_VERSION_CACHE.get() {
+                        if let Ok(mut map) = mutex.lock() {
+                            map.insert(name.to_string(), version.to_string());
+                        }
+                    }
                     return Ok(Some(version.to_string()));
                 }
             }
         }
     }
-
     Ok(None)
 }
 
@@ -252,7 +304,11 @@ pub fn is_stable_version(version: &str) -> bool {
         .unwrap_or(true)
 }
 
-pub async fn get_latest_version(
+/// 用 `cargo search` 回退路径取最新版本。
+///
+/// 仅在 sparse index 失败时使用——`cargo search` 慢（启动 cargo 子进程 + 联网），
+/// 且解析依赖输出格式不变。
+async fn cargo_search_fallback(
     package_name: &str,
     include_prerelease: bool,
 ) -> Result<Option<String>> {
@@ -269,7 +325,7 @@ pub async fn get_latest_version(
 
     // 查找精确匹配的包名
     for line in output_str.lines() {
-        if line.starts_with(&package_prefix) && line.contains("\"") {
+        if line.starts_with(&package_prefix) && line.contains('"') {
             if let Some(version) = extract_version_from_line(line) {
                 if include_prerelease || is_stable_version(&version) {
                     return Ok(Some(version));
@@ -285,7 +341,7 @@ pub async fn get_latest_version(
 
     // 如果包含预发布版本但没有找到精确匹配，返回第一个匹配的版本
     for line in output_str.lines() {
-        if line.starts_with(&package_prefix) && line.contains("\"") {
+        if line.starts_with(&package_prefix) && line.contains('"') {
             if let Some(version) = extract_version_from_line(line) {
                 return Ok(Some(version));
             }
@@ -295,24 +351,79 @@ pub async fn get_latest_version(
     Ok(None)
 }
 
+/// 拉取一个包的稳定 + 预发布最新版本。
+///
+/// 主路径走 sparse index（快、并发友好）；任何失败时回退到 `cargo search`。
+/// 回退路径无法一次拿两个版本，只能按 `include_prerelease` 拿一个。
+pub async fn fetch_latest_versions(
+    package_name: &str,
+    include_prerelease: bool,
+) -> sparse_index::LatestVersions {
+    match sparse_index::fetch_latest(http_client(), package_name).await {
+        Ok(v) => v,
+        Err(_) => {
+            // 回退到 cargo search——只能拿一个版本，根据需求填入对应字段
+            match cargo_search_fallback(package_name, include_prerelease).await {
+                Ok(Some(v)) => {
+                    if is_stable_version(&v) {
+                        sparse_index::LatestVersions {
+                            stable: Some(v),
+                            prerelease: None,
+                        }
+                    } else {
+                        sparse_index::LatestVersions {
+                            stable: None,
+                            prerelease: Some(v),
+                        }
+                    }
+                }
+                _ => sparse_index::LatestVersions::default(),
+            }
+        }
+    }
+}
+
+/// 公开 API：只取最新版本（兼容老调用方）。
+#[allow(dead_code)]
+pub async fn get_latest_version(
+    package_name: &str,
+    include_prerelease: bool,
+) -> Result<Option<String>> {
+    let latest = fetch_latest_versions(package_name, include_prerelease).await;
+    Ok(if include_prerelease {
+        latest.prerelease.or(latest.stable)
+    } else {
+        latest.stable
+    })
+}
+
+/// 并发查询所有 crates.io 源包的最新版本（稳定 + 预发布一次拿齐）。
+///
+/// 行为：
+/// - Git / Path 源跳过（crates.io 上没有它们的"最新版本"概念）
+/// - 同时拿 stable 和 prerelease，避免旧实现的两次串行扫描
+/// - 用 `Semaphore` 限制 ≤ 16 个并发请求，防止 fd 耗尽 / 触发 crates.io 限流
+/// - 优先把 stable 写入 `latest_version`；只在没有 stable 更新但有
+///   预发布更新（且与当前版本不同）时改写为 prerelease，保留旧版"无稳定
+///   更新时仍能看到预发布候选"的行为
 pub async fn check_package_updates(
     packages: &mut [PackageInfo],
     verbose: bool,
-    include_prerelease: bool,
+    _include_prerelease: bool,
 ) -> Result<()> {
     let language = detect_language();
-
-    // 创建并发任务来检查所有包
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_INDEX_REQUESTS));
     let mut handles = Vec::new();
 
     for (index, package) in packages.iter().enumerate() {
-        // Git / Path 源的"最新版本"在 crates.io 上无意义——跳过查询，
-        // 用户若想升级需要重新跑 cargo install --git / --path（updater 会用对应命令）
         if !package.source.is_crates() {
             continue;
         }
         let package_name = package.name.clone();
+        let sem = semaphore.clone();
         let handle = tokio::spawn(async move {
+            // 持有 permit 直到任务结束，自动释放
+            let _permit = sem.acquire_owned().await.ok();
             if verbose {
                 println!(
                     "{} {}...",
@@ -320,54 +431,49 @@ pub async fn check_package_updates(
                     package_name.cyan()
                 );
             }
-
-            let result = get_latest_version(&package_name, include_prerelease).await;
-            (index, package_name, result)
+            let latest = fetch_latest_versions(&package_name, true).await;
+            (index, package_name, latest)
         });
         handles.push(handle);
     }
 
-    // 等待所有任务完成
     for handle in handles {
-        match handle.await {
-            Ok((index, package_name, result)) => match result {
-                Ok(Some(version)) => {
-                    packages[index].latest_version = Some(version.clone());
-                    if verbose {
-                        println!(
-                            "  {} {}: {}",
-                            package_name,
-                            language.get_text("latest_version"),
-                            version.green()
-                        );
-                    }
-                }
-                Ok(None) => {
-                    if verbose {
-                        println!(
-                            "  {} {}",
-                            package_name.red(),
-                            language.get_text("unable_to_get_latest_version")
-                        );
-                    }
-                }
-                Err(e) => {
-                    if verbose {
-                        println!(
-                            "  {} {}: {}",
-                            package_name.red(),
-                            language.get_text("check_failed"),
-                            e
-                        );
-                    }
-                }
-            },
-            Err(e) => {
-                if verbose {
-                    println!("Task failed: {}", e);
-                }
+        let Ok((index, package_name, latest)) = handle.await else {
+            if verbose {
+                println!("{}", language.get_text("check_failed").red());
+            }
+            continue;
+        };
+
+        let current = packages[index].current_version.clone();
+        // 优先用 stable：当 stable 与当前版本不同时（升级或回滚由 has_update 用 semver 再判一次）
+        let chosen = match (&latest.stable, &latest.prerelease, &current) {
+            (Some(s), _, Some(cur)) if s != cur => Some(s.clone()),
+            (Some(s), _, None) => Some(s.clone()),
+            // 没有 stable 更新时，若有预发布且与当前不同，作为候选展示
+            (_, Some(pre), Some(cur)) if pre != cur => Some(pre.clone()),
+            (_, Some(pre), None) => Some(pre.clone()),
+            // stable 与当前相同（已是最新），且没有更新的预发布
+            (Some(s), _, _) => Some(s.clone()),
+            _ => None,
+        };
+
+        if verbose {
+            match &chosen {
+                Some(v) => println!(
+                    "  {} {}: {}",
+                    package_name,
+                    language.get_text("latest_version"),
+                    v.green()
+                ),
+                None => println!(
+                    "  {} {}",
+                    package_name.red(),
+                    language.get_text("unable_to_get_latest_version")
+                ),
             }
         }
+        packages[index].latest_version = chosen;
     }
 
     Ok(())

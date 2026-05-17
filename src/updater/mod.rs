@@ -8,7 +8,10 @@ use crate::models::{
     PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_BAR_WIDTH, PROGRESS_TICK_MS,
     RETRY_DELAY_MS, VERSION_UPDATE_DELAY_MS,
 };
-use crate::package::{ensure_binstall_available, get_installed_version, is_binstall_available};
+use crate::package::{
+    ensure_binstall_available, get_installed_version, invalidate_installed_version,
+    is_binstall_available,
+};
 
 pub fn create_progress_bar(package_name: &str) -> ProgressBar {
     let language = detect_language();
@@ -119,6 +122,9 @@ async fn verify_and_report_update(
             &[("name", &package_name.green().to_string())],
         ),
     );
+
+    // 升级成功后让该包的版本缓存失效，下次 get_installed_version 重新查 cargo
+    invalidate_installed_version(package_name);
 
     tokio::time::sleep(tokio::time::Duration::from_millis(VERSION_UPDATE_DELAY_MS)).await;
 

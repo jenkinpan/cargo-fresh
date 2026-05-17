@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+## [0.9.12] - 2026-05-17
+
+### Added
+- **新模块 `package::sparse_index`**: crates.io sparse index 客户端，作为 `cargo search` 的高速替代。直接 HTTPS GET `https://index.crates.io/{shard}/{name}`，按行 JSON 解析、按 semver 取最新未 yank 版本，同时返回稳定 + 预发布两个候选。`fetch_latest` 异步函数 + `parse_index_body` 纯函数 + `index_path` 分片规则函数三层分离，便于离线单测
+- **`fetch_latest_versions` 统一入口**: 主路径走 sparse index；网络错误、HTTP 非 2xx、解析失败时自动回退到 `cargo search`。回退路径无法一次拿两个版本，按 `include_prerelease` 标志选一个填入对应字段
+
+### Changed
+- **`check_package_updates` 改单次 RPC 同时拿稳定+预发布**: 旧版稳定版和预发布版各发一轮请求；新版 sparse index 单次响应即包含全部历史版本。`main.rs` 删除了串行 prerelease 循环（19 行）
+- **并发限流 `Semaphore(16)`**: `check_package_updates` 中每个 `tokio::spawn` 先 acquire permit 再发请求，防止超大包数（100+）触发 crates.io 限流或本地 fd 耗尽
+- **缓存 `cargo install --list` 结果**: 新增 `INSTALLED_VERSION_CACHE`（`OnceLock<Mutex<HashMap>>`），`get_installed_packages` 首次解析时填充；`get_installed_version` 优先读缓存，避免 N 个包升级需要 N+1 次 `cargo install --list` 启动 cargo 子进程。升级成功后通过 `invalidate_installed_version` 失效单条记录强制下次重读真实状态
+
+### Technical
+- 引入 `reqwest = "0.12"` 依赖，`default-features = false` + `rustls-tls` 避免拉 native-tls / openssl 链
+- 单进程共享 `OnceLock<reqwest::Client>` 复用 connection pool，UA 设置为 `cargo-fresh/VERSION`，超时 10s
+- 新增 11 个单元测试覆盖 sparse index：`index_path`（1/2/3/4+ 字符分片、大小写归一）共 5 个；`parse_index_body`（最大稳定版、稳定+预发布分流、跳过 yank、跳过不可解析行、空输入、全 yank）共 6 个。测试数 52 → 63
+- 实测性能：本机 18 个全局包，沿用 0.9.11 二进制需要 ~22s，新二进制 ~2.6s，瓶颈现在是纯网络延迟（单次 sparse index RPC ~1s，Semaphore(16) 两个 wave 完成）
+
+### Notes
+- `cargo search` 回退路径完整保留——为企业代理 / 防火墙环境留好生路
+- 未做：完整 `std::process::Command` → `tokio::process::Command` 重写。剩余 `Command` 调用只在 sequential update loop 中执行（一次一个包），不阻塞并发热点；sparse index 接入后真正的瓶颈已消除。完整重写收益小、破坏 binstall 探测逻辑的风险大，推到 1.0.0-rc.1 阶段
+
 ## [0.9.11] - 2026-05-17
 
 ### Added

@@ -17,7 +17,7 @@ use locale::detect_language;
 use models::{PackageInfo, UpdateResult};
 use package::{
     check_package_updates, exclude_packages, filter_packages, get_installed_packages,
-    get_latest_version, is_stable_version,
+    is_stable_version,
 };
 use updater::{create_main_progress_bar, update_package};
 
@@ -77,25 +77,10 @@ async fn main() -> Result<()> {
             .replace("{}", &packages.len().to_string())
     );
 
-    // 首先检查稳定版本
-    check_package_updates(&mut packages, cli.verbose, false).await?;
-
-    // 检查预发布版本
-    if !cli.include_prerelease {
-        // 如果用户没有明确指定包含预发布版本，检查是否有预发布版本可用
-        for package in packages.iter_mut() {
-            if let Ok(Some(prerelease_version)) = get_latest_version(&package.name, true).await {
-                if let Some(current_version) = &package.current_version {
-                    if current_version != &prerelease_version {
-                        // 检查是否是预发布版本
-                        if !is_stable_version(&prerelease_version) {
-                            package.latest_version = Some(prerelease_version);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // 一次性拿稳定版 + 预发布版（sparse index 单次请求带回两者，
+    // 失败时回退到 cargo search）。check_package_updates 内部会按优先级
+    // 选 latest_version：优先 stable，无 stable 更新但有更新的预发布时填预发布
+    check_package_updates(&mut packages, cli.verbose, cli.include_prerelease).await?;
 
     // 获取有稳定版本更新的包
     let stable_updates: Vec<&PackageInfo> = packages
