@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-05-18
+
 ### BEHAVIOR
 
 - **`cargo fresh` 不再静默安装 cargo-binstall**: 之前发现 binstall 不可用时会自动 `cargo install cargo-binstall`——CI 与受控环境用户表示这种"悄悄改 toolchain"令人不安。新版本默认只打 Hint，走 `cargo install` 慢路径；需要自动安装可显式加 `--install-binstall`。Dry-run 永远不动 toolchain
