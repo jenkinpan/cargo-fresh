@@ -171,7 +171,15 @@ pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
     }
 
     // 缓存版本表，供 get_installed_version 复用，避免每次升级后 N+1 次 `cargo install --list`
-    let _ = INSTALLED_VERSION_CACHE.set(std::sync::Mutex::new(version_map));
+    //
+    // 用 get_or_init + lock/clear/extend 而不是 OnceLock::set——后者在第二次调用
+    // 会静默返回 Err 并丢掉新数据，未来 `--watch` 多次扫描就会读到第一次的陈旧版本。
+    // invalidate_installed_version 仍能正常 remove 单条。
+    let mutex = INSTALLED_VERSION_CACHE.get_or_init(|| std::sync::Mutex::new(Default::default()));
+    if let Ok(mut map) = mutex.lock() {
+        map.clear();
+        map.extend(version_map);
+    }
 
     Ok(packages)
 }
