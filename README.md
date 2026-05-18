@@ -13,6 +13,10 @@
 
 ---
 
+> 📣 **1.0 is approaching.** I'm collecting real-world feedback to lock in the 1.0 contract (CLI shape, `--format=json` schema, exit codes, error hints). Window closes **2026-06-30**, then `1.0.0-rc.1`. Comment at [#3 Towards 1.0 — Feedback Wanted](https://github.com/jenkinpan/cargo-fresh/issues/3).
+
+---
+
 A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection. After installation, you can use it via the `cargo fresh` command. The tool automatically detects your system language and displays the interface in Chinese or English accordingly.
 
 ## Features

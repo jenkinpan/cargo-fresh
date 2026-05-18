@@ -14,6 +14,10 @@
 
 ---
 
+> 📣 **1.0 临近**。正在收集真实使用反馈，用来锁定 1.0 契约（CLI 形态、`--format=json` schema、退出码、错误提示）。反馈窗口截至 **2026-06-30**，之后切 `1.0.0-rc.1`。请在 [#3 Towards 1.0 — Feedback Wanted](https://github.com/jenkinpan/cargo-fresh/issues/3) 留言。
+
+---
+
 一个用 Rust 编写的工具，用于检查和管理全局安装的 Cargo 包更新。支持交互式更新、智能预发布版本检测和彩色输出。安装后可以通过 `cargo fresh` 命令使用。工具会自动检测系统语言并相应显示中文或英文界面。
 
 ## 功能特性
