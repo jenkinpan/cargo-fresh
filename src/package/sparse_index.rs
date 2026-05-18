@@ -92,23 +92,47 @@ pub fn parse_index_body(body: &str) -> LatestVersions {
 ///
 /// `base_url` 一般是 `https://index.crates.io`，企业 / 国内镜像下从
 /// `package::registry::sparse_index_base` 解析得来。包名为空、网络错误、
-/// HTTP 非 2xx 时返回错误——调用方应回退到 `cargo search`。
+/// HTTP 5xx 时会进行一次快速重试（500ms 退避）；HTTP 4xx 不重试
+/// （404 通常表示包名错误或镜像缺失，重试浪费时间）。所有尝试都
+/// 失败时返回 Err，调用方应回退到 `cargo search`（除非 `--no-cargo-search-fallback`）。
 pub async fn fetch_latest(
     client: &reqwest::Client,
     base_url: &str,
     name: &str,
 ) -> Result<LatestVersions> {
+    const MAX_ATTEMPTS: u32 = 2;
+    const RETRY_DELAY_MS: u64 = 500;
+
     let path = index_path(name);
     if path.is_empty() {
         anyhow::bail!("empty package name");
     }
     let url = format!("{}/{}", base_url.trim_end_matches('/'), path);
-    let resp = client.get(&url).send().await?;
-    if !resp.status().is_success() {
-        anyhow::bail!("sparse index HTTP {}", resp.status());
+
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    let body = resp.text().await?;
+                    return Ok(parse_index_body(&body));
+                }
+                // 4xx 不重试——通常是真的没这个包，再请求一次浪费时间
+                if status.is_client_error() {
+                    anyhow::bail!("sparse index HTTP {}", status);
+                }
+                last_err = Some(anyhow::anyhow!("sparse index HTTP {}", status));
+            }
+            Err(e) => {
+                last_err = Some(anyhow::Error::new(e));
+            }
+        }
+        if attempt < MAX_ATTEMPTS {
+            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+        }
     }
-    let body = resp.text().await?;
-    Ok(parse_index_body(&body))
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("sparse index: all retries exhausted")))
 }
 
 #[cfg(test)]
