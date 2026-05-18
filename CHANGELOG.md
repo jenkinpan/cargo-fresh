@@ -23,6 +23,7 @@
 - **`CommandFactory` 派生补全脚本**: 消除了 `cli/mod.rs` 里手写的第二份 `clap::Command`，补全脚本现在永远跟真实 CLI 同步
 - **新增 `package/registry.rs`**: 7 个 unit test 覆盖 ustc 风格 mirror、git mirror、缺失配置、URL 规范化
 - **`choose_latest` 抽成纯函数**: 选择逻辑从 `check_package_updates` 里拆出，7 个 unit test 覆盖 `--include-prerelease` on/off × stable/pre 在/不在 的矩阵
+- **声明 MSRV (`rust-version = "1.82"`)**: 当前代码用到 `Option::is_none_or`（1.82 稳定），明确写到 `Cargo.toml`。新增 `.github/workflows/ci.yml` 同时跑 stable 与 1.82 toolchain 的 `cargo check`，避免 MSRV 在维护中静默漂移
 
 ## [0.9.14] - 2026-05-17
 
