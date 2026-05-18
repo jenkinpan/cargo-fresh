@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use clap_complete_nushell::Nushell;
 
@@ -73,73 +73,6 @@ pub enum ShellType {
 }
 
 impl Cli {
-    /// 创建标准的 cargo-fresh 命令结构
-    fn create_cargo_fresh_command() -> clap::Command {
-        clap::Command::new("cargo-fresh")
-            .about("Check and update globally installed Cargo packages")
-            .arg(
-                clap::Arg::new("verbose")
-                    .short('v')
-                    .long("verbose")
-                    .help("Show detailed information"),
-            )
-            .arg(
-                clap::Arg::new("updates-only")
-                    .short('u')
-                    .long("updates-only")
-                    .help("Show only packages with updates"),
-            )
-            .arg(
-                clap::Arg::new("no-interactive")
-                    .long("no-interactive")
-                    .help("Non-interactive mode (default is interactive mode)"),
-            )
-            .arg(
-                clap::Arg::new("include-prerelease")
-                    .long("include-prerelease")
-                    .help("Include prerelease versions (alpha, beta, rc, etc.)"),
-            )
-            .arg(
-                clap::Arg::new("batch")
-                    .long("batch")
-                    .help("Batch mode - automatically update all packages without confirmation"),
-            )
-            .arg(
-                clap::Arg::new("filter")
-                    .long("filter")
-                    .help("Filter packages by name pattern (supports glob patterns: *, ?, [abc])")
-                    .value_name("PATTERN"),
-            )
-            .arg(
-                clap::Arg::new("exclude")
-                    .long("exclude")
-                    .help("Exclude packages by glob pattern (repeatable)")
-                    .value_name("PATTERN")
-                    .action(clap::ArgAction::Append),
-            )
-            .arg(
-                clap::Arg::new("dry-run")
-                    .long("dry-run")
-                    .help("Print commands that would run but don't execute them")
-                    .action(clap::ArgAction::SetTrue),
-            )
-            .subcommand(
-                clap::Command::new("completion")
-                    .about("Generate shell completion scripts")
-                    .arg(
-                        clap::Arg::new("shell")
-                            .help("Shell to generate completion script for")
-                            .value_parser(clap::value_parser!(ShellType)),
-                    )
-                    .arg(
-                        clap::Arg::new("cargo-fresh")
-                            .long("cargo-fresh")
-                            .help("Generate completion for cargo fresh subcommand")
-                            .action(clap::ArgAction::SetTrue),
-                    ),
-            )
-    }
-
     /// 生成补全脚本的通用方法
     fn generate_completion_for_shell(shell: ShellType, cmd: &mut clap::Command, name: &str) {
         let shell_type = match shell {
@@ -153,21 +86,63 @@ impl Cli {
         generate(shell_type, cmd, name, &mut std::io::stdout());
     }
 
+    /// 生成顶层 `cargo-fresh` 的补全脚本，直接复用 derive 出来的 Command。
     pub fn generate_completion(shell: ShellType) {
-        let mut cmd = Self::create_cargo_fresh_command();
+        let mut cmd = Self::command();
         Self::generate_completion_for_shell(shell, &mut cmd, "cargo-fresh");
     }
 
-    /// 生成 cargo fresh 子命令的补全脚本
+    /// 生成 `cargo fresh` 子命令的补全脚本——把同一个 derive 出来的 Command
+    /// 重命名为 "fresh" 后挂到 `cargo` 下，避免和顶层补全双重维护。
     pub fn generate_cargo_fresh_completion(shell: ShellType) {
+        let fresh = Self::command()
+            .name("fresh")
+            .about("Check and update globally installed Cargo packages");
         let mut cargo_cmd = clap::Command::new("cargo")
             .about("Rust's package manager")
-            .subcommand(
-                Self::create_cargo_fresh_command()
-                    .name("fresh")
-                    .about("Check and update globally installed Cargo packages"),
-            );
+            .subcommand(fresh);
 
         Self::generate_completion_for_shell(shell, &mut cargo_cmd, "cargo");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_command_builds() {
+        // CommandFactory 派生出来的 Command 至少能成功构造并自检
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn cli_parses_basic_flags() {
+        let cli = Cli::try_parse_from([
+            "cargo-fresh",
+            "--verbose",
+            "--batch",
+            "--filter",
+            "cargo-*",
+            "--exclude",
+            "foo",
+            "--exclude",
+            "bar",
+        ])
+        .expect("parse");
+        assert!(cli.verbose);
+        assert!(cli.batch);
+        assert_eq!(cli.filter.as_deref(), Some("cargo-*"));
+        assert_eq!(cli.exclude, vec!["foo".to_string(), "bar".to_string()]);
+    }
+
+    #[test]
+    fn cli_completion_subcommand() {
+        let cli =
+            Cli::try_parse_from(["cargo-fresh", "completion", "bash", "--cargo-fresh"]).expect("parse");
+        match cli.command {
+            Some(Commands::Completion { cargo_fresh, .. }) => assert!(cargo_fresh),
+            _ => panic!("expected completion subcommand"),
+        }
     }
 }
