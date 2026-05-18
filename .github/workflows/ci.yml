@@ -35,5 +35,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: msrv
-      # MSRV check 不跑测试（避免 dev-deps 的 MSRV 漂移），只验证 src/ 能编译
-      - run: cargo check --all-targets --locked
+      # MSRV check 只验证 src/（lib + bin）能编译——`--all-targets` 会拉 dev-deps，
+      # 它们的 MSRV 与我们承诺给用户的 MSRV 无关。
+      - run: cargo check --locked --lib --bins
