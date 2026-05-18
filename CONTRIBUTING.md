@@ -4,7 +4,7 @@ Thanks for considering a contribution! This document captures the conventions yo
 
 ## Development environment
 
-- **MSRV**: Rust 1.82. The latest stable works locally; CI runs both stable and 1.82.
+- **MSRV**: Rust 1.85. The latest stable works locally; CI runs both stable and 1.85.
 - **Dependencies**: `Cargo.lock` is committed (this is a binary crate, reproducible builds are required).
 
 ## Pre-submission checklist
