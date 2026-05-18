@@ -23,6 +23,16 @@
 - **cargo 子调用全部走 `tokio::process::Command`**: `get_installed_packages` / `get_installed_version` / `cargo_search_fallback` / `install_binstall` / `run_cargo` 不再阻塞 tokio runtime；`is_binstall_available` 因 `OnceLock` 缓存最多调用一次而保留 sync 实现
 - **tokio features 收紧**: `full` → `[macros, rt-multi-thread, signal, process, time, sync]`，依赖体积下降
 
+### Fixed
+
+- **`INSTALLED_VERSION_CACHE` 写入不再静默丢失**: 改用 `OnceLock::get_or_init` + `lock/clear/extend`，未来 `--watch` 多次扫描能正确刷新缓存。`invalidate_installed_version` 单条移除语义保持
+- **locale 检测的并发竞争**: 抽出纯函数 `detect_from_locale(&str)`，测试不再 `env::set_var`；`cargo test` 可放心并发跑，CI 撤掉 `--test-threads=1`
+
+### Tests
+
+- **新增 `tests/` 集成测试**: `tests/cli.rs` 用 `assert_cmd` 跑 `--version` / `--help` / `completion {bash,fish}` 的对外契约；`tests/sparse_index_http.rs` 用 `wiremock` 覆盖 sparse index 客户端的 200 / 404 / 5xx / 重试恢复 / 空 body 五种路径，全程不联网
+- **暴露 `src/lib.rs`**: bin 与 lib 共用同一份模块树，集成测试可直接 `cargo_fresh::package::sparse_index::fetch_latest`
+
 ## [0.10.0] - 2026-05-18
 
 ### BREAKING

@@ -5,28 +5,21 @@ use anyhow::Result;
 use clap::Parser;
 use colored::*;
 
-mod cli;
-mod display;
-mod locale;
-mod models;
-mod package;
-mod updater;
-
-use cli::{Cli, Commands, OutputFormat};
-use display::{
+use cargo_fresh::cli::{Cli, Commands, OutputFormat};
+use cargo_fresh::display::{
     print_results, print_update_selection, print_update_summary, set_json_mode, status,
     status_dim, status_err, status_warn,
 };
-use locale::detect_language;
-use models::{
+use cargo_fresh::locale::detect_language;
+use cargo_fresh::models::{
     JsonReport, JsonResult, JsonSkipped, JsonSummary, JsonUpdateCandidate, PackageInfo,
     PackageSource, UpdateResult,
 };
-use package::{
+use cargo_fresh::package::{
     check_package_updates, exclude_packages, filter_packages, get_installed_packages,
     is_stable_version,
 };
-use updater::update_package;
+use cargo_fresh::updater::update_package;
 
 /// 退出码契约（在 README 同步文档化）：
 ///
@@ -116,7 +109,7 @@ async fn main() -> Result<()> {
             .replace("{}", &packages.len().to_string()),
     );
 
-    let no_fallback = package::cargo_search_fallback_disabled(cli.no_cargo_search_fallback);
+    let no_fallback = cargo_fresh::package::cargo_search_fallback_disabled(cli.no_cargo_search_fallback);
     check_package_updates(
         &mut packages,
         cli.verbose,
