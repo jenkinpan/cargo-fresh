@@ -22,7 +22,7 @@
 - **`--verbose` 输出统一走 `status_*`**: `check_package_updates` 三处裸 `println!` 改成 `status_dim` / `status_warn`，新增 `Check` / `Latest` 两个动词头
 - **cargo 子调用全部走 `tokio::process::Command`**: `get_installed_packages` / `get_installed_version` / `cargo_search_fallback` / `install_binstall` / `run_cargo` 不再阻塞 tokio runtime；`is_binstall_available` 因 `OnceLock` 缓存最多调用一次而保留 sync 实现
 - **tokio features 收紧**: `full` → `[macros, rt-multi-thread, signal, process, time, sync]`，依赖体积下降
-- **MSRV 抬到 1.85**: clap 4.5.x 的最新 patch 通过 `clap_derive` 间接要求 `edition2024`（2025-02 在 Rust 1.85 稳定），1.82 已无法 `cargo check --locked`。CI MSRV job 同步改成 1.85.0
+- **MSRV 抬到 1.86**: 1.82 已无法 `cargo check --locked`——`clap_derive 4.6.1` 要求 `edition2024`（Rust 1.85 稳定），`icu_*@2.2.0`（reqwest → url → idna → icu）声明 `rust-version = 1.86`。一口气抬到 1.86 避免下一个 patch 又要再调一次。CI MSRV job 同步改成 1.86.0
 
 ### Added
 
