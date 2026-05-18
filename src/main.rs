@@ -99,7 +99,13 @@ async fn main() -> Result<()> {
     // 一次性拿稳定版 + 预发布版（sparse index 单次请求带回两者，
     // 失败时回退到 cargo search）。check_package_updates 内部会按优先级
     // 选 latest_version：优先 stable，无 stable 更新但有更新的预发布时填预发布
-    check_package_updates(&mut packages, cli.verbose, cli.include_prerelease).await?;
+    check_package_updates(
+        &mut packages,
+        cli.verbose,
+        cli.include_prerelease,
+        cli.registry_url.clone(),
+    )
+    .await?;
 
     // 获取有稳定版本更新的包
     let stable_updates: Vec<&PackageInfo> = packages

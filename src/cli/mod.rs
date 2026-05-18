@@ -39,6 +39,12 @@ pub struct Cli {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Override sparse index base URL (e.g. https://mirrors.ustc.edu.cn/crates.io-index/).
+    /// Default: read from $CARGO_HOME/config.toml [source.crates-io] replace-with,
+    /// fall back to https://index.crates.io.
+    #[arg(long, value_name = "URL")]
+    pub registry_url: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

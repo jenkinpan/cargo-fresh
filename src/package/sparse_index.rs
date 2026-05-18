@@ -13,8 +13,6 @@ use anyhow::Result;
 use semver::Version;
 use serde::Deserialize;
 
-const INDEX_BASE: &str = "https://index.crates.io";
-
 /// sparse index 每一行的 JSON 结构（只取我们需要的字段）。
 #[derive(Debug, Deserialize)]
 struct IndexEntry {
@@ -92,13 +90,19 @@ pub fn parse_index_body(body: &str) -> LatestVersions {
 
 /// 网络拉取并解析 sparse index。
 ///
-/// 包名为空、网络错误、HTTP 非 2xx 时返回错误——调用方应回退到 `cargo search`。
-pub async fn fetch_latest(client: &reqwest::Client, name: &str) -> Result<LatestVersions> {
+/// `base_url` 一般是 `https://index.crates.io`，企业 / 国内镜像下从
+/// `package::registry::sparse_index_base` 解析得来。包名为空、网络错误、
+/// HTTP 非 2xx 时返回错误——调用方应回退到 `cargo search`。
+pub async fn fetch_latest(
+    client: &reqwest::Client,
+    base_url: &str,
+    name: &str,
+) -> Result<LatestVersions> {
     let path = index_path(name);
     if path.is_empty() {
         anyhow::bail!("empty package name");
     }
-    let url = format!("{}/{}", INDEX_BASE, path);
+    let url = format!("{}/{}", base_url.trim_end_matches('/'), path);
     let resp = client.get(&url).send().await?;
     if !resp.status().is_success() {
         anyhow::bail!("sparse index HTTP {}", resp.status());

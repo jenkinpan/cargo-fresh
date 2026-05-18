@@ -11,6 +11,7 @@ use semver::Version;
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
 
+pub mod registry;
 pub mod sparse_index;
 
 /// 单进程共享的 HTTP 客户端，启用 connection pool。
@@ -343,11 +344,16 @@ async fn cargo_search_fallback(
 ///
 /// 主路径走 sparse index（快、并发友好）；任何失败时回退到 `cargo search`。
 /// 回退路径无法一次拿两个版本，只能按 `include_prerelease` 拿一个。
+///
+/// `registry_override`：CLI `--registry-url` 优先生效；否则从
+/// `$CARGO_HOME/config.toml` 读 sparse mirror，再退默认 `index.crates.io`。
 pub async fn fetch_latest_versions(
     package_name: &str,
     include_prerelease: bool,
+    registry_override: Option<&str>,
 ) -> sparse_index::LatestVersions {
-    match sparse_index::fetch_latest(http_client(), package_name).await {
+    let base = registry::sparse_index_base(registry_override);
+    match sparse_index::fetch_latest(http_client(), &base, package_name).await {
         Ok(v) => v,
         Err(_) => {
             // 回退到 cargo search——只能拿一个版本，根据需求填入对应字段
@@ -377,7 +383,7 @@ pub async fn get_latest_version(
     package_name: &str,
     include_prerelease: bool,
 ) -> Result<Option<String>> {
-    let latest = fetch_latest_versions(package_name, include_prerelease).await;
+    let latest = fetch_latest_versions(package_name, include_prerelease, None).await;
     Ok(if include_prerelease {
         latest.prerelease.or(latest.stable)
     } else {
@@ -398,6 +404,7 @@ pub async fn check_package_updates(
     packages: &mut [PackageInfo],
     verbose: bool,
     _include_prerelease: bool,
+    registry_override: Option<String>,
 ) -> Result<()> {
     let language = detect_language();
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_INDEX_REQUESTS));
@@ -409,6 +416,7 @@ pub async fn check_package_updates(
         }
         let package_name = package.name.clone();
         let sem = semaphore.clone();
+        let override_clone = registry_override.clone();
         let handle = tokio::spawn(async move {
             // 持有 permit 直到任务结束，自动释放
             let _permit = sem.acquire_owned().await.ok();
@@ -419,7 +427,8 @@ pub async fn check_package_updates(
                     package_name.cyan()
                 );
             }
-            let latest = fetch_latest_versions(&package_name, true).await;
+            let latest =
+                fetch_latest_versions(&package_name, true, override_clone.as_deref()).await;
             (index, package_name, latest)
         });
         handles.push(handle);
