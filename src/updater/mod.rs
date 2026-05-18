@@ -28,7 +28,10 @@ pub fn create_progress_bar(package_name: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.set_style(
         ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
+            // {elapsed} 由 indicatif 在每个 tick 重新渲染——和 enable_steady_tick
+            // 一起让用户能看出哪个包正在长跑（典型场景：binstall 没有预编译，
+            // 退化成本地 build 的 ripgrep / cargo-bloat 这种大 crate）
+            .template("{spinner:.green} {msg} {elapsed:.dim}")
             .unwrap()
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
     );
@@ -37,6 +40,28 @@ pub fn create_progress_bar(package_name: &str) -> ProgressBar {
         pb.set_draw_target(ProgressDrawTarget::hidden());
     }
     pb
+}
+
+/// 长跑包的告警阈值——超过这个秒数 spawn 一条 `Slow` 提示，
+/// 帮助用户在 18 个包升级里看出"卡住的那个是谁"。
+const SLOW_PACKAGE_THRESHOLD_SECS: u64 = 30;
+
+/// 起一个任务，到点（默认 30s）后在 `pb` 上打 `Slow <name> running for Ns ...`。
+/// 调用方 `Drop` 返回的 handle 即可取消这条提示（包正常结束时立即生效）。
+fn spawn_slow_warning(pb: ProgressBar, package_name: String) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(SLOW_PACKAGE_THRESHOLD_SECS)).await;
+        let elapsed = pb.elapsed().as_secs();
+        pb_status_dim(
+            &pb,
+            "Slow",
+            &format!(
+                "{} running for {}s (likely building from source)",
+                package_name.cyan(),
+                elapsed
+            ),
+        );
+    })
 }
 
 /// Drop 守卫：保证 spinner 在 `update_package` 任何返回路径都被 `finish_and_clear`。
@@ -48,6 +73,16 @@ struct PbGuard<'a>(&'a ProgressBar);
 impl Drop for PbGuard<'_> {
     fn drop(&mut self) {
         self.0.finish_and_clear();
+    }
+}
+
+/// 中止 `spawn_slow_warning` 的 watchdog——包在阈值前完成时，避免
+/// 在主流程结束后才弹出迟到的 Slow 提示。
+struct SlowGuard(tokio::task::JoinHandle<()>);
+
+impl Drop for SlowGuard {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }
 
@@ -261,6 +296,9 @@ pub async fn update_package(
 
     let pb = create_progress_bar(package_name);
     let _pb_guard = PbGuard(&pb);
+    let slow_handle = spawn_slow_warning(pb.clone(), package_name.to_string());
+    // Drop slow_handle 时它仍可能在 sleep；中止它避免无意义提示在主流程结束后才打
+    let _slow_guard = SlowGuard(slow_handle);
     if let Some(ref version) = old_version {
         pb_status_dim(
             &pb,
