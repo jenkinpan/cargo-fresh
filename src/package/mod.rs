@@ -2,9 +2,13 @@ use anyhow::Result;
 use colored::*;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use std::collections::HashSet;
-use std::process::Command;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Semaphore;
+
+/// 默认所有 cargo 子调用走 `tokio::process::Command`，避免阻塞 runtime。
+/// 仅 `is_binstall_available` 这种 sync 探测路径用 std 版本——它通过 `OnceLock`
+/// 缓存，首次调用至多一次，作为同步函数对调用方更自然。
+use tokio::process::Command as AsyncCommand;
 
 use semver::Version;
 
@@ -32,10 +36,14 @@ const MAX_CONCURRENT_INDEX_REQUESTS: usize = 16;
 // 缓存 cargo binstall 的可用性状态
 static BINSTALL_AVAILABLE: OnceLock<bool> = OnceLock::new();
 
-/// 检查 cargo binstall 是否可用（使用缓存）
+/// 检查 cargo binstall 是否可用（使用缓存）。
+///
+/// 故意保持 sync——调用方既有 sync（dry-run 探测）也有 async，OnceLock
+/// 缓存保证最多一次 `cargo binstall --help` 子进程。这一次同步调用 ≤ 100ms，
+/// 比把整条 API 改 async + tokio::sync::OnceCell 简单得多。
 pub fn is_binstall_available() -> bool {
     *BINSTALL_AVAILABLE.get_or_init(|| {
-        Command::new("cargo")
+        std::process::Command::new("cargo")
             .args(["binstall", "--help"])
             .output()
             .map(|output| output.status.success())
@@ -49,9 +57,10 @@ pub async fn install_binstall() -> Result<bool> {
     let language = detect_language();
     status("Installing", language.get_text("installing_binstall"));
 
-    let output = Command::new("cargo")
+    let output = AsyncCommand::new("cargo")
         .args(["install", "cargo-binstall"])
-        .output()?;
+        .output()
+        .await?;
 
     if output.status.success() {
         status("Installed", language.get_text("binstall_installed_successfully"));
@@ -132,7 +141,10 @@ pub fn exclude_packages(packages: &mut Vec<PackageInfo>, patterns: &[String]) ->
 }
 
 pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
-    let output = Command::new("cargo").args(["install", "--list"]).output()?;
+    let output = AsyncCommand::new("cargo")
+        .args(["install", "--list"])
+        .output()
+        .await?;
 
     if !output.status.success() {
         let language = detect_language();
@@ -252,7 +264,10 @@ pub async fn get_installed_version(package_name: &str) -> Result<Option<String>>
     }
 
     // 缓存未命中：cache 被 invalidate 后的查询走这里，去读真实状态并回填
-    let output = Command::new("cargo").args(["install", "--list"]).output()?;
+    let output = AsyncCommand::new("cargo")
+        .args(["install", "--list"])
+        .output()
+        .await?;
     if !output.status.success() {
         return Ok(None);
     }
@@ -301,9 +316,10 @@ async fn cargo_search_fallback(
     package_name: &str,
     include_prerelease: bool,
 ) -> Result<Option<String>> {
-    let output = Command::new("cargo")
+    let output = AsyncCommand::new("cargo")
         .args(["search", package_name, "--limit", "10"])
-        .output()?;
+        .output()
+        .await?;
 
     if !output.status.success() {
         return Ok(None);

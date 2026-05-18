@@ -1,7 +1,8 @@
 use anyhow::Result;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::process::{Command, Output};
+use std::process::Output;
+use tokio::process::Command;
 
 use crate::display::{pb_status, pb_status_dim, pb_status_err, pb_status_warn, status, status_dim};
 use crate::locale::detection::detect_language;
@@ -77,14 +78,15 @@ fn build_args<'a>(
     }
 }
 
-fn run_cargo(pb: &ProgressBar, args: &[&str]) -> Result<Output> {
+async fn run_cargo(pb: &ProgressBar, args: &[&str]) -> Result<Output> {
     pb_status_dim(pb, "Running", &format!("cargo {}", args.join(" ")));
     pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
     let output = Command::new("cargo")
         .args(args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .output()?;
+        .output()
+        .await?;
     pb.disable_steady_tick();
     Ok(output)
 }
@@ -279,7 +281,7 @@ pub async fn update_package(
             ));
         }
 
-        let output = run_cargo(&pb, &primary_args)?;
+        let output = run_cargo(&pb, &primary_args).await?;
 
         if output.status.success() {
             let result = verify_and_report_update(&pb, package_name, &old_version).await;
@@ -295,7 +297,7 @@ pub async fn update_package(
         // binstall 第一次失败：立刻尝试 install 回退（不消耗 attempt 计数器中的剩余次数）
         if let (Some(args), 1) = (fallback_args.as_ref(), attempt) {
             pb_status_warn(&pb, "Fallback", language.get_text("binstall_failed_fallback"));
-            let fb_output = run_cargo(&pb, args)?;
+            let fb_output = run_cargo(&pb, args).await?;
             if fb_output.status.success() {
                 return Ok(verify_and_report_update(&pb, package_name, &old_version).await);
             }
