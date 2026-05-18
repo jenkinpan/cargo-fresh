@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use anyhow::Result;
 use clap::Parser;
 use colored::*;
@@ -37,6 +40,19 @@ async fn main() -> Result<()> {
 
     // 检测系统语言
     let language = detect_language();
+
+    // 全局取消标志：Ctrl-C 后 update 循环在"包之间"会停下，剩余包跳过。
+    // 子进程内的取消（cargo install 已在跑）属于 P1-1（同步 IO 改 tokio::process）
+    // 的范畴，这里只做"between packages"粒度。
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let cancel = cancel.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        });
+    }
 
     // 处理子命令
     if let Some(command) = cli.command {
@@ -151,7 +167,12 @@ async fn main() -> Result<()> {
         let mut all_packages_to_update = stable_updates.clone();
         all_packages_to_update.extend(prerelease_updates.clone());
 
+        let mut aborted_at: Option<usize> = None;
         for (i, &index) in selections.iter().enumerate() {
+            if cancel.load(Ordering::SeqCst) {
+                aborted_at = Some(i);
+                break;
+            }
             let package_name = &all_packages_to_update[index].name;
 
             // 找到对应的包信息以获取目标版本和来源
@@ -211,6 +232,21 @@ async fn main() -> Result<()> {
 
         // 显示更新摘要
         print_update_summary(&update_results, language);
+
+        // 取消路径：打 Aborted 头，按已完成的数据打总结，并以退出码 130 退出
+        if let Some(done) = aborted_at {
+            status_warn(
+                "Aborted",
+                &language.format_text(
+                    "aborted_by_user",
+                    &[
+                        ("done", &done.to_string()),
+                        ("total", &total_packages.to_string()),
+                    ],
+                ),
+            );
+            std::process::exit(130);
+        }
 
         // 单行 Finished 收尾，cargo 风格："X succeeded, Y failed in 3.4s"
         let success_text = language

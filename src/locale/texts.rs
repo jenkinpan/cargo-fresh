@@ -42,6 +42,7 @@ pub fn get_english_text(key: &str) -> &'static str {
         "success_count" => "{} succeeded",
         "fail_count" => "{} failed",
         "no_packages_selected" => "no packages selected",
+        "aborted_by_user" => "cancelled by user, {done}/{total} completed",
 
         // Hint text
         "update_instructions" => "To update manually: cargo install --force <name>",
@@ -147,6 +148,7 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "success_count" => "{} 个成功",
         "fail_count" => "{} 个失败",
         "no_packages_selected" => "未选择任何包",
+        "aborted_by_user" => "用户取消，已完成 {done}/{total}",
 
         // 提示
         "update_instructions" => "手动更新：cargo install --force <name>",
@@ -262,6 +264,7 @@ mod tests {
             "success_count",
             "fail_count",
             "no_packages_selected",
+            "aborted_by_user",
             "update_instructions",
             "interactive_instructions",
             "version_unchanged",
