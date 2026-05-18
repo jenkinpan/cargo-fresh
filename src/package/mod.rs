@@ -12,6 +12,7 @@ use tokio::process::Command as AsyncCommand;
 
 use semver::Version;
 
+use crate::errors::CargoFreshError;
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
 
@@ -148,7 +149,10 @@ pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
 
     if !output.status.success() {
         let language = detect_language();
-        anyhow::bail!("{}", language.get_text("cargo_install_list_failed"));
+        return Err(CargoFreshError::CargoListFailed {
+            source: anyhow::anyhow!("{}", language.get_text("cargo_install_list_failed")),
+        }
+        .into());
     }
 
     let output_str = String::from_utf8(output.stdout)?;

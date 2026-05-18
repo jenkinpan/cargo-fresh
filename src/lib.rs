@@ -6,6 +6,7 @@
 
 pub mod cli;
 pub mod display;
+pub mod errors;
 pub mod locale;
 pub mod models;
 pub mod package;

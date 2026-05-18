@@ -36,7 +36,27 @@ const EXIT_FAILED: i32 = 2;
 const EXIT_ABORTED: i32 = 130;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
+    let exit_code = match run().await {
+        Ok(code) => code,
+        Err(err) => {
+            // anyhow 默认会把整条 chain 打到 stderr，我们额外补一条 "Hint" 行
+            // 给出可执行建议（如果 errors::hint_for 能识别这条错误）。
+            // 用 eprintln 而非 status_err 是因为这时 colored 可能受 NO_COLOR 影响，
+            // 让 anyhow 自己控制；hint 用 status_dim 走和 spinner 同一条 stderr 通道。
+            eprintln!("error: {err:?}");
+            if let Some(hint) = cargo_fresh::errors::hint_for(&err) {
+                if !cargo_fresh::display::is_json_mode() {
+                    status_dim("Hint", hint);
+                }
+            }
+            std::process::exit(EXIT_FAILED);
+        }
+    };
+    std::process::exit(exit_code);
+}
+
+async fn run() -> Result<i32> {
     let args: Vec<String> = std::env::args().collect();
     let cli = if args.get(1) == Some(&"fresh".to_string()) {
         Cli::parse_from(args.into_iter().skip(1))
@@ -70,7 +90,7 @@ async fn main() -> Result<()> {
                 } else {
                     Cli::generate_completion(shell);
                 }
-                return Ok(());
+                return Ok(EXIT_OK);
             }
         }
     }
@@ -85,7 +105,7 @@ async fn main() -> Result<()> {
         if json_mode {
             emit_empty_report(&cli, run_start);
         }
-        return Ok(());
+        return Ok(EXIT_OK);
     }
 
     if let Some(filter_pattern) = &cli.filter {
@@ -99,7 +119,7 @@ async fn main() -> Result<()> {
         if json_mode {
             emit_empty_report(&cli, run_start);
         }
-        return Ok(());
+        return Ok(EXIT_OK);
     }
 
     status(
@@ -143,7 +163,7 @@ async fn main() -> Result<()> {
         if json_mode {
             emit_report(&cli, &packages, &[], &[], false, run_start);
         }
-        return Ok(());
+        return Ok(EXIT_OK);
     }
 
     print_results(&packages, cli.updates_only, language);
@@ -314,10 +334,7 @@ async fn main() -> Result<()> {
         EXIT_OK
     };
 
-    if code != EXIT_OK {
-        std::process::exit(code);
-    }
-    Ok(())
+    Ok(code)
 }
 
 /// 提前退出（没有任何包）时打一份空 JSON 报告，保持 stdout 始终单行可解析。

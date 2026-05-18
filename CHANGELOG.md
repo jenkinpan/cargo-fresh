@@ -23,6 +23,10 @@
 - **cargo 子调用全部走 `tokio::process::Command`**: `get_installed_packages` / `get_installed_version` / `cargo_search_fallback` / `install_binstall` / `run_cargo` 不再阻塞 tokio runtime；`is_binstall_available` 因 `OnceLock` 缓存最多调用一次而保留 sync 实现
 - **tokio features 收紧**: `full` → `[macros, rt-multi-thread, signal, process, time, sync]`，依赖体积下降
 
+### Added
+
+- **可执行错误提示 (`errors::hint_for`)**: 用 `thiserror` 建模 `CargoFreshError::CargoListFailed`，外加 `reqwest::Error` 网络层匹配。`main` 拿到错误时在 stderr 多打一行 `Hint`，给出"`cargo --version` 验证 toolchain"或"设置 HTTPS_PROXY"这类**具体可执行**的下一步操作
+
 ### Fixed
 
 - **`INSTALLED_VERSION_CACHE` 写入不再静默丢失**: 改用 `OnceLock::get_or_init` + `lock/clear/extend`，未来 `--watch` 多次扫描能正确刷新缓存。`invalidate_installed_version` 单条移除语义保持
