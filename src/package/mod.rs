@@ -492,10 +492,13 @@ pub async fn check_package_updates(
             // 持有 permit 直到任务结束，自动释放
             let _permit = sem.acquire_owned().await.ok();
             if verbose {
-                println!(
-                    "{} {}...",
-                    language.get_text("checking_package"),
-                    package_name.cyan()
+                crate::display::status_dim(
+                    "Check",
+                    &format!(
+                        "{} {}",
+                        language.get_text("checking_package"),
+                        package_name.cyan()
+                    ),
                 );
             }
             let latest = fetch_latest_versions(
@@ -514,7 +517,7 @@ pub async fn check_package_updates(
     for handle in handles {
         let Ok((index, package_name, latest)) = handle.await else {
             if verbose {
-                println!("{}", language.get_text("check_failed").red());
+                crate::display::status_warn("Check", language.get_text("check_failed"));
             }
             continue;
         };
@@ -529,16 +532,22 @@ pub async fn check_package_updates(
 
         if verbose {
             match &chosen {
-                Some(v) => println!(
-                    "  {} {}: {}",
-                    package_name,
-                    language.get_text("latest_version"),
-                    v.green()
+                Some(v) => crate::display::status_dim(
+                    "Latest",
+                    &format!(
+                        "{} {}: {}",
+                        package_name.cyan(),
+                        language.get_text("latest_version"),
+                        v.green()
+                    ),
                 ),
-                None => println!(
-                    "  {} {}",
-                    package_name.red(),
-                    language.get_text("unable_to_get_latest_version")
+                None => crate::display::status_warn(
+                    "Check",
+                    &format!(
+                        "{} {}",
+                        package_name.red(),
+                        language.get_text("unable_to_get_latest_version")
+                    ),
                 ),
             }
         }

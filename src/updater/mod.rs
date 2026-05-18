@@ -1,6 +1,6 @@
 use anyhow::Result;
 use colored::*;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::process::Output;
 use tokio::process::Command;
 
@@ -19,7 +19,12 @@ use crate::package::{
 ///
 /// 必须配合 [`PbGuard`] 使用——guard drop 时自动调用 `finish_and_clear()`，
 /// 保证 spinner 残留不会污染输出（任何提前 return 也覆盖到）。
+///
+/// 非 TTY（CI 日志、管道、`tee` 等）下把 draw target 设为 hidden——
+/// spinner 帧在非交互终端没有意义，反而会污染日志。`pb.println` 还会
+/// 正常输出，所以 pb_status* 仍然工作。
 pub fn create_progress_bar(package_name: &str) -> ProgressBar {
+    use std::io::IsTerminal;
     let pb = ProgressBar::new_spinner();
     pb.set_style(
         ProgressStyle::default_spinner()
@@ -28,6 +33,9 @@ pub fn create_progress_bar(package_name: &str) -> ProgressBar {
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
     );
     pb.set_message(package_name.cyan().to_string());
+    if !std::io::stderr().is_terminal() || crate::display::is_json_mode() {
+        pb.set_draw_target(ProgressDrawTarget::hidden());
+    }
     pb
 }
 
