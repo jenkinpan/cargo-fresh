@@ -14,7 +14,7 @@ cargo run -- [flags]
 # Lint (zero warnings policy enforced)
 cargo clippy --all-targets -- -D warnings
 
-# Test (63 unit tests as of v0.9.14)
+# Test (84 unit + 10 integration as of v0.10.1)
 cargo test
 
 # Install locally for testing
@@ -40,14 +40,19 @@ cargo install --path .
 
 | Module | Role |
 |--------|------|
-| `src/main.rs` | Top-level orchestration; CLI parsing dispatch (handles both `cargo-fresh` and `cargo fresh` subcommand forms) |
-| `src/cli/mod.rs` | Clap argument parsing; shell completion generation for bash/zsh/fish/powershell/elvish/nushell |
-| `src/models/mod.rs` | `PackageInfo`, `UpdateResult`, `PackageSource { Crates, Git { url, rev }, Path { dir } }`; constants `MAX_RETRY_ATTEMPTS`, `RETRY_DELAY_MS`, `VERSION_UPDATE_DELAY_MS`, `PROGRESS_TICK_MS`; semver-based `has_update` and `is_prerelease` |
-| `src/package/mod.rs` | Parses `cargo install --list`; `fetch_latest_versions` (sparse index primary + cargo search fallback); `filter_packages` / `exclude_packages` (globset); installed version cache with `invalidate_installed_version` for surgical refresh after updates |
-| `src/package/sparse_index.rs` | crates.io sparse index client. `index_path` shard rule + `parse_index_body` pure parser + `fetch_latest` async HTTP via shared `reqwest::Client` |
-| `src/updater/mod.rs` | Builds cargo args per source, runs commands through per-package spinner, retry loop, dry-run short-circuit; `PbGuard` RAII guard ensures spinner cleanup on every return path; `verify_and_report_update` extracted helper covers both primary and binstall→install fallback paths |
-| `src/display/mod.rs` | **All user-facing output goes through `status` / `status_warn` / `status_err` / `status_dim` (and `pb_status*` for progress-bar contexts).** Cargo-style "   Verb message" format: 12-char right-aligned colored bold verb + content. No emojis anywhere |
-| `src/locale/` | Auto-detects system language via `LANG`/`LC_ALL`/`LC_CTYPE`; English/Chinese text maps in `texts.rs`. `Language::format_text(key, &[(name, value)])` uses named placeholders to avoid the bug where chained `.replace("{}", x)` would substitute all placeholders at once |
+| `src/lib.rs` | Module re-exports so `tests/` can call internals directly (`cargo_fresh::package::sparse_index::fetch_latest`). Not a downstream API — `bin` and `lib` share one module tree |
+| `src/main.rs` | Top-level orchestration; CLI parsing dispatch (handles both `cargo-fresh` and `cargo fresh` subcommand forms); `run() -> Result<i32>` returns exit codes, `main()` prints errors and applies `errors::hint_for` |
+| `src/cli/mod.rs` | Clap argument parsing via `CommandFactory` derive (one source of truth for help and completion); shell completion generation for bash/zsh/fish/powershell/elvish/nushell |
+| `src/models/mod.rs` | `PackageInfo`, `UpdateResult`, `PackageSource { Crates, Git { url, rev }, Path { dir }, Unknown(String) }`; `JsonReport` + friends with `schema_version = 1`; semver-based `has_update` and `is_prerelease`; `kind_str()` for JSON serialization |
+| `src/errors.rs` | `thiserror`-derived `CargoFreshError` variants for the few failures that can surface actionable hints (currently `CargoListFailed`); `hint_for(&anyhow::Error)` walks the error chain and emits a `Hint:` line via `main` |
+| `src/package/mod.rs` | Parses `cargo install --list`; `fetch_latest_versions(name, include_prerelease, registry_override, no_fallback, verbose)`; `choose_latest` pure function for `--include-prerelease` semantics; `filter_packages` / `exclude_packages` (globset); installed version cache uses `OnceLock::get_or_init` + `lock/clear/extend` to refresh safely across calls |
+| `src/package/sparse_index.rs` | crates.io sparse index client. `index_path` shard rule + `parse_index_body` pure parser + `fetch_latest(client, base_url, name)` async HTTP via shared `reqwest::Client`; 1 retry on network/5xx with 500ms backoff, 4xx not retried |
+| `src/package/registry.rs` | Resolves the sparse index base URL: explicit `--registry-url` wins; otherwise parses `$CARGO_HOME/config.toml` for `[source.crates-io] replace-with = "..." → [source.<n>].registry = "sparse+URL"`; falls back to `https://index.crates.io` |
+| `src/updater/mod.rs` | Builds cargo args per source via async `tokio::process::Command`, runs commands through per-package spinner, retry loop, dry-run short-circuit; `PbGuard` RAII guards spinner cleanup; `SlowGuard` aborts the 30s slow-warning watchdog; `verify_and_report_update` covers both primary and binstall→install fallback paths |
+| `src/display/mod.rs` | **All user-facing output goes through `status` / `status_warn` / `status_err` / `status_dim` (and `pb_status*` for progress-bar contexts).** Cargo-style "   Verb message" format: 12-char right-aligned colored bold verb + content. No emojis. `JSON_MODE` atomic short-circuits everything when `--format=json`. Non-TTY (`!stderr.is_terminal()`) disables spinners but keeps `pb.println` working |
+| `src/locale/` | Auto-detects system language via `LANG`/`LC_ALL`/`LC_CTYPE`; pure function `detect_from_locale(&str)` is what tests target (no `env::set_var` races); English/Chinese text maps in `texts.rs`. `Language::format_text(key, &[(name, value)])` uses named placeholders to avoid the bug where chained `.replace("{}", x)` would substitute all placeholders at once |
+| `tests/cli.rs` | `assert_cmd` integration tests for `--version` / `--help` flag inventory / `cargo fresh` subcommand form / bash & fish completion. Verifies external contract, not byte-for-byte output |
+| `tests/sparse_index_http.rs` | `wiremock` tests covering 200 / 404 (no retry) / 5xx (retry once) / 5xx-then-200 (recovery) / empty body. Offline — no network needed |
 
 ### Key design decisions
 
@@ -56,12 +61,16 @@ cargo install --path .
 - **Single-pass stable + prerelease**: sparse index responses include all historical versions, so we always get both candidates in one fetch. `check_package_updates` picks `latest_version` based on update direction — stable preferred, prerelease shown when no stable update available
 - **`cargo install --list` cache**: `OnceLock<Mutex<HashMap>>` populated once by `get_installed_packages`; `invalidate_installed_version(pkg)` removes a single entry after a successful update so the next read picks up the new version. Without this, N package updates would invoke `cargo install --list` N+1 times
 - **semver-based comparison**: `PackageInfo::has_update` and `is_prerelease` use `semver::Version`. Yank rollbacks (current > latest) no longer flag as "needs update". Note: the semver crate's `Ord` compares build metadata for total ordering even though the SemVer spec says it shouldn't — cargo-fresh leans into this since a re-published artifact with new build metadata is usually worth reinstalling
-- **binstall fallback**: only attempted for `PackageSource::Crates`. `is_binstall_available()` is the read-only probe (used in dry-run); `ensure_binstall_available()` will install cargo-binstall on first miss
-- **Source-aware update strategy**: `updater::build_args` switches on `PackageSource` — crates uses `binstall`/`install`, git uses `install --git URL [--rev REV]`, path uses `install --path DIR`
+- **binstall opt-in (BEHAVIOR change in 0.10.1)**: `is_binstall_available()` is the read-only probe; if binstall is missing, default behavior is just a `Hint:` line and falling back to `cargo install`. Set `--install-binstall` to restore the old auto-install behavior. Rationale: silently invoking `cargo install cargo-binstall` modifies the user's toolchain
+- **Source-aware update strategy**: `updater::build_args` switches on `PackageSource` — crates uses `binstall`/`install`, git uses `install --git URL [--rev REV]`, path uses `install --path DIR`, `Unknown(raw)` is explicitly skipped with a `Skip [unknown source]` line so cargo-fresh never tries to do something silly with a registry it doesn't understand
 - **`PbGuard` RAII for spinner cleanup**: `update_package` wraps the per-package `ProgressBar` in a `PbGuard` immediately after creation. Its `Drop` impl calls `finish_and_clear()`, guaranteeing no spinner frames are left on screen regardless of which return path is taken (success, failure, retry exhausted, dry-run)
 - **No main progress bar**: The overall N/M progress is shown as a plain `   Package 3/18 cargo-fresh` status line (only when updating more than one package). This avoids two concurrent spinners conflicting in the terminal
 - **i18n named placeholders**: templates use `{name}` / `{old}` / `{new}` / `{code}` / `{error}` / `{attempt}`. Each variable substituted via `format_text(key, args)` — never chain `.replace("{}", x)` on multi-placeholder templates (single-value templates may still use `{}` with `.replace("{}", val)`)
 - **Bilingual UI**: all user-facing strings live in `src/locale/texts.rs` as enum-mapped pairs. Adding a language means adding a `match` arm and updating the consistency test list in `texts.rs::tests`
+- **All cargo subprocess calls are async (`tokio::process::Command`)**: `get_installed_packages` / `cargo_search_fallback` / `install_binstall` / `run_cargo` no longer block the runtime. Only `is_binstall_available()` stays sync — it's gated by `OnceLock`, runs at most once, and being sync lets dry-run probe it without an async context. Tokio features trimmed from `"full"` to the minimal set needed: `["macros", "rt-multi-thread", "signal", "process", "time", "sync"]`
+- **Exit code contract**: `0` no updates or all succeeded, `1` updates available but not applied (JSON mode without `--batch`; `--no-interactive` with no selection), `2` at least one update failed, `130` SIGINT. Stable as of 1.0. `run() -> Result<i32>` keeps this isolated from the `?`-propagation paths
+- **`--format=json` JSON_MODE**: a global `AtomicBool` in `display::mod.rs`. All `status*` / `pb_status*` / `print_results` / `print_update_summary` short-circuit when set, and main emits one `JsonReport` line at the end. `schema_version = 1` is the 1.0 commitment — additive only
+- **Actionable errors via `errors::hint_for`**: keep most paths on `anyhow::Result`; only define `CargoFreshError` variants for failures where we can give a user a concrete next step ("`cargo --version` to verify the toolchain"). Network connect/timeout matches `reqwest::Error` directly without an enum variant
 
 ### CLI output style
 
@@ -79,7 +88,7 @@ Every `println!` for user-facing output is forbidden — use the `status` family
 
 Colors carry the semantic load: green (success), yellow (warning), red (failure), dim (secondary). Verbs are 12-char right-aligned and bold.
 
-**Exception**: `--verbose` output in `check_package_updates` (package-level) still uses raw `println!` — this is a known inconsistency, not an intentional pattern to follow.
+No exceptions remain — `--verbose` package-level output was migrated to `status_dim("Check", ...)` / `status_warn` / `status_dim("Latest", ...)` in 0.10.1.
 
 ### Status verb dictionary
 
@@ -97,6 +106,12 @@ Colors carry the semantic load: green (success), yellow (warning), red (failure)
 | `Unchanged` | yellow | Update ran but version didn't change |
 | `Package` | dim | N/M counter for multi-package update |
 | `Note` | yellow | Non-fatal informational message |
+| `Hint` | dim | Actionable suggestion after a failure (from `errors::hint_for`) |
+| `Check` | dim | `--verbose` per-package check progress |
+| `Latest` | dim | `--verbose` reports the latest version resolved for a package |
+| `Skip` | yellow | Package skipped (`PackageSource::Unknown`) |
+| `Slow` | yellow | 30s elapsed on a single package — emitted by `SlowGuard` watchdog |
+| `Aborted` | yellow | User pressed Ctrl-C; partial progress line |
 | `Failed` | red | Package update failed |
 | `Finished` | green/red | Final summary line (red if any failures) |
 
@@ -110,21 +125,21 @@ Colors carry the semantic load: green (success), yellow (warning), red (failure)
 ## Release process
 
 Releases are fully automated via GitHub Actions:
+- **`ci.yml`**: every push/PR to master runs `cargo check --all-targets`, `cargo clippy --all-targets -- -D warnings`, `cargo test` on stable; separate job runs `cargo check --locked --lib --bins` on the MSRV toolchain (1.86 today). MSRV job intentionally excludes `--all-targets` so dev-deps' MSRV drift doesn't break it
 - **`crate.yml`**: triggered on `v*` tag push; publishes to crates.io using OIDC, creates a GitHub release
-- **`release.yml`**: triggered by crate.yml completion; builds for macOS ARM64/x86_64 and Linux x86_64, uploads binaries
+- **`release.yml`**: triggered by crate.yml completion; builds for macOS ARM64/x86_64 and Linux x86_64, uploads binaries, updates Homebrew tap
 
-To release: bump version in `Cargo.toml`, add a CHANGELOG entry, commit, then `git tag -a vX.Y.Z -m "..."` and push both the commit and the tag.
+To release: bump version in `Cargo.toml`, move `[Unreleased]` content to a dated `[X.Y.Z]` heading in `CHANGELOG.md`, run `cargo build --release` (to bump `Cargo.lock`), commit, then `git tag -a vX.Y.Z -m "..."` and push both the commit and the tag.
 
 ## Roadmap to 1.0
 
-See `plan.md` (gitignored, locally generated) for the full path. Status as of v0.9.14:
+Detailed item-by-item plan lives in `ROADMAP.md`. Status as of **v0.10.1**:
 
-- ✅ **0.9.10** — Cargo.lock committed, semver comparison, prerelease detection, 29 unit tests added
-- ✅ **0.9.11** — globset filter, git/path source support, `--dry-run`, `--exclude`
-- ✅ **0.9.12** — sparse index, Semaphore(16) concurrency limit, install-list cache
-- ✅ **0.9.13** — cargo-style CLI output, no emojis
-- ✅ **0.9.14** — PbGuard RAII spinner cleanup, removed conflicting main progress bar
-- ⏭ **1.0.0-rc.1** — issue/PR templates, CONTRIBUTING.md, SECURITY.md, README "Stability Guarantees" section, comparison table
-- ⏭ **1.0.0** — gather rc.1 feedback, finalize
+- ✅ **0.9.10–0.9.14** — Cargo.lock, semver, sparse index, cargo-style output, PbGuard
+- ✅ **0.10.0** — `--include-prerelease` strict (BREAKING), `--registry-url`, mirror auto-detect, Ctrl-C cancel, `--format=json` + exit code contract
+- ✅ **0.10.1** — async cargo subprocess, `--no-cargo-search-fallback`, `--install-binstall` (BEHAVIOR), non-TTY downgrade, `SlowGuard` 30s watchdog, `PackageSource::Unknown`, `errors::hint_for`, `tests/` integration suite, MSRV 1.86, ISSUE/PR/CONTRIBUTING/SECURITY, README Stability + cargo-update comparison
+- 🔄 **Feedback window** — pinned meta issue #3 collecting 1.0-contract feedback. Window closes **2026-06-30**, then `1.0.0-rc.1` cut from master
+- ⏭ **1.0.0-rc.1** — only ships if 0.10.x picks up BREAKING-class feedback that needs to bake before 1.0
+- ⏭ **1.0.0** — promote `schema_version=1`, exit codes, CLI flag inventory to permanent contract
 
-Open questions before 1.0: README bilingual sync, MSRV declaration, whether `--json` ships in 1.0 or 1.1, whether to keep `cargo search` fallback long-term, migrate verbose `println!` in `check_package_updates` to the `status` family.
+Remaining open question: whether to keep the `cargo search` fallback long-term. Today it's the safety net for environments where sparse index is blocked; if 1.0 feedback shows nobody relies on it, we can drop it in 1.x.
