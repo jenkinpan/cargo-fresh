@@ -116,11 +116,13 @@ async fn main() -> Result<()> {
             .replace("{}", &packages.len().to_string()),
     );
 
+    let no_fallback = package::cargo_search_fallback_disabled(cli.no_cargo_search_fallback);
     check_package_updates(
         &mut packages,
         cli.verbose,
         cli.include_prerelease,
         cli.registry_url.clone(),
+        no_fallback,
     )
     .await?;
 

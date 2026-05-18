@@ -51,6 +51,12 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = OutputFormat::Human, value_name = "FORMAT")]
     pub format: OutputFormat,
 
+    /// Disable the `cargo search` fallback when the sparse index request fails.
+    /// `cargo search` is slow (spawns a cargo subprocess, parses output) and brittle.
+    /// You can also set `CARGO_FRESH_NO_FALLBACK=1` to achieve the same effect.
+    #[arg(long)]
+    pub no_cargo_search_fallback: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

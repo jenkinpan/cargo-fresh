@@ -356,6 +356,16 @@ async fn cargo_search_fallback(
     Ok(None)
 }
 
+/// 用户是否禁用了 `cargo search` 兜底。读 CLI 与环境变量；CLI 优先。
+pub fn cargo_search_fallback_disabled(cli_flag: bool) -> bool {
+    if cli_flag {
+        return true;
+    }
+    std::env::var("CARGO_FRESH_NO_FALLBACK")
+        .map(|v| !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false)
+}
+
 /// 拉取一个包的稳定 + 预发布最新版本。
 ///
 /// 主路径走 sparse index（快、并发友好）；任何失败时回退到 `cargo search`。
@@ -363,15 +373,28 @@ async fn cargo_search_fallback(
 ///
 /// `registry_override`：CLI `--registry-url` 优先生效；否则从
 /// `$CARGO_HOME/config.toml` 读 sparse mirror，再退默认 `index.crates.io`。
+///
+/// `no_fallback`：true 时跳过 `cargo search` 兜底——sparse index 失败直接返回
+/// 空。对私有 registry / 离线环境无意义的慢路径，用户可显式关掉。
+/// `verbose`：true 时在真正走兜底前打一行提示，便于诊断为什么变慢。
 pub async fn fetch_latest_versions(
     package_name: &str,
     include_prerelease: bool,
     registry_override: Option<&str>,
+    no_fallback: bool,
+    verbose: bool,
 ) -> sparse_index::LatestVersions {
     let base = registry::sparse_index_base(registry_override);
     match sparse_index::fetch_latest(http_client(), &base, package_name).await {
         Ok(v) => v,
+        Err(_) if no_fallback => sparse_index::LatestVersions::default(),
         Err(_) => {
+            if verbose {
+                crate::display::status_dim(
+                    "Fallback",
+                    &format!("cargo search (slow path) for {}", package_name.cyan()),
+                );
+            }
             // 回退到 cargo search——只能拿一个版本，根据需求填入对应字段
             match cargo_search_fallback(package_name, include_prerelease).await {
                 Ok(Some(v)) => {
@@ -399,7 +422,8 @@ pub async fn get_latest_version(
     package_name: &str,
     include_prerelease: bool,
 ) -> Result<Option<String>> {
-    let latest = fetch_latest_versions(package_name, include_prerelease, None).await;
+    let latest =
+        fetch_latest_versions(package_name, include_prerelease, None, false, false).await;
     Ok(if include_prerelease {
         latest.prerelease.or(latest.stable)
     } else {
@@ -451,6 +475,7 @@ pub async fn check_package_updates(
     verbose: bool,
     include_prerelease: bool,
     registry_override: Option<String>,
+    no_fallback: bool,
 ) -> Result<()> {
     let language = detect_language();
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_INDEX_REQUESTS));
@@ -473,8 +498,14 @@ pub async fn check_package_updates(
                     package_name.cyan()
                 );
             }
-            let latest =
-                fetch_latest_versions(&package_name, true, override_clone.as_deref()).await;
+            let latest = fetch_latest_versions(
+                &package_name,
+                true,
+                override_clone.as_deref(),
+                no_fallback,
+                verbose,
+            )
+            .await;
             (index, package_name, latest)
         });
         handles.push(handle);
