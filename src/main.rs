@@ -212,7 +212,15 @@ async fn main() -> Result<()> {
                 );
             }
 
-            match update_package(package_name, target_version, &source, cli.dry_run).await {
+            match update_package(
+                package_name,
+                target_version,
+                &source,
+                cli.dry_run,
+                cli.install_binstall,
+            )
+            .await
+            {
                 Ok(result) => {
                     if result.success {
                         success_count += 1;

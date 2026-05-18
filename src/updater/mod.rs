@@ -195,20 +195,30 @@ pub async fn update_package(
     target_version: Option<&str>,
     source: &PackageSource,
     dry_run: bool,
+    install_binstall: bool,
 ) -> Result<UpdateResult> {
     let language = detect_language();
     let old_version = get_installed_version(package_name).await.ok().flatten();
 
     // 决定主命令的来源策略：
-    // - Crates 源在非 dry-run 下确保 binstall 可用（必要时安装它）
-    // - Crates 源在 dry-run 下用只读探测，避免副作用
+    // - Crates 源：先只读探测 binstall 可用性；不可用且 install_binstall=true
+    //   时才主动安装 binstall（dry-run 下永远不动 toolchain）
+    // - Crates 源 binstall 不可用、且用户未开启 install_binstall：打 Hint，
+    //   走 `cargo install` 路径，不触发任何安装副作用
     // - Git / Path 源不走 binstall（binstall 仅支持 crates.io）
     let use_binstall = match source {
         PackageSource::Crates => {
-            if dry_run {
-                is_binstall_available()
-            } else {
+            if is_binstall_available() {
+                true
+            } else if install_binstall && !dry_run {
                 ensure_binstall_available().await.unwrap_or(false)
+            } else {
+                // 静默地提示一次，给 CI/审计场景留个线索而不打扰主输出
+                status_dim(
+                    "Hint",
+                    language.get_text("binstall_hint"),
+                );
+                false
             }
         }
         _ => false,

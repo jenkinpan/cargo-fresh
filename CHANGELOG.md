@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### BEHAVIOR
+
+- **`cargo fresh` 不再静默安装 cargo-binstall**: 之前发现 binstall 不可用时会自动 `cargo install cargo-binstall`——CI 与受控环境用户表示这种"悄悄改 toolchain"令人不安。新版本默认只打 Hint，走 `cargo install` 慢路径；需要自动安装可显式加 `--install-binstall`。Dry-run 永远不动 toolchain
+
+### Added
+
+- **`--install-binstall`**: 显式启用"binstall 不可用时自动安装"的旧行为
+- **`--no-cargo-search-fallback` / `CARGO_FRESH_NO_FALLBACK=1`**: sparse index 失败后跳过 `cargo search` 兜底——私有 registry / 离线沙箱 / 镜像配置错误的诊断利器
+- **非 TTY 自动降级**: stderr 不是 terminal（CI 日志、管道、`tee`）时禁用 spinner，`pb.println` 仍正常输出。JSON 模式同样走这条路径
+
+### Changed
+
+- **`--verbose` 输出统一走 `status_*`**: `check_package_updates` 三处裸 `println!` 改成 `status_dim` / `status_warn`，新增 `Check` / `Latest` 两个动词头
+- **cargo 子调用全部走 `tokio::process::Command`**: `get_installed_packages` / `get_installed_version` / `cargo_search_fallback` / `install_binstall` / `run_cargo` 不再阻塞 tokio runtime；`is_binstall_available` 因 `OnceLock` 缓存最多调用一次而保留 sync 实现
+- **tokio features 收紧**: `full` → `[macros, rt-multi-thread, signal, process, time, sync]`，依赖体积下降
+
 ## [0.10.0] - 2026-05-18
 
 ### BREAKING
