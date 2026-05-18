@@ -1,36 +1,36 @@
 <!--
-感谢提 PR！在开 PR 前请：
-- 跑 `cargo clippy --all-targets -- -D warnings`
-- 跑 `cargo test`
-- 在 CHANGELOG.md 的 `[Unreleased]` 节加一条说明（除非纯文档/CI 变更）
-- 用户可见的行为变化请在 README 同步更新
+Thanks for opening a PR! Before submitting, please:
+- Run `cargo clippy --all-targets -- -D warnings`
+- Run `cargo test`
+- Add a note to the `[Unreleased]` section of CHANGELOG.md (unless docs/CI-only)
+- Update README for any user-visible behavior change
 -->
 
-## 这个 PR 做了什么
+## What does this PR do?
 
-<!-- 一两句话说清楚意图。"修了什么" 比 "改了哪些文件" 更有用。 -->
+<!-- One or two sentences. "What it fixes" beats "which files it touches". -->
 
-## 动机
+## Motivation
 
-<!-- 关联的 issue / 用户场景 / 兼容性问题。 -->
+<!-- Linked issue, user scenario, or compatibility concern. -->
 
 Closes #
 
-## 类型
+## Type
 
-- [ ] Bug fix（不引入新行为）
-- [ ] 增量功能（向后兼容）
-- [ ] BREAKING change（行为/输出/CLI 形态变化）
-- [ ] 文档 / 测试 / CI 仅
+- [ ] Bug fix (no new behavior)
+- [ ] Additive feature (backwards-compatible)
+- [ ] BREAKING change (behavior / output / CLI shape change)
+- [ ] Docs / tests / CI only
 
-## 验证
+## Verification
 
-<!-- 怎么验证这个改动？如果是行为变化，列出实际跑过的命令与输出。 -->
+<!-- How did you verify this? For behavior changes, paste the commands and output you actually ran. -->
 
 - [ ] `cargo clippy --all-targets -- -D warnings`
 - [ ] `cargo test`
-- [ ] 手动跑 `cargo fresh ...` 验证（写出命令）
+- [ ] Manually ran `cargo fresh ...` to verify (paste the command)
 
-## 备注
+## Notes
 
-<!-- 不在范围内的相关问题、follow-up TODO、设计取舍等。 -->
+<!-- Out-of-scope follow-ups, design trade-offs, anything reviewers should be aware of. -->

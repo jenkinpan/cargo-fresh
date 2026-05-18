@@ -1,40 +1,41 @@
 name: Feature request
-description: 建议新功能或行为改进
+description: Propose a new feature or behavior change
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        在提之前，请先看 `ROADMAP.md` —— 你想要的可能已经被规划或刻意排除。
-        如果是 1.0 之前的 BREAKING change，请说明。
+        Before filing, please skim `ROADMAP.md` — what you want may already be planned
+        or intentionally out of scope. If this proposes a BREAKING change before 1.0,
+        please call that out.
 
   - type: textarea
     id: problem
     attributes:
-      label: 你在解决什么问题？
-      description: 与其描述方案，不如先把用户场景讲清楚。"我每周要手动跑 X 次"比"加个 --watch flag"更有帮助。
+      label: What problem are you solving?
+      description: Describe the user scenario, not the solution. "I manually run X every week" is more useful than "add a --watch flag".
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: 建议的方案
-      description: 命令行形态 / 行为变化 / 输出示例
+      label: Proposed solution
+      description: CLI shape, behavior change, example output
 
   - type: textarea
     id: alternatives
     attributes:
-      label: 考虑过的替代方案
-      description: 现有工具能否满足？已有 flag 组合能否凑出？
+      label: Alternatives considered
+      description: Can existing tools or flag combinations cover this?
 
   - type: dropdown
     id: breaking
     attributes:
-      label: 这是 BREAKING change 吗？
+      label: Is this a BREAKING change?
       options:
-        - 不是（纯增量）
-        - 是（行为/输出格式变化）
-        - 不确定
+        - "No (purely additive)"
+        - "Yes (behavior / output format change)"
+        - "Not sure"
     validations:
       required: true

@@ -1,18 +1,19 @@
 name: Bug report
-description: cargo-fresh 行为与预期不符 / 崩溃 / 假阳性更新
+description: cargo-fresh misbehaves, crashes, or reports a false-positive update
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢报告 bug！为了让排查更快，请尽量给出可复现的最小步骤和实际/预期输出。
-        如果只是想问"该不该升级 X"，更适合 Discussions。
+        Thanks for filing a bug! To speed up triage, please give a minimal reproducer
+        plus expected and actual output. For "should I upgrade X?" questions, Discussions
+        is a better fit.
 
   - type: input
     id: version
     attributes:
-      label: cargo-fresh 版本
-      description: 运行 `cargo fresh --version` 的输出
+      label: cargo-fresh version
+      description: Output of `cargo fresh --version`
       placeholder: cargo-fresh 0.10.0
     validations:
       required: true
@@ -20,8 +21,8 @@ body:
   - type: input
     id: rustc
     attributes:
-      label: rustc / cargo 版本
-      description: 运行 `rustc -V && cargo -V` 的输出
+      label: rustc / cargo version
+      description: Output of `rustc -V && cargo -V`
       placeholder: rustc 1.82.0 / cargo 1.82.0
     validations:
       required: true
@@ -29,7 +30,7 @@ body:
   - type: input
     id: os
     attributes:
-      label: 操作系统
+      label: Operating system
       placeholder: macOS 15.2 / Ubuntu 24.04 / Windows 11
     validations:
       required: true
@@ -37,32 +38,32 @@ body:
   - type: textarea
     id: repro
     attributes:
-      label: 复现步骤
-      description: 完整命令行 + 必要时的环境变量（HTTPS_PROXY、CARGO_HOME、镜像配置等）
+      label: Steps to reproduce
+      description: The exact command line, plus any relevant env vars (HTTPS_PROXY, CARGO_HOME, mirror config, etc.)
       placeholder: |
         1. `cargo fresh --include-prerelease --filter "tokio*"`
-        2. 选 tokio-console
-        3. 升级卡在 ...
+        2. Pick tokio-console
+        3. Update hangs at ...
     validations:
       required: true
 
   - type: textarea
     id: expected
     attributes:
-      label: 预期行为
+      label: Expected behavior
 
   - type: textarea
     id: actual
     attributes:
-      label: 实际行为
-      description: 粘贴完整 stderr/stdout；可加 `--verbose` 获取更详细的日志
+      label: Actual behavior
+      description: Paste the full stderr/stdout. Re-run with `--verbose` for more detail.
       render: shell
 
   - type: checkboxes
     id: triage
     attributes:
-      label: 自检
+      label: Self-check
       options:
-        - label: 我用 `cargo --version` 确认 cargo 可用
-        - label: 我尝试加 `--verbose` 看了详细输出
-        - label: 我搜索过现有 issue，没找到重复
+        - label: I confirmed cargo is available via `cargo --version`
+        - label: I tried `--verbose` and inspected the detailed output
+        - label: I searched existing issues and did not find a duplicate
