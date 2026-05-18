@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### BREAKING
+
+- **`--include-prerelease` 现在真正生效**: 旧版本即使不加这个 flag，`check_package_updates` 也会把更新的预发布版本写入 `latest_version`，触发交互选择里的预发布分组。0.10.0 起严格遵守 flag 语义——不加 `--include-prerelease` 看不到任何预发布候选。如果你过去依赖"不加 flag 也能看到 rc"的隐式行为，请显式传 `--include-prerelease`
+
+### Added
+
+- **`--registry-url URL`**: 显式覆盖 sparse index 的 base URL（如 `https://mirrors.ustc.edu.cn/crates.io-index/`）
+- **自动识别 cargo 镜像配置**: 解析 `$CARGO_HOME/config.toml` 的 `[source.crates-io] replace-with` → `[source.<name>].registry`（仅支持 `sparse+URL` 前缀），命中后所有版本检查走镜像，无需配置 `--registry-url`。git registry 镜像继续走 `cargo search` 兜底
+- **Ctrl-C 取消**: 更新循环响应 SIGINT。命中后跳过剩余包，打印 `   Aborted N/M completed`，以退出码 130 退出。子进程内的取消（cargo install 已在跑）属于 P1 范畴
+
+### Changed
+
+- **`CommandFactory` 派生补全脚本**: 消除了 `cli/mod.rs` 里手写的第二份 `clap::Command`，补全脚本现在永远跟真实 CLI 同步
+- **新增 `package/registry.rs`**: 7 个 unit test 覆盖 ustc 风格 mirror、git mirror、缺失配置、URL 规范化
+- **`choose_latest` 抽成纯函数**: 选择逻辑从 `check_package_updates` 里拆出，7 个 unit test 覆盖 `--include-prerelease` on/off × stable/pre 在/不在 的矩阵
+
 ## [0.9.14] - 2026-05-17
 
 ### Fixed

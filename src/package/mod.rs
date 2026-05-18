@@ -391,19 +391,49 @@ pub async fn get_latest_version(
     })
 }
 
+/// 在已抓到的稳定 + 预发布版本中，选择应写入 `latest_version` 的候选。
+///
+/// 规则（BREAKING since 0.10.0）：
+/// - 优先 stable：只要 stable 存在且 > current（或 current 缺失），就选 stable。
+/// - 仅当 `include_prerelease == true` 时，stable 已是最新（或不存在）时才看预发布。
+/// - 都没有更新候选时返回 stable（用于"已是最新"的展示）。
+/// - 旧版会在不加 `--include-prerelease` 时也把预发布塞进 `latest_version`，
+///   触发 dialoguer 的 prerelease bucket——0.10.0 起明确不再这样做（BREAKING）。
+///
+/// `has_update` 会再用 semver 严格比较一次，保证 yank 回滚不被误判。
+pub fn choose_latest(
+    stable: Option<&str>,
+    prerelease: Option<&str>,
+    current: Option<&str>,
+    include_prerelease: bool,
+) -> Option<String> {
+    if let Some(s) = stable {
+        if current.map(|c| c != s).unwrap_or(true) {
+            return Some(s.to_string());
+        }
+    }
+    if include_prerelease {
+        if let Some(pre) = prerelease {
+            if current.map(|c| c != pre).unwrap_or(true) {
+                return Some(pre.to_string());
+            }
+        }
+    }
+    // 没有更新候选：stable 存在就返回它（展示"已是最新"），否则 None
+    stable.map(|s| s.to_string())
+}
+
 /// 并发查询所有 crates.io 源包的最新版本（稳定 + 预发布一次拿齐）。
 ///
 /// 行为：
-/// - Git / Path 源跳过（crates.io 上没有它们的"最新版本"概念）
-/// - 同时拿 stable 和 prerelease，避免旧实现的两次串行扫描
-/// - 用 `Semaphore` 限制 ≤ 16 个并发请求，防止 fd 耗尽 / 触发 crates.io 限流
-/// - 优先把 stable 写入 `latest_version`；只在没有 stable 更新但有
-///   预发布更新（且与当前版本不同）时改写为 prerelease，保留旧版"无稳定
-///   更新时仍能看到预发布候选"的行为
+/// - Git / Path 源跳过（crates.io 上没有它们的"最新版本"概念）。
+/// - 同时拿 stable 和 prerelease，避免旧实现的两次串行扫描。
+/// - 用 `Semaphore` 限制 ≤ 16 个并发请求，防止 fd 耗尽 / 触发 crates.io 限流。
+/// - 选择逻辑见 `choose_latest`——`include_prerelease=false` 时绝不写入预发布。
 pub async fn check_package_updates(
     packages: &mut [PackageInfo],
     verbose: bool,
-    _include_prerelease: bool,
+    include_prerelease: bool,
     registry_override: Option<String>,
 ) -> Result<()> {
     let language = detect_language();
@@ -443,17 +473,12 @@ pub async fn check_package_updates(
         };
 
         let current = packages[index].current_version.clone();
-        // 优先用 stable：当 stable 与当前版本不同时（升级或回滚由 has_update 用 semver 再判一次）
-        let chosen = match (&latest.stable, &latest.prerelease, &current) {
-            (Some(s), _, Some(cur)) if s != cur => Some(s.clone()),
-            (Some(s), _, None) => Some(s.clone()),
-            // 没有 stable 更新时，若有预发布且与当前不同，作为候选展示
-            (_, Some(pre), Some(cur)) if pre != cur => Some(pre.clone()),
-            (_, Some(pre), None) => Some(pre.clone()),
-            // stable 与当前相同（已是最新），且没有更新的预发布
-            (Some(s), _, _) => Some(s.clone()),
-            _ => None,
-        };
+        let chosen = choose_latest(
+            latest.stable.as_deref(),
+            latest.prerelease.as_deref(),
+            current.as_deref(),
+            include_prerelease,
+        );
 
         if verbose {
             match &chosen {
@@ -479,6 +504,66 @@ pub async fn check_package_updates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---------- choose_latest ----------
+
+    #[test]
+    fn choose_latest_picks_stable_when_newer() {
+        assert_eq!(
+            choose_latest(Some("1.2.0"), Some("2.0.0-rc.1"), Some("1.1.0"), false),
+            Some("1.2.0".to_string())
+        );
+    }
+
+    #[test]
+    fn choose_latest_omits_prerelease_when_flag_off() {
+        // 关键 BREAKING 用例：stable 已经是最新，但有更新的预发布——
+        // 不加 --include-prerelease 时绝对不能让预发布泄漏到 latest_version
+        assert_eq!(
+            choose_latest(Some("1.1.0"), Some("2.0.0-rc.1"), Some("1.1.0"), false),
+            Some("1.1.0".to_string())
+        );
+    }
+
+    #[test]
+    fn choose_latest_picks_prerelease_when_flag_on() {
+        assert_eq!(
+            choose_latest(Some("1.1.0"), Some("2.0.0-rc.1"), Some("1.1.0"), true),
+            Some("2.0.0-rc.1".to_string())
+        );
+    }
+
+    #[test]
+    fn choose_latest_no_stable_no_prerelease_when_flag_off() {
+        // 只有预发布版本但用户没要求看预发布：返回 None（不强升）
+        assert_eq!(
+            choose_latest(None, Some("0.1.0-alpha.1"), Some("0.0.1"), false),
+            None
+        );
+    }
+
+    #[test]
+    fn choose_latest_no_stable_picks_prerelease_when_flag_on() {
+        assert_eq!(
+            choose_latest(None, Some("0.1.0-alpha.1"), Some("0.0.1"), true),
+            Some("0.1.0-alpha.1".to_string())
+        );
+    }
+
+    #[test]
+    fn choose_latest_returns_stable_when_already_latest() {
+        // current == stable，预发布无关；返回 stable 让上层展示"Fresh"
+        assert_eq!(
+            choose_latest(Some("1.0.0"), None, Some("1.0.0"), false),
+            Some("1.0.0".to_string())
+        );
+    }
+
+    #[test]
+    fn choose_latest_empty_returns_none() {
+        assert_eq!(choose_latest(None, None, Some("1.0.0"), true), None);
+        assert_eq!(choose_latest(None, None, None, false), None);
+    }
 
     // ---------- parse_package_line ----------
 
