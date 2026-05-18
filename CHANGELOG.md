@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-18
+
 ### BREAKING
 
 - **`--include-prerelease` 现在真正生效**: 旧版本即使不加这个 flag，`check_package_updates` 也会把更新的预发布版本写入 `latest_version`，触发交互选择里的预发布分组。0.10.0 起严格遵守 flag 语义——不加 `--include-prerelease` 看不到任何预发布候选。如果你过去依赖"不加 flag 也能看到 rc"的隐式行为，请显式传 `--include-prerelease`
