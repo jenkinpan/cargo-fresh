@@ -1,4 +1,5 @@
 use semver::Version;
+use serde::Serialize;
 
 // 常量定义
 pub const MAX_RETRY_ATTEMPTS: u32 = 3;
@@ -106,6 +107,74 @@ impl PackageInfo {
             .and_then(|v| Version::parse(v).ok())
             .map(|v| !v.pre.is_empty())
             .unwrap_or(false)
+    }
+}
+
+/// JSON 输出 schema v1。`--format=json` 在 main 末尾把整个流程的快照
+/// 写到 stdout 一行——脚本可以直接 `jq` 消费，无需解析 ANSI 文案。
+///
+/// 字段约定：
+/// - `schema_version`：单调递增，1.x 内只做向后兼容的字段新增
+/// - `updates_available`：所有有更新候选的包（不论是否被 batch / 用户选中）
+/// - `results`：实际跑过 cargo install 的包及其结果；非 batch / 无 dry-run 时为空数组
+/// - `summary.duration_ms` 是整个执行的墙钟时间（含检查 + 更新）
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonReport<'a> {
+    pub schema_version: u32,
+    pub format: &'static str,
+    pub include_prerelease: bool,
+    pub dry_run: bool,
+    pub registry_url: Option<&'a str>,
+    pub updates_available: Vec<JsonUpdateCandidate<'a>>,
+    pub fresh: Vec<&'a str>,
+    pub skipped: Vec<JsonSkipped<'a>>,
+    pub results: Vec<JsonResult<'a>>,
+    pub summary: JsonSummary,
+    pub aborted: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonUpdateCandidate<'a> {
+    pub name: &'a str,
+    pub current: Option<&'a str>,
+    pub latest: &'a str,
+    pub source: &'static str,
+    pub prerelease: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonSkipped<'a> {
+    pub name: &'a str,
+    pub source: &'static str,
+    pub reason: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonResult<'a> {
+    pub name: &'a str,
+    pub old_version: Option<&'a str>,
+    pub new_version: Option<&'a str>,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonSummary {
+    pub checked: usize,
+    pub available: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub skipped: usize,
+    pub duration_ms: u128,
+}
+
+/// PackageSource 在 JSON 里用 "crates" / "git" / "path" 短串表示。
+impl PackageSource {
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            PackageSource::Crates => "crates",
+            PackageSource::Git { .. } => "git",
+            PackageSource::Path { .. } => "path",
+        }
     }
 }
 

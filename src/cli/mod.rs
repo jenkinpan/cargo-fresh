@@ -45,6 +45,12 @@ pub struct Cli {
     #[arg(long, value_name = "URL")]
     pub registry_url: Option<String>,
 
+    /// Output format. `human` (default) prints cargo-style status lines;
+    /// `json` emits a single machine-readable object and disables colors, spinners,
+    /// and interactive prompts. Useful in CI.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Human, value_name = "FORMAT")]
+    pub format: OutputFormat,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -60,6 +66,15 @@ pub enum Commands {
         #[arg(long)]
         cargo_fresh: bool,
     },
+}
+
+/// 输出格式。Human 是 cargo 风格的状态行；Json 用于 CI / 脚本消费。
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum OutputFormat {
+    /// Cargo-style status lines (default)
+    Human,
+    /// Machine-readable JSON document (one line, no colors, no spinners, no prompts)
+    Json,
 }
 
 #[derive(Clone, ValueEnum)]

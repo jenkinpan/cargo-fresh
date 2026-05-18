@@ -109,8 +109,33 @@ cargo-fresh
 - `--filter <PATTERN>`: Keep only packages matching the glob pattern (`*`, `?`, `[abc]`)
 - `--exclude <PATTERN>`: Drop packages matching the glob pattern; repeatable, applied after `--filter`
 - `--dry-run`: Print the cargo commands that would run without executing them
+- `--registry-url <URL>`: Override sparse index base URL (mirror support)
+- `--format <FORMAT>`: `human` (default) or `json` for CI consumption
 - `-h, --help`: Show help information
 - `-V, --version`: Show version information
+
+### Exit Codes
+
+`cargo fresh` returns the following exit codes — stable contract since 0.10.0:
+
+| Code | Meaning                                                              |
+|------|----------------------------------------------------------------------|
+| 0    | No updates available, or all selected updates succeeded              |
+| 1    | Updates available but not applied (e.g. `--format=json` without `--batch`, or `--no-interactive` with no selections) |
+| 2    | At least one update failed                                           |
+| 130  | User pressed Ctrl-C; remaining packages skipped                      |
+
+Use `--format=json` for scripts: it disables colors, spinners, and prompts, and emits a single JSON object on stdout (schema version 1).
+
+```bash
+# CI gating: fail the job if any global package has an update
+cargo fresh --format=json
+# → exit 1 if updates are available, 0 otherwise
+
+# Apply all updates in CI, fail on any update failure
+cargo fresh --format=json --batch
+# → exit 2 if any update failed, 0 otherwise
+```
 
 ### Examples
 

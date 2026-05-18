@@ -16,6 +16,7 @@
 - **`--registry-url URL`**: 显式覆盖 sparse index 的 base URL（如 `https://mirrors.ustc.edu.cn/crates.io-index/`）
 - **自动识别 cargo 镜像配置**: 解析 `$CARGO_HOME/config.toml` 的 `[source.crates-io] replace-with` → `[source.<name>].registry`（仅支持 `sparse+URL` 前缀），命中后所有版本检查走镜像，无需配置 `--registry-url`。git registry 镜像继续走 `cargo search` 兜底
 - **Ctrl-C 取消**: 更新循环响应 SIGINT。命中后跳过剩余包，打印 `   Aborted N/M completed`，以退出码 130 退出。子进程内的取消（cargo install 已在跑）属于 P1 范畴
+- **`--format=json` 与稳定退出码契约**: CI / 脚本友好的输出模式。JSON 模式禁用所有彩色、spinner 和 dialoguer 交互，结尾在 stdout 打一行 `JsonReport`（schema_version=1）。退出码：`0` 全部成功、`1` 有可更新但未应用、`2` 至少一个失败、`130` 用户取消。README 加 "Exit Codes" 一节
 
 ### Changed
 

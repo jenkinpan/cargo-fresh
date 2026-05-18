@@ -1,9 +1,24 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use colored::*;
 use dialoguer::{Confirm, MultiSelect};
 use indicatif::ProgressBar;
 
 use crate::locale::Language;
 use crate::models::{PackageInfo, UpdateResult};
+
+/// JSON mode 开关：在 main 早期被设置一次，之后所有 status* / print_* /
+/// dialoguer 调用都自动 no-op，避免污染 JSON 输出。
+static JSON_MODE: AtomicBool = AtomicBool::new(false);
+
+/// 由 main 在解析 CLI 后调用一次。
+pub fn set_json_mode(enabled: bool) {
+    JSON_MODE.store(enabled, Ordering::SeqCst);
+}
+
+pub fn is_json_mode() -> bool {
+    JSON_MODE.load(Ordering::SeqCst)
+}
 
 /// Cargo 风格状态行的右对齐宽度。
 ///
@@ -16,23 +31,38 @@ const STATUS_WIDTH: usize = 12;
 /// 颜色变体：`status_warn` 黄、`status_err` 红、`status_dim` 灰（用于次要信息）。
 /// 颜色码不计入宽度——必须先 pad 再上色，否则 ANSI 序列被算进宽度导致错位。
 pub fn status(verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(), msg);
 }
 
 pub fn status_warn(verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(), msg);
 }
 
 pub fn status_err(verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(), msg);
 }
 
 pub fn status_dim(verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     println!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(), msg);
 }
 
 /// 同 `status`，但把输出送到指定的 ProgressBar（避免与活动进度条冲突）。
 pub fn pb_status(pb: &ProgressBar, verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     pb.println(format!(
         "{} {}",
         format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(),
@@ -41,6 +71,9 @@ pub fn pb_status(pb: &ProgressBar, verb: &str, msg: &str) {
 }
 
 pub fn pb_status_warn(pb: &ProgressBar, verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     pb.println(format!(
         "{} {}",
         format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(),
@@ -49,6 +82,9 @@ pub fn pb_status_warn(pb: &ProgressBar, verb: &str, msg: &str) {
 }
 
 pub fn pb_status_err(pb: &ProgressBar, verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     pb.println(format!(
         "{} {}",
         format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(),
@@ -57,6 +93,9 @@ pub fn pb_status_err(pb: &ProgressBar, verb: &str, msg: &str) {
 }
 
 pub fn pb_status_dim(pb: &ProgressBar, verb: &str, msg: &str) {
+    if is_json_mode() {
+        return;
+    }
     pb.println(format!(
         "{} {}",
         format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(),
@@ -128,6 +167,9 @@ fn package_with_source(package: &PackageInfo) -> String {
 }
 
 pub fn print_results(packages: &[PackageInfo], updates_only: bool, language: Language) {
+    if is_json_mode() {
+        return;
+    }
     let mut has_updates = false;
     let mut fresh_count = 0;
 
@@ -175,6 +217,9 @@ pub fn print_update_summary(update_results: &[UpdateResult], language: Language)
         }
     }
 
+    if is_json_mode() {
+        return;
+    }
     println!();
     println!("{}", language.get_text("update_summary").bold());
 
