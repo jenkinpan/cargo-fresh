@@ -1,0 +1,68 @@
+name: Bug report
+description: cargo-fresh 行为与预期不符 / 崩溃 / 假阳性更新
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告 bug！为了让排查更快，请尽量给出可复现的最小步骤和实际/预期输出。
+        如果只是想问"该不该升级 X"，更适合 Discussions。
+
+  - type: input
+    id: version
+    attributes:
+      label: cargo-fresh 版本
+      description: 运行 `cargo fresh --version` 的输出
+      placeholder: cargo-fresh 0.10.0
+    validations:
+      required: true
+
+  - type: input
+    id: rustc
+    attributes:
+      label: rustc / cargo 版本
+      description: 运行 `rustc -V && cargo -V` 的输出
+      placeholder: rustc 1.82.0 / cargo 1.82.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: macOS 15.2 / Ubuntu 24.04 / Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 完整命令行 + 必要时的环境变量（HTTPS_PROXY、CARGO_HOME、镜像配置等）
+      placeholder: |
+        1. `cargo fresh --include-prerelease --filter "tokio*"`
+        2. 选 tokio-console
+        3. 升级卡在 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 粘贴完整 stderr/stdout；可加 `--verbose` 获取更详细的日志
+      render: shell
+
+  - type: checkboxes
+    id: triage
+    attributes:
+      label: 自检
+      options:
+        - label: 我用 `cargo --version` 确认 cargo 可用
+        - label: 我尝试加 `--verbose` 看了详细输出
+        - label: 我搜索过现有 issue，没找到重复

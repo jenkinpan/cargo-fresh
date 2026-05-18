@@ -468,15 +468,50 @@ For `cargo fresh` subcommand completion:
    cargo fresh <TAB>  # Should show all fresh options
    ```
 
+## Stability Guarantees
+
+Prior to 1.0.0 the project still ships breaking changes; once 1.0.0 lands the surface below is **promised** to follow semver:
+
+| Surface | Stability |
+|---|---|
+| Exit codes (`0` / `1` / `2` / `130`) | Stable — never reused or removed within a major version |
+| `--format=json` output, `schema_version=1` | Additive only — new fields may appear; existing fields will not be renamed or change types |
+| CLI flags listed in `--help` | Stable — flags are not silently renamed; deprecations get one minor cycle of warning before removal |
+| Source-aware install behavior (crates / git / path) | Stable |
+| Human-readable status verbs (`Checking`, `Updating`, etc.) | **Not** stable — wording, color, alignment may change for UX improvements |
+| Locale text (English / Chinese) | **Not** stable — phrasing tweaks expected; don't grep against `stdout` |
+| Internal modules / library API (`cargo_fresh::*`) | **Not** stable — `src/lib.rs` exists for integration tests, not as a downstream API |
+
+If you're scripting against cargo-fresh, anchor on exit codes and `--format=json`; never on colored status text.
+
+## How cargo-fresh differs from cargo-update / cargo-install-update
+
+[`cargo-update`](https://github.com/nabijaczleweli/cargo-update) is the long-standing tool in this space. cargo-fresh is a fresh take, not a fork — these are the differences that drove building it:
+
+| | cargo-fresh | cargo-update |
+|---|---|---|
+| **Version source** | crates.io sparse index (HTTP, ~50–100ms/pkg, 16-way concurrent) | `cargo search` subprocess per package |
+| **Source-aware updates** | Crates / `git+URL` / `path+DIR` each get the right install command | Crates only |
+| **Glob filtering** | `--filter "tokio*"` + `--exclude "*-test"` (globset) | Substring match |
+| **Prerelease handling** | Explicit `--include-prerelease`; semver `.pre` check, not string `"rc"` | Limited |
+| **Output style** | Cargo-aesthetic 12-char verb prefixes; no emoji | Plain text |
+| **JSON mode** | `--format=json` with versioned `schema_version=1` schema | None |
+| **i18n** | English + Chinese auto-detected via `LANG` | English only |
+| **Dry-run preview** | `--dry-run` prints the exact `cargo install` command per package | Limited |
+| **binstall policy** | Opt-in via `--install-binstall`; otherwise hint only | N/A |
+| **CI ergonomics** | Exit codes 0/1/2/130 + JSON + non-TTY auto-downgrade | Limited |
+
+cargo-update is more mature and has features cargo-fresh doesn't (yet) — notably installing packages by listing them in a config file. Use whichever fits; both are healthy projects to depend on.
+
 ## Contributing
 
-Contributions are welcome! Please follow these steps:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. TL;DR:
 
-1. Fork the project
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Create a Pull Request
+1. Fork → branch → commit → PR
+2. Before pushing: `cargo clippy --all-targets -- -D warnings` and `cargo test` must be green
+3. User-visible changes need a `CHANGELOG.md` `[Unreleased]` entry + README sync
+
+Security issues: see [SECURITY.md](SECURITY.md) — please don't file them as public issues.
 
 ## License
 
