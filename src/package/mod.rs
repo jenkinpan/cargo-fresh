@@ -232,10 +232,11 @@ pub fn parse_package_line(line: &str) -> Option<(&str, &str, PackageSource)> {
 
 /// 解析括号内的来源字串。
 ///
-/// - `registry+URL` → Crates
+/// - `registry+URL` → Crates（默认 crates.io；私有 / 镜像 registry 也走这里，
+///   因为 cargo-fresh 已经通过 `package::registry` 处理 mirror 重定向）
 /// - `git+URL` 或 `git+URL#rev` → Git
 /// - `path+file:///DIR` 或 `path+DIR` → Path
-/// - 其他未知格式默认归类为 Crates（保守，不丢失包）
+/// - 其他未识别前缀 → Unknown(原始字符串)，让上层显式跳过而非误归 Crates
 fn parse_source(s: &str) -> PackageSource {
     if let Some(rest) = s.strip_prefix("git+") {
         let (url, rev) = match rest.split_once('#') {
@@ -247,9 +248,13 @@ fn parse_source(s: &str) -> PackageSource {
         PackageSource::Path { dir: rest.to_string() }
     } else if let Some(rest) = s.strip_prefix("path+") {
         PackageSource::Path { dir: rest.to_string() }
-    } else {
-        // registry+... 或缺省时归为 crates.io
+    } else if s.starts_with("registry+") || s.is_empty() {
+        // registry+... 是 cargo 标记 crates.io 或自定义 registry 的标准前缀；
+        // 空串通常来自旧 cargo 输出格式（包名 vX.Y.Z: 无括号）
         PackageSource::Crates
+    } else {
+        // alt-registry+... / sparse+... / 未来 cargo 新增的前缀都走这里
+        PackageSource::Unknown(s.to_string())
     }
 }
 
@@ -703,6 +708,20 @@ mod tests {
                 rev: None,
             }
         );
+    }
+
+    #[test]
+    fn parse_package_line_unknown_source() {
+        // 假定某天 cargo 引入新前缀（这里以 sparse+ 模拟）——
+        // 之前会被静默归到 Crates，现在显式建模为 Unknown
+        let line = "weird-tool v1.0.0 (sparse+https://example.com/index):";
+        let source = parse_package_line(line).unwrap().2;
+        match source {
+            PackageSource::Unknown(raw) => {
+                assert_eq!(raw, "sparse+https://example.com/index");
+            }
+            other => panic!("expected Unknown, got {:?}", other),
+        }
     }
 
     #[test]

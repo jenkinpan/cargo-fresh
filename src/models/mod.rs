@@ -25,6 +25,13 @@ pub enum PackageSource {
     Path {
         dir: String,
     },
+    /// `cargo install --list` 中无法识别的来源前缀。
+    ///
+    /// 旧版会把这些悄悄归到 `Crates`，导致 cargo-fresh 试图去 sparse index
+    /// 查一个其实不是 crates.io 来源的包，把人误导到"版本检查失败"。
+    /// 现在显式建模——`check_package_updates` 跳过，`updater::build_args`
+    /// 直接拒绝，UI 用 `[unknown source]` 标记，让用户看到这个包被有意忽略。
+    Unknown(String),
 }
 
 impl PackageSource {
@@ -39,6 +46,7 @@ impl PackageSource {
             PackageSource::Crates => "",
             PackageSource::Git { .. } => "[git]",
             PackageSource::Path { .. } => "[path]",
+            PackageSource::Unknown(_) => "[unknown source]",
         }
     }
 }
@@ -174,6 +182,7 @@ impl PackageSource {
             PackageSource::Crates => "crates",
             PackageSource::Git { .. } => "git",
             PackageSource::Path { .. } => "path",
+            PackageSource::Unknown(_) => "unknown",
         }
     }
 }

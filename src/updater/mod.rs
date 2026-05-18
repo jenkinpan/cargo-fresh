@@ -118,6 +118,12 @@ fn build_args<'a>(
         PackageSource::Path { dir } => {
             vec!["install", "--path", dir.as_str(), "--force", package_name]
         }
+        // Unknown 来源不应该到这一步——check_package_updates 会跳过它，
+        // main 也不会把它放进可升级列表。万一到了，给个明显错的命令
+        // 让上层报错而不是默默走 cargo install。
+        PackageSource::Unknown(raw) => {
+            vec!["install", "--unknown-source-marker", raw.as_str(), package_name]
+        }
     }
 }
 
@@ -322,6 +328,17 @@ pub async fn update_package(
                     "{} {}",
                     language.get_text("using_install_fallback"),
                     source.marker().dimmed(),
+            ));
+        }
+        (PackageSource::Unknown(_), _) => {
+            // 不应该到这一步——main 不会把 unknown 包放进 selections。
+            // 万一来到，给个明显的错误信息而不是默默走 cargo install。
+            pb_status_warn(&pb, "Skip", &format!("{} {}", package_name, source.marker()));
+            return Ok(UpdateResult::new(
+                package_name.to_string(),
+                old_version,
+                None,
+                false,
             ));
         }
     }
