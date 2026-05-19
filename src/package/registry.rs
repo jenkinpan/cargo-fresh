@@ -46,7 +46,7 @@ fn normalize(url: &str) -> String {
     url.trim().trim_end_matches('/').to_string()
 }
 
-fn cargo_home() -> Option<PathBuf> {
+pub(crate) fn cargo_home() -> Option<PathBuf> {
     if let Ok(s) = env::var("CARGO_HOME") {
         if !s.is_empty() {
             return Some(PathBuf::from(s));

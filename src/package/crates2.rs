@@ -51,6 +51,22 @@ pub fn parse_crates2(json: &str) -> HashMap<String, InstallOpts> {
     out
 }
 
+/// 定位并解析 `$CARGO_HOME/.crates2.json`。
+///
+/// 复用 `registry::cargo_home()`（`CARGO_HOME` env，回退 `$HOME/.cargo`）。
+/// 文件不存在 / 不可读 / 解析失败 → 空 map。永不报错、永不打印告警。
+pub fn load_install_opts() -> HashMap<String, InstallOpts> {
+    let path = match crate::package::registry::cargo_home() {
+        Some(p) => p.join(".crates2.json"),
+        None => return HashMap::new(),
+    };
+    let body = match std::fs::read_to_string(&path) {
+        Ok(b) => b,
+        Err(_) => return HashMap::new(),
+    };
+    parse_crates2(&body)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
