@@ -529,4 +529,19 @@ mod tests {
         let got = build_args(true, "tool", None, &PackageSource::Crates, Some(&opts));
         assert_eq!(got, s(&["binstall", "--force", "tool"]));
     }
+
+    #[test]
+    fn unknown_source_ignores_opts() {
+        let opts = InstallOpts {
+            no_default_features: true,
+            all_features: true,
+            features: vec!["x".into()],
+        };
+        let src = PackageSource::Unknown("custom-reg".into());
+        let got = build_args(false, "tool", None, &src, Some(&opts));
+        assert_eq!(
+            got,
+            s(&["install", "--unknown-source-marker", "custom-reg", "tool"])
+        );
+    }
 }
