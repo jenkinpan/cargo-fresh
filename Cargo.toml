@@ -17,6 +17,7 @@ name = "cargo-fresh"
 path = "src/main.rs"
 
 [dependencies]
+anstream = "0.6"
 anyhow = "1.0.100"
 clap = { version = "4.5.48", features = ["cargo", "derive"] }
 clap_complete = "4.5.58"

@@ -105,6 +105,39 @@ fn json_mode_keeps_stdout_clean() {
 }
 
 #[test]
+fn no_color_env_strips_ansi_from_stderr() {
+    // NO_COLOR=1 + 非 TTY stderr：anstream 应该把 ANSI 序列裁干净
+    let assert = bin()
+        .env("NO_COLOR", "1")
+        .args(["--batch", "--dry-run", "--filter=__nonexistent_pkg_xyz__"])
+        .assert()
+        .success();
+    let err = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(
+        !err.contains("\x1b["),
+        "stderr should be ANSI-free under NO_COLOR=1, got:\n{err}"
+    );
+    // 但状态行的文字内容应仍在
+    assert!(err.contains("Checking"), "expected 'Checking' verb in stderr:\n{err}");
+}
+
+#[test]
+fn clicolor_force_keeps_ansi_when_redirected() {
+    // CLICOLOR_FORCE=1：即便 stderr 不是 TTY，也应保留颜色码
+    let assert = bin()
+        .env("CLICOLOR_FORCE", "1")
+        .env_remove("NO_COLOR")
+        .args(["--batch", "--dry-run", "--filter=__nonexistent_pkg_xyz__"])
+        .assert()
+        .success();
+    let err = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(
+        err.contains("\x1b["),
+        "stderr should contain ANSI escapes under CLICOLOR_FORCE=1, got:\n{err}"
+    );
+}
+
+#[test]
 fn non_json_mode_keeps_status_off_stdout() {
     // 非 JSON 模式下，status 行应全部到 stderr；stdout 必须为空
     let assert = bin()

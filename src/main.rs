@@ -42,9 +42,9 @@ async fn main() {
         Err(err) => {
             // anyhow 默认会把整条 chain 打到 stderr，我们额外补一条 "Hint" 行
             // 给出可执行建议（如果 errors::hint_for 能识别这条错误）。
-            // 用 eprintln 而非 status_err 是因为这时 colored 可能受 NO_COLOR 影响，
-            // 让 anyhow 自己控制；hint 用 status_dim 走和 spinner 同一条 stderr 通道。
-            eprintln!("error: {err:?}");
+            // 用 anstream::eprintln 而非 status_err：anstream 已经处理过 NO_COLOR/TTY；
+            // hint 用 status_dim 走和 spinner 同一条 stderr 通道。
+            anstream::eprintln!("error: {err:?}");
             if let Some(hint) = cargo_fresh::errors::hint_for(&err) {
                 if !cargo_fresh::display::is_json_mode() {
                     status_dim("Hint", hint);
@@ -63,6 +63,13 @@ async fn run() -> Result<i32> {
     } else {
         Cli::parse()
     };
+
+    // 颜色决策权交给 anstream：它读取 NO_COLOR / CLICOLOR[_FORCE] / TERM / TTY
+    // 一次得出 ColorChoice，我们把这个决定下发给 colored（让 `.green().bold()` 这套
+    // 生成 ANSI，但是否实际写到终端最终还是 anstream::eprintln! 在每次调用时再裁剪）。
+    // status 全部走 stderr，因此用 stderr 的 choice 校准；JSON 模式独立走 anstream::stdout。
+    let stderr_choice = anstream::AutoStream::choice(&std::io::stderr());
+    colored::control::set_override(stderr_choice != anstream::ColorChoice::Never);
 
     // JSON 模式：禁用所有 status*/print_*/dialoguer 输出，结尾统一打一行 JSON。
     let json_mode = cli.format == OutputFormat::Json;
@@ -191,7 +198,7 @@ async fn run() -> Result<i32> {
 
     if !selections.is_empty() {
         if !json_mode {
-            eprintln!();
+            anstream::eprintln!();
             if cli.dry_run {
                 status("Dry run", language.get_text("dry_run_summary"));
             } else {
@@ -444,10 +451,13 @@ fn emit_report(
 }
 
 fn print_json(report: &JsonReport) {
+    // JSON 报告永远不需要颜色，但仍走 anstream::println! 以保持 stdout 通道一致
     match serde_json::to_string(report) {
-        Ok(s) => println!("{}", s),
+        Ok(s) => anstream::println!("{}", s),
         Err(e) => {
-            eprintln!("{{\"schema_version\":1,\"error\":\"failed to serialize report: {}\"}}", e);
+            anstream::eprintln!(
+                "{{\"schema_version\":1,\"error\":\"failed to serialize report: {}\"}}", e
+            );
         }
     }
 }

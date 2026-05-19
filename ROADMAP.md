@@ -67,11 +67,10 @@ Most of these can land as `1.1.0`, `1.2.0`. Anything in this list that becomes a
 
 The list at this point is mostly nice-to-have; the ones below are still meaningfully open:
 
-1. `concolor` / `anstream` instead of `colored` (color detection is still implicit; stdout/stderr split is already explicit as of post-0.10.1)
-2. `cargo-dist` to replace handwritten release matrix (`crate.yml` + `release.yml`)
-3. `etcetera` / `xdg` for config dir resolution (→ P2-4 prerequisite)
+1. `cargo-dist` to replace handwritten release matrix (`crate.yml` + `release.yml`)
+2. `etcetera` / `xdg` for config dir resolution (→ P2-4 prerequisite)
 
-Items already closed post-0.10.1: stdout/stderr routing (all `status*` go to stderr via `eprintln!`; stdout reserved for JSON), `docs/json-schema.json` (Draft 2020-12 schema for the v1 JSON contract), `cargo fresh man` subcommand (clap_mangen-rendered roff to stdout, mirrors `completion` subcommand), `audit.yml` workflow (cargo-deny + cargo-audit on push/PR/weekly schedule with `deny.toml`).
+Items already closed post-0.10.1: stdout/stderr routing (all `status*` go to stderr via `anstream::eprintln!`; stdout reserved for JSON), `docs/json-schema.json` (Draft 2020-12 schema for the v1 JSON contract), `cargo fresh man` subcommand (clap_mangen-rendered roff to stdout, mirrors `completion` subcommand), `audit.yml` workflow (cargo-deny + cargo-audit on push/PR/weekly schedule with `deny.toml`), `anstream` color pipeline (centralizes `NO_COLOR`/`CLICOLOR_FORCE`/TTY detection; `colored` keeps the ergonomic API, anstream owns the on/off decision).
 
 Items already closed in 0.10.x: `CommandFactory` derive, `is_terminal` non-TTY downgrade, `tokio` feature pruning, `assert_cmd` + integration tests, MSRV in CI.
 

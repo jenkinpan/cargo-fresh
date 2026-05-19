@@ -34,28 +34,28 @@ pub fn status(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(), msg);
+    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(), msg);
 }
 
 pub fn status_warn(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(), msg);
+    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(), msg);
 }
 
 pub fn status_err(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(), msg);
+    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(), msg);
 }
 
 pub fn status_dim(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(), msg);
+    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(), msg);
 }
 
 /// 同 `status`，但把输出送到指定的 ProgressBar（避免与活动进度条冲突）。
@@ -220,8 +220,8 @@ pub fn print_update_summary(update_results: &[UpdateResult], language: Language)
     if is_json_mode() {
         return;
     }
-    eprintln!();
-    eprintln!("{}", language.get_text("update_summary").bold());
+    anstream::eprintln!();
+    anstream::eprintln!("{}", language.get_text("update_summary").bold());
 
     if !success_updates.is_empty() {
         for result in &success_updates {
@@ -261,18 +261,18 @@ pub fn print_update_selection(
     prerelease_updates: &[&PackageInfo],
     language: Language,
 ) -> Result<Vec<usize>, anyhow::Error> {
-    eprintln!();
-    eprintln!("{}", language.get_text("updates_detected").bold());
+    anstream::eprintln!();
+    anstream::eprintln!("{}", language.get_text("updates_detected").bold());
 
     if !stable_updates.is_empty() {
-        eprintln!("{}", language.get_text("stable_updates").dimmed());
+        anstream::eprintln!("{}", language.get_text("stable_updates").dimmed());
         for package in stable_updates {
             status("Updating", &package_transition(package, language));
         }
     }
 
     if !prerelease_updates.is_empty() {
-        eprintln!("{}", language.get_text("prerelease_updates").dimmed());
+        anstream::eprintln!("{}", language.get_text("prerelease_updates").dimmed());
         for package in prerelease_updates {
             status_warn(
                 "Prerelease",
@@ -294,7 +294,7 @@ pub fn print_update_selection(
         }
     }
 
-    eprintln!();
+    anstream::eprintln!();
     let should_update = match Confirm::new()
         .with_prompt(language.get_text("update_question"))
         .default(true)
@@ -353,7 +353,7 @@ pub fn print_update_selection(
         Err(e) => {
             // 如果不是终端环境，默认选择所有包
             if e.to_string().contains("not a terminal") {
-                eprintln!("{}", language.get_text("no_interactive_mode").yellow());
+                anstream::eprintln!("{}", language.get_text("no_interactive_mode").yellow());
                 (0..package_names.len()).collect()
             } else {
                 return Err(e.into());
