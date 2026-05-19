@@ -535,10 +535,10 @@ If you're scripting against cargo-fresh, anchor on exit codes and `--format=json
 | **i18n** | English + Chinese auto-detected via `LANG` | English only |
 | **Dry-run preview** | `--dry-run` prints the exact `cargo install` command per package | `-n`/`--dry-run` lists what would update |
 | **binstall usage** | Opt-in via `--install-binstall`; otherwise hint only | Auto-used when available and config is default |
-| **Install options preserved** | Not yet — `cargo install --force` resets to default features (tracked for before 1.0) | Yes — reads `.crates2.json` for features/profile, plus per-package `cargo-install-update-config` |
+| **Install options preserved** | Yes — features (`--features` / `--no-default-features` / `--all-features`) restored from `.crates2.json` | Yes — `.crates2.json` features/profile, plus per-package `cargo-install-update-config` |
 | **CI ergonomics** | Exit codes 0/1/2/130 + JSON + non-TTY auto-downgrade | Standard exit codes |
 
-cargo-update is more mature. Its main edge today: it preserves the features/profile a package was installed with (via `.crates2.json` and `cargo-install-update-config`), whereas cargo-fresh currently re-installs with default features — closing this gap is tracked for before 1.0. Use whichever fits; both are healthy projects to depend on.
+cargo-update is more mature. Both tools now preserve the features a package was installed with; cargo-update additionally preserves build profile and supports per-package config via `cargo-install-update-config`. Use whichever fits; both are healthy projects to depend on.
 
 ## Contributing
 

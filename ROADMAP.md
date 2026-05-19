@@ -83,6 +83,8 @@ The list at this point is mostly nice-to-have; the ones below are still meaningf
 
 Closed across 0.10.x: `CommandFactory` derive, `is_terminal` non-TTY downgrade, `tokio` feature pruning, `assert_cmd` + integration tests, MSRV in CI, stdout/stderr routing via `anstream::eprintln!`, `docs/json-schema.json`, `cargo fresh man` (clap_mangen), `audit.yml` (cargo-deny + cargo-audit), `anstream` color pipeline (centralizes `NO_COLOR`/`CLICOLOR_FORCE`/TTY detection), strict version parsing in `release.yml`.
 
+✅ Install-option preservation via `.crates2.json` (features only; profile/target deferred) — closes the main cargo-update gap.
+
 ## Open question for 1.x
 
 Whether to keep the `cargo search` fallback long-term. Today it's the safety net for environments where sparse index is blocked. If 1.0 feedback shows nobody depends on it, drop it in `1.1.0` to slim the code path.
