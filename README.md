@@ -142,6 +142,33 @@ cargo fresh --format=json --batch
 # → exit 2 if any update failed, 0 otherwise
 ```
 
+### Output streams
+
+`cargo fresh` follows the standard CLI convention:
+
+- **stdout** — machine-readable output only. With `--format=json`, exactly one JSON object per invocation. With `--format=human` (default), stdout is empty; pipe-safe.
+- **stderr** — all status lines, spinners, prompts, and error messages.
+
+This means `cargo fresh --format=json | jq '.'` works without filtering, and `cargo fresh > /dev/null` still shows progress.
+
+### JSON schema
+
+The full schema is at [`docs/json-schema.json`](docs/json-schema.json) (JSON Schema Draft 2020-12). The `schema_version=1` field shape is the 1.0 contract — within 1.x, fields are only added (never removed or renamed).
+
+```bash
+# List names of packages that have updates available
+cargo fresh --format=json | jq -r '.updates_available[].name'
+
+# Get the count of failed updates after a batch run
+cargo fresh --format=json --batch | jq '.summary.failed'
+
+# Show every git-sourced update candidate
+cargo fresh --format=json | jq '.updates_available[] | select(.source == "git")'
+
+# Detect a Ctrl-C abort
+cargo fresh --format=json --batch | jq '.aborted'
+```
+
 ### Examples
 
 ```bash

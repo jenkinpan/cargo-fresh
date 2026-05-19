@@ -64,3 +64,41 @@ fn completion_fish_emits_script() {
     let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
     assert!(out.contains("complete -c"), "fish completion looks empty:\n{out}");
 }
+
+#[test]
+fn json_mode_keeps_stdout_clean() {
+    // --format=json 的合约：stdout 只有一行可解析的 JSON；状态行/进度全部走 stderr
+    let assert = bin()
+        .args(["--batch", "--dry-run", "--format=json", "--filter=__nonexistent_pkg_xyz__"])
+        .assert()
+        .success();
+    let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    let trimmed = out.trim();
+    assert!(
+        trimmed.starts_with('{') && trimmed.ends_with('}'),
+        "stdout should be a single JSON object, got:\n{out}"
+    );
+    assert!(
+        trimmed.lines().count() == 1,
+        "stdout should be exactly one line of JSON, got {} lines:\n{out}",
+        trimmed.lines().count()
+    );
+    assert!(
+        trimmed.contains("\"schema_version\":1"),
+        "JSON missing schema_version=1:\n{out}"
+    );
+}
+
+#[test]
+fn non_json_mode_keeps_status_off_stdout() {
+    // 非 JSON 模式下，status 行应全部到 stderr；stdout 必须为空
+    let assert = bin()
+        .args(["--batch", "--dry-run", "--filter=__nonexistent_pkg_xyz__"])
+        .assert()
+        .success();
+    let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert!(
+        out.trim().is_empty(),
+        "stdout should be empty in non-JSON mode, got:\n{out}"
+    );
+}

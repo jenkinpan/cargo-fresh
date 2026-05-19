@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jenkinpan/cargo-fresh/blob/master/docs/json-schema.json",
+  "title": "cargo-fresh JSON report",
+  "description": "Schema for the single JSON object emitted to stdout when cargo-fresh runs with --format=json. Stability: schema_version=1 is the 1.0 contract — within 1.x, fields are only added (never removed or renamed). Status lines, prompts, and progress all go to stderr; stdout contains exactly one JSON object per invocation.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "format",
+    "include_prerelease",
+    "dry_run",
+    "registry_url",
+    "updates_available",
+    "fresh",
+    "skipped",
+    "results",
+    "summary",
+    "aborted"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema major version. Bumps only on a breaking change; 1.x is additive-only."
+    },
+    "format": {
+      "type": "string",
+      "const": "cargo-fresh-v1",
+      "description": "Format discriminator. Lets downstream scripts pin a known shape without parsing semver."
+    },
+    "include_prerelease": {
+      "type": "boolean",
+      "description": "Whether --include-prerelease was active for this run."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "Whether --dry-run was active. If true, `results` reflects what would have happened, not what did."
+    },
+    "registry_url": {
+      "type": ["string", "null"],
+      "description": "Resolved sparse-index base URL used for the run, or null when the default (https://index.crates.io) was used."
+    },
+    "updates_available": {
+      "type": "array",
+      "description": "Every package with at least one update candidate found, regardless of whether it was selected for install.",
+      "items": { "$ref": "#/$defs/updateCandidate" }
+    },
+    "fresh": {
+      "type": "array",
+      "description": "Names of packages already at their latest applicable version.",
+      "items": { "type": "string" }
+    },
+    "skipped": {
+      "type": "array",
+      "description": "Packages whose version check was skipped (non-crates source or unknown registry).",
+      "items": { "$ref": "#/$defs/skipped" }
+    },
+    "results": {
+      "type": "array",
+      "description": "Outcomes of actual `cargo install` invocations. Empty when no updates were applied (e.g. dry-run still records each attempt; --no-interactive with no selection yields an empty array).",
+      "items": { "$ref": "#/$defs/result" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "aborted": {
+      "type": "boolean",
+      "description": "True when the run was interrupted (Ctrl-C / SIGINT). Combine with exit code 130 to detect partial runs."
+    }
+  },
+  "$defs": {
+    "updateCandidate": {
+      "type": "object",
+      "required": ["name", "current", "latest", "source", "prerelease"],
+      "properties": {
+        "name": { "type": "string" },
+        "current": {
+          "type": ["string", "null"],
+          "description": "Installed version, or null if `cargo install --list` did not report one."
+        },
+        "latest": {
+          "type": "string",
+          "description": "Latest applicable version (respects --include-prerelease)."
+        },
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "prerelease": {
+          "type": "boolean",
+          "description": "True when `latest` is a SemVer prerelease (only possible with --include-prerelease)."
+        }
+      }
+    },
+    "skipped": {
+      "type": "object",
+      "required": ["name", "source", "reason"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "reason": {
+          "type": "string",
+          "description": "Human-readable reason. Stable enough to log; not stable enough to branch on — match on `source` instead."
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["name", "old_version", "new_version", "success"],
+      "properties": {
+        "name": { "type": "string" },
+        "old_version": { "type": ["string", "null"] },
+        "new_version": {
+          "type": ["string", "null"],
+          "description": "Version observed after the install attempt. May equal `old_version` if the update ran but the binary didn't actually change."
+        },
+        "success": { "type": "boolean" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["checked", "available", "succeeded", "failed", "skipped", "duration_ms"],
+      "properties": {
+        "checked": { "type": "integer", "minimum": 0 },
+        "available": { "type": "integer", "minimum": 0 },
+        "succeeded": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total wall-clock time from start of run to JSON emission."
+        }
+      }
+    },
+    "sourceKind": {
+      "type": "string",
+      "enum": ["crates", "git", "path", "unknown"],
+      "description": "Short tag derived from PackageSource. `crates` = crates.io / mirror, `git` = git+URL[#rev], `path` = local path, `unknown` = a registry cargo-fresh doesn't speak."
+    }
+  }
+}

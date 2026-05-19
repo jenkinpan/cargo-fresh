@@ -187,7 +187,7 @@ async fn run() -> Result<i32> {
 
     if !selections.is_empty() {
         if !json_mode {
-            println!();
+            eprintln!();
             if cli.dry_run {
                 status("Dry run", language.get_text("dry_run_summary"));
             } else {
