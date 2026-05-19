@@ -1,6 +1,6 @@
 # ROADMAP
 
-**Current**: 0.10.1 shipped. Both P0 (1.0 blockers) and P1 (1.0.0-rc.1 prereqs) are done. We're in the **1.0 feedback window** (until **2026-06-30**) — see pinned issue [#3](https://github.com/jenkinpan/cargo-fresh/issues/3).
+**Current**: 0.10.2 shipped. P0 (1.0 blockers) + P1 (1.0.0-rc.1 prereqs) + P1-ext (1.0 contract polish) all done. We're in the **1.0 feedback window** (until **2026-06-30**) — see pinned issue [#3](https://github.com/jenkinpan/cargo-fresh/issues/3).
 
 This file is the durable plan. CLAUDE.md tracks the high-level status; CHANGELOG.md tracks what shipped and when.
 
@@ -30,6 +30,17 @@ This file is the durable plan. CLAUDE.md tracks the high-level status; CHANGELOG
 | P1-9 | Integration tests | `tests/cli.rs` (`assert_cmd`), `tests/sparse_index_http.rs` (`wiremock`); `src/lib.rs` exposes module tree |
 | P1-10 | thiserror + actionable hints | `CargoFreshError::CargoListFailed` + `reqwest::Error` chain match in `errors::hint_for` |
 | P1-11 | 1.0 doc suite | ISSUE/PR/CONTRIBUTING/SECURITY, README Stability + comparison |
+
+## ✅ P1-ext — 1.0 contract polish (shipped in 0.10.2)
+
+| # | Item | Note |
+|---|------|------|
+| P1e-1 | Explicit stdout / stderr split | `status*` 全部走 `anstream::eprintln!` → stderr；`--format=json` 报告独占 stdout 一行；两条回归测试 (`json_mode_keeps_stdout_clean` / `non_json_mode_keeps_status_off_stdout`) 钉合约 |
+| P1e-2 | `docs/json-schema.json` | JSON Schema Draft 2020-12 描述 `schema_version=1` 字段形状；README 加 jq 用例 |
+| P1e-3 | `cargo fresh man` | `clap_mangen` 把 `Cli::command()` 渲染成 roff 到 stdout，镜像 `completion` 子命令；`man_subcommand_emits_roff` 测试覆盖 |
+| P1e-4 | Color detection via `anstream` | `NO_COLOR` / `CLICOLOR_FORCE` / `TERM=dumb` / TTY 检测集中到一处；`colored` 仍提供 `.green().bold()` 人体工学 API，是否真的输出 ANSI 由 anstream 决定。两条回归测试覆盖 |
+| P1e-5 | `audit.yml` CI workflow | `cargo-deny check advisories licenses sources bans` + `cargo-audit`；push/PR + 每周一 06:00 UTC cron；`deny.toml` allowlist 基于 `cargo license` 实盘点 |
+| P1e-6 | `release.yml` 版本解析硬失败 | 之前 `workflow_run.head_branch` 解析漏洞会 fall back 到默认 `0.1.0`，污染 ghost release。新逻辑：解析失败 `::error::` + exit 1，绝不带默认值继续 |
 
 ## 🔄 Now — 1.0 feedback window
 
@@ -70,9 +81,7 @@ The list at this point is mostly nice-to-have; the ones below are still meaningf
 1. `cargo-dist` to replace handwritten release matrix (`crate.yml` + `release.yml`)
 2. `etcetera` / `xdg` for config dir resolution (→ P2-4 prerequisite)
 
-Items already closed post-0.10.1: stdout/stderr routing (all `status*` go to stderr via `anstream::eprintln!`; stdout reserved for JSON), `docs/json-schema.json` (Draft 2020-12 schema for the v1 JSON contract), `cargo fresh man` subcommand (clap_mangen-rendered roff to stdout, mirrors `completion` subcommand), `audit.yml` workflow (cargo-deny + cargo-audit on push/PR/weekly schedule with `deny.toml`), `anstream` color pipeline (centralizes `NO_COLOR`/`CLICOLOR_FORCE`/TTY detection; `colored` keeps the ergonomic API, anstream owns the on/off decision).
-
-Items already closed in 0.10.x: `CommandFactory` derive, `is_terminal` non-TTY downgrade, `tokio` feature pruning, `assert_cmd` + integration tests, MSRV in CI.
+Closed across 0.10.x: `CommandFactory` derive, `is_terminal` non-TTY downgrade, `tokio` feature pruning, `assert_cmd` + integration tests, MSRV in CI, stdout/stderr routing via `anstream::eprintln!`, `docs/json-schema.json`, `cargo fresh man` (clap_mangen), `audit.yml` (cargo-deny + cargo-audit), `anstream` color pipeline (centralizes `NO_COLOR`/`CLICOLOR_FORCE`/TTY detection), strict version parsing in `release.yml`.
 
 ## Open question for 1.x
 
