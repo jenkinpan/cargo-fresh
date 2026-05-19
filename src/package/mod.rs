@@ -16,6 +16,7 @@ use crate::errors::CargoFreshError;
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
 
+pub mod crates2;
 pub mod registry;
 pub mod sparse_index;
 
