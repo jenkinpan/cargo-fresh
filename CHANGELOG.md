@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### BEHAVIOR
+
+- **带非默认 features 的包跳过 binstall**: 一个包若以 `--features` / `--no-default-features` / `--all-features` 安装,更新时直接走 `cargo install`(binstall 下的是上游预编译二进制,无法应用任意 features)。无自定义 features 的包行为不变,仍优先 binstall
+
+### Added
+
+- **`.crates2.json` 安装选项保留**: 新增 `src/package/crates2.rs`,从 `$CARGO_HOME/.crates2.json` 解析每个包安装时的 features 选项,更新时透传给 `cargo install`。尽力而为——文件缺失/损坏/无匹配条目一律静默回退默认行为,绝不让它成为更新失败的原因
+
+### Fixed
+
+- **更新不再静默丢 features**: 之前 `cargo install --force <name>` 不带任何 `--features`,把以自定义特性安装的包(如 `ripgrep --features pcre2`)悄悄退回默认特性。现在从 `.crates2.json` 还原并保留 `--features` / `--no-default-features` / `--all-features`
+
+### Docs
+
+- **README 对比表纠偏**: 之前对 cargo-update 的描述有三处与事实不符——它支持 git 包(非 "Crates only")、包选择是精确名/`--all`(非 "Substring match")、binstall 可用时会自动启用(非 "N/A")。新表如实陈述,并新增 "Install options preserved" 一行坦白 cargo-fresh 目前会把 `--features` 重置为默认(1.0 前修复)
+
 ## [0.10.2] - 2026-05-19
 
 打磨型小版本，全是为 1.0 合约清理边角。无 BREAKING、无 BEHAVIOR——可放心从 0.10.1 升级。

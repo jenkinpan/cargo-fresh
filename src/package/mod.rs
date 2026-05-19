@@ -16,6 +16,7 @@ use crate::errors::CargoFreshError;
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
 
+pub mod crates2;
 pub mod registry;
 pub mod sparse_index;
 
@@ -172,6 +173,13 @@ pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
                 ));
             }
         }
+    }
+
+    // 尽力而为地附上每个包安装时的 features 选项（.crates2.json）。
+    // 读不到 / 解析失败 → install_opts 保持 None，走默认行为。
+    let install_opts_map = crates2::load_install_opts();
+    for pkg in &mut packages {
+        pkg.install_opts = crates2::match_install_opts(&install_opts_map, &pkg.name, &pkg.source);
     }
 
     // 缓存版本表，供 get_installed_version 复用，避免每次升级后 N+1 次 `cargo install --list`
@@ -888,6 +896,7 @@ mod tests {
             current_version: Some(current.to_string()),
             latest_version: Some(latest.to_string()),
             source: PackageSource::Crates,
+            install_opts: None,
         }
     }
 

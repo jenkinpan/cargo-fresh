@@ -527,17 +527,18 @@ If you're scripting against cargo-fresh, anchor on exit codes and `--format=json
 | | cargo-fresh | cargo-update |
 |---|---|---|
 | **Version source** | crates.io sparse index (HTTP, ~50–100ms/pkg, 16-way concurrent) | `cargo search` subprocess per package |
-| **Source-aware updates** | Crates / `git+URL` / `path+DIR` each get the right install command | Crates only |
-| **Glob filtering** | `--filter "tokio*"` + `--exclude "*-test"` (globset) | Substring match |
-| **Prerelease handling** | Explicit `--include-prerelease`; semver `.pre` check, not string `"rc"` | Limited |
+| **Source-aware updates** | Crates / `git+URL` / `path+DIR` each get the right install command | Registry + git; no `path` source |
+| **Package selection** | `--filter "tokio*"` + `--exclude "*-test"` (globset glob) | Exact package names or `--all` (no glob/substring) |
+| **Prerelease handling** | Explicit `--include-prerelease`; semver `.pre` check, not string `"rc"` | Per-package opt-in via `cargo-install-update-config` |
 | **Output style** | Cargo-aesthetic 12-char verb prefixes; no emoji | Plain text |
 | **JSON mode** | `--format=json` with versioned `schema_version=1` schema | None |
 | **i18n** | English + Chinese auto-detected via `LANG` | English only |
-| **Dry-run preview** | `--dry-run` prints the exact `cargo install` command per package | Limited |
-| **binstall policy** | Opt-in via `--install-binstall`; otherwise hint only | N/A |
-| **CI ergonomics** | Exit codes 0/1/2/130 + JSON + non-TTY auto-downgrade | Limited |
+| **Dry-run preview** | `--dry-run` prints the exact `cargo install` command per package | `-n`/`--dry-run` lists what would update |
+| **binstall usage** | Opt-in via `--install-binstall`; otherwise hint only | Auto-used when available and config is default |
+| **Install options preserved** | Yes — features (`--features` / `--no-default-features` / `--all-features`) restored from `.crates2.json` | Yes — `.crates2.json` features/profile, plus per-package `cargo-install-update-config` |
+| **CI ergonomics** | Exit codes 0/1/2/130 + JSON + non-TTY auto-downgrade | Standard exit codes |
 
-cargo-update is more mature and has features cargo-fresh doesn't (yet) — notably installing packages by listing them in a config file. Use whichever fits; both are healthy projects to depend on.
+cargo-update is more mature. Both tools now preserve the features a package was installed with; cargo-update additionally preserves build profile and supports per-package config via `cargo-install-update-config`. Use whichever fits; both are healthy projects to depend on.
 
 ## Contributing
 

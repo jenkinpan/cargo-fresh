@@ -7,8 +7,8 @@ use tokio::process::Command;
 use crate::display::{pb_status, pb_status_dim, pb_status_err, pb_status_warn, status, status_dim};
 use crate::locale::detection::detect_language;
 use crate::models::{
-    PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_TICK_MS, RETRY_DELAY_MS,
-    VERSION_UPDATE_DELAY_MS,
+    InstallOpts, PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_TICK_MS,
+    RETRY_DELAY_MS, VERSION_UPDATE_DELAY_MS,
 };
 use crate::package::{
     ensure_binstall_available, get_installed_version, invalidate_installed_version,
@@ -86,48 +86,78 @@ impl Drop for SlowGuard {
     }
 }
 
-/// 根据来源类型构造 cargo 子命令参数。
+/// 根据来源类型构造 cargo 子命令参数，并追加 features 相关 flags。
 ///
 /// - `Crates`：`install`/`binstall --force <pkg> [--version V]`
 /// - `Git`：`install --git URL [--rev REV] --force <pkg>`（binstall 不支持 git，强制 install）
 /// - `Path`：`install --path DIR --force <pkg>`
-fn build_args<'a>(
+/// - `opts`：如果提供且非默认，则在基础参数后追加 `--no-default-features` / `--all-features` / `--features a,b`
+fn build_args(
     use_binstall: bool,
-    package_name: &'a str,
-    version: Option<&'a str>,
-    source: &'a PackageSource,
-) -> Vec<&'a str> {
-    match source {
+    package_name: &str,
+    version: Option<&str>,
+    source: &PackageSource,
+    opts: Option<&InstallOpts>,
+) -> Vec<String> {
+    let mut args: Vec<String> = match source {
         PackageSource::Crates => {
             let subcmd = if use_binstall { "binstall" } else { "install" };
             match version {
-                Some(v) => vec![subcmd, "--force", package_name, "--version", v],
-                None => vec![subcmd, "--force", package_name],
+                Some(v) => vec![
+                    subcmd.into(),
+                    "--force".into(),
+                    package_name.into(),
+                    "--version".into(),
+                    v.into(),
+                ],
+                None => vec![subcmd.into(), "--force".into(), package_name.into()],
             }
         }
         PackageSource::Git { url, rev } => {
-            let mut args = vec!["install", "--git", url.as_str()];
+            let mut a: Vec<String> =
+                vec!["install".into(), "--git".into(), url.clone()];
             if let Some(r) = rev {
-                args.push("--rev");
-                args.push(r.as_str());
+                a.push("--rev".into());
+                a.push(r.clone());
             }
-            args.push("--force");
-            args.push(package_name);
-            args
+            a.push("--force".into());
+            a.push(package_name.into());
+            a
         }
-        PackageSource::Path { dir } => {
-            vec!["install", "--path", dir.as_str(), "--force", package_name]
+        PackageSource::Path { dir } => vec![
+            "install".into(),
+            "--path".into(),
+            dir.clone(),
+            "--force".into(),
+            package_name.into(),
+        ],
+        // Unknown 来源不应到这一步——check_package_updates 会跳过它。
+        // 万一到了，给个明显错的命令让上层报错而不是默默 cargo install。
+        PackageSource::Unknown(raw) => vec![
+            "install".into(),
+            "--unknown-source-marker".into(),
+            raw.clone(),
+            package_name.into(),
+        ],
+    };
+
+    // 追加 features 选项（Unknown 源不追加——它本就要让上层报错）。
+    if let (Some(o), false) = (opts, matches!(source, PackageSource::Unknown(_))) {
+        if o.no_default_features {
+            args.push("--no-default-features".into());
         }
-        // Unknown 来源不应该到这一步——check_package_updates 会跳过它，
-        // main 也不会把它放进可升级列表。万一到了，给个明显错的命令
-        // 让上层报错而不是默默走 cargo install。
-        PackageSource::Unknown(raw) => {
-            vec!["install", "--unknown-source-marker", raw.as_str(), package_name]
+        if o.all_features {
+            args.push("--all-features".into());
+        }
+        if !o.features.is_empty() {
+            args.push("--features".into());
+            args.push(o.features.join(","));
         }
     }
+    args
 }
 
-async fn run_cargo(pb: &ProgressBar, args: &[&str]) -> Result<Output> {
+async fn run_cargo(pb: &ProgressBar, args: &[String]) -> Result<Output> {
     pb_status_dim(pb, "Running", &format!("cargo {}", args.join(" ")));
     pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
     let output = Command::new("cargo")
@@ -235,8 +265,10 @@ pub async fn update_package(
     package_name: &str,
     target_version: Option<&str>,
     source: &PackageSource,
+    install_opts: Option<&InstallOpts>,
     dry_run: bool,
     install_binstall: bool,
+    verbose: bool,
 ) -> Result<UpdateResult> {
     let language = detect_language();
     let old_version = get_installed_version(package_name).await.ok().flatten();
@@ -247,28 +279,43 @@ pub async fn update_package(
     // - Crates 源 binstall 不可用、且用户未开启 install_binstall：打 Hint，
     //   走 `cargo install` 路径，不触发任何安装副作用
     // - Git / Path 源不走 binstall（binstall 仅支持 crates.io）
+    // 包带非默认 features 时不能走 binstall——binstall 下的是上游预编译
+    // 二进制，无法应用任意 --features。此时强制走 cargo install。
+    let opts_allow_binstall = install_opts.is_none_or(|o| o.is_default());
     let use_binstall = match source {
         PackageSource::Crates => {
-            if is_binstall_available() {
+            if is_binstall_available() && opts_allow_binstall {
                 true
-            } else if install_binstall && !dry_run {
+            } else if install_binstall && !dry_run && opts_allow_binstall {
                 ensure_binstall_available().await.unwrap_or(false)
             } else {
-                // 静默地提示一次，给 CI/审计场景留个线索而不打扰主输出
-                status_dim(
-                    "Hint",
-                    language.get_text("binstall_hint"),
-                );
+                if opts_allow_binstall {
+                    // binstall 本身不可用——给 CI/审计场景留个线索
+                    status_dim("Hint", language.get_text("binstall_hint"));
+                } else if verbose {
+                    // 包带非默认 features，走 cargo install 才能生效
+                    status_dim(
+                        "Check",
+                        &format!("{package_name}: custom features, skipping binstall"),
+                    );
+                }
                 false
             }
         }
         _ => false,
     };
 
-    let primary_args = build_args(use_binstall, package_name, target_version, source);
+    if verbose && install_opts.is_none() && matches!(source, PackageSource::Crates) {
+        status_dim(
+            "Check",
+            &format!("{package_name} no install metadata, using default features"),
+        );
+    }
+    let primary_args =
+        build_args(use_binstall, package_name, target_version, source, install_opts);
     // 只有 Crates 源走 binstall 时才有 install 回退
     let fallback_args = if use_binstall {
-        Some(build_args(false, package_name, target_version, source))
+        Some(build_args(false, package_name, target_version, source, install_opts))
     } else {
         None
     };
@@ -399,4 +446,118 @@ pub async fn update_package(
         None,
         false,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_args;
+    use crate::models::{InstallOpts, PackageSource};
+
+    fn s(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn crates_default_opts_no_extra_flags() {
+        let got = build_args(false, "ripgrep", Some("14.1.1"), &PackageSource::Crates, None);
+        assert_eq!(
+            got,
+            s(&["install", "--force", "ripgrep", "--version", "14.1.1"])
+        );
+    }
+
+    #[test]
+    fn crates_with_features() {
+        let opts = InstallOpts {
+            no_default_features: false,
+            all_features: false,
+            features: vec!["pcre2".into(), "simd".into()],
+        };
+        let got = build_args(false, "ripgrep", None, &PackageSource::Crates, Some(&opts));
+        assert_eq!(
+            got,
+            s(&["install", "--force", "ripgrep", "--features", "pcre2,simd"])
+        );
+    }
+
+    #[test]
+    fn crates_no_default_and_all_features() {
+        let opts = InstallOpts {
+            no_default_features: true,
+            all_features: true,
+            features: vec![],
+        };
+        let got = build_args(false, "x", None, &PackageSource::Crates, Some(&opts));
+        assert_eq!(
+            got,
+            s(&[
+                "install",
+                "--force",
+                "x",
+                "--no-default-features",
+                "--all-features"
+            ])
+        );
+    }
+
+    #[test]
+    fn git_source_with_features() {
+        let opts = InstallOpts {
+            no_default_features: false,
+            all_features: false,
+            features: vec!["a".into()],
+        };
+        let src = PackageSource::Git {
+            url: "https://github.com/x/y".into(),
+            rev: Some("abc".into()),
+        };
+        let got = build_args(false, "y", None, &src, Some(&opts));
+        assert_eq!(
+            got,
+            s(&[
+                "install", "--git", "https://github.com/x/y", "--rev", "abc",
+                "--force", "y", "--features", "a"
+            ])
+        );
+    }
+
+    #[test]
+    fn path_source_with_no_default_features() {
+        let opts = InstallOpts {
+            no_default_features: true,
+            all_features: false,
+            features: vec![],
+        };
+        let src = PackageSource::Path { dir: "/tmp/p".into() };
+        let got = build_args(false, "p", None, &src, Some(&opts));
+        assert_eq!(
+            got,
+            s(&[
+                "install", "--path", "/tmp/p", "--force", "p",
+                "--no-default-features"
+            ])
+        );
+    }
+
+    #[test]
+    fn default_opts_some_but_empty_adds_nothing() {
+        let opts = InstallOpts::default();
+        let got = build_args(true, "tool", None, &PackageSource::Crates, Some(&opts));
+        assert_eq!(got, s(&["binstall", "--force", "tool"]));
+    }
+
+    #[test]
+    fn unknown_source_ignores_opts() {
+        let opts = InstallOpts {
+            no_default_features: true,
+            all_features: true,
+            features: vec!["x".into()],
+        };
+        let src = PackageSource::Unknown("custom-reg".into());
+        let got = build_args(false, "tool", None, &src, Some(&opts));
+        assert_eq!(
+            got,
+            s(&["install", "--unknown-source-marker", "custom-reg", "tool"])
+        );
+    }
 }
