@@ -51,12 +51,31 @@ impl PackageSource {
     }
 }
 
+/// 一个包安装时使用的 Cargo 特性选项，从 `$CARGO_HOME/.crates2.json` 解析而来。
+///
+/// 只建模 features 三项；profile/target/rustc 刻意不保留（见 spec）。
+/// `None`（在 `PackageInfo.install_opts` 上）表示没读到元数据，走默认行为。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InstallOpts {
+    pub no_default_features: bool,
+    pub all_features: bool,
+    pub features: Vec<String>,
+}
+
+impl InstallOpts {
+    /// 全默认安装——可安全走 binstall，无需追加任何 cargo flag。
+    pub fn is_default(&self) -> bool {
+        !self.no_default_features && !self.all_features && self.features.is_empty()
+    }
+}
+
 #[derive(Debug)]
 pub struct PackageInfo {
     pub name: String,
     pub current_version: Option<String>,
     pub latest_version: Option<String>,
     pub source: PackageSource,
+    pub install_opts: Option<InstallOpts>,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +103,7 @@ impl PackageInfo {
             current_version,
             latest_version: None,
             source,
+            install_opts: None,
         }
     }
 
@@ -200,5 +220,52 @@ impl UpdateResult {
             new_version,
             success,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn install_opts_default_is_default() {
+        let o = InstallOpts::default();
+        assert!(o.is_default());
+    }
+
+    #[test]
+    fn install_opts_with_features_is_not_default() {
+        let o = InstallOpts {
+            no_default_features: false,
+            all_features: false,
+            features: vec!["pcre2".to_string()],
+        };
+        assert!(!o.is_default());
+    }
+
+    #[test]
+    fn install_opts_no_default_features_is_not_default() {
+        let o = InstallOpts {
+            no_default_features: true,
+            all_features: false,
+            features: vec![],
+        };
+        assert!(!o.is_default());
+    }
+
+    #[test]
+    fn install_opts_all_features_is_not_default() {
+        let o = InstallOpts {
+            no_default_features: false,
+            all_features: true,
+            features: vec![],
+        };
+        assert!(!o.is_default());
+    }
+
+    #[test]
+    fn package_info_install_opts_defaults_none() {
+        let p = PackageInfo::new("ripgrep".to_string(), Some("14.0.0".to_string()));
+        assert!(p.install_opts.is_none());
     }
 }

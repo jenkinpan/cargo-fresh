@@ -888,6 +888,7 @@ mod tests {
             current_version: Some(current.to_string()),
             latest_version: Some(latest.to_string()),
             source: PackageSource::Crates,
+            install_opts: None,
         }
     }
 
