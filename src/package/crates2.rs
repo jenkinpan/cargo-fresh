@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::models::InstallOpts;
+use crate::models::{InstallOpts, PackageSource};
 
 /// 解析 `.crates2.json` 文本，返回 `key -> InstallOpts`。
 ///
@@ -65,6 +65,43 @@ pub fn load_install_opts() -> HashMap<String, InstallOpts> {
         Err(_) => return HashMap::new(),
     };
     parse_crates2(&body)
+}
+
+/// 从已解析的 `.crates2.json` map 里挑出 `name` 对应的安装选项。
+///
+/// key 形如 `"<name> <version> (<source>)"`。按 name 匹配（key 第一个空格前的
+/// 子串）。同名多条时，优先 `(<source>)` 前缀与 `PackageSource` 一致的那条：
+/// `registry+` ↔ Crates，`git+` ↔ Git，`path+` ↔ Path。仍无法区分则取首个。
+/// 返回 `InstallOpts` 的克隆（调用方需要 owned 值挂到 PackageInfo 上）。
+pub fn match_install_opts(
+    map: &HashMap<String, InstallOpts>,
+    name: &str,
+    source: &PackageSource,
+) -> Option<InstallOpts> {
+    let candidates: Vec<(&String, &InstallOpts)> = map
+        .iter()
+        .filter(|(k, _)| k.split(' ').next() == Some(name))
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+    let want_prefix = match source {
+        PackageSource::Crates => "registry+",
+        PackageSource::Git { .. } => "git+",
+        PackageSource::Path { .. } => "path+",
+        PackageSource::Unknown(_) => "",
+    };
+    if !want_prefix.is_empty() {
+        if let Some((_, opts)) = candidates.iter().find(|(k, _)| {
+            k.find('(')
+                .and_then(|i| k.get(i + 1..))
+                .map(|s| s.starts_with(want_prefix))
+                .unwrap_or(false)
+        }) {
+            return Some((*opts).clone());
+        }
+    }
+    Some(candidates[0].1.clone())
 }
 
 #[cfg(test)]
@@ -145,5 +182,41 @@ mod tests {
         );
         let o = m.get("x 1.0.0 (registry+https://example)").unwrap();
         assert!(o.is_default());
+    }
+
+    #[test]
+    fn match_by_name_simple() {
+        let m = parse_crates2(SAMPLE);
+        let o = match_install_opts(&m, "ripgrep", &PackageSource::Crates).unwrap();
+        assert_eq!(o.features, vec!["pcre2".to_string()]);
+    }
+
+    #[test]
+    fn match_no_entry_returns_none() {
+        let m = parse_crates2(SAMPLE);
+        assert!(match_install_opts(&m, "does-not-exist", &PackageSource::Crates).is_none());
+    }
+
+    #[test]
+    fn match_prefers_source_consistent_entry() {
+        let json = r#"{"installs":{
+          "dup 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)": {"features":["reg"]},
+          "dup 0.9.0 (git+https://github.com/x/dup#abc)": {"features":["git"]}
+        }}"#;
+        let m = parse_crates2(json);
+        assert_eq!(
+            match_install_opts(&m, "dup", &PackageSource::Crates).unwrap().features,
+            vec!["reg".to_string()]
+        );
+        assert_eq!(
+            match_install_opts(
+                &m,
+                "dup",
+                &PackageSource::Git { url: "https://github.com/x/dup".into(), rev: None }
+            )
+            .unwrap()
+            .features,
+            vec!["git".to_string()]
+        );
     }
 }

@@ -175,6 +175,13 @@ pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
         }
     }
 
+    // 尽力而为地附上每个包安装时的 features 选项（.crates2.json）。
+    // 读不到 / 解析失败 → install_opts 保持 None，走默认行为。
+    let install_opts_map = crates2::load_install_opts();
+    for pkg in &mut packages {
+        pkg.install_opts = crates2::match_install_opts(&install_opts_map, &pkg.name, &pkg.source);
+    }
+
     // 缓存版本表，供 get_installed_version 复用，避免每次升级后 N+1 次 `cargo install --list`
     //
     // 用 get_or_init + lock/clear/extend 而不是 OnceLock::set——后者在第二次调用
