@@ -53,7 +53,7 @@ or
 cargo binstall cargo-fresh
 ```
 
-**Note**: `cargo binstall` provides faster installation by downloading pre-compiled binaries instead of compiling from source. If you don't have `cargo binstall` installed, cargo-fresh will automatically install it for you when needed.
+**Note**: `cargo binstall` provides faster installation by downloading pre-compiled binaries instead of compiling from source. If `cargo binstall` is not installed, cargo-fresh prints a hint and falls back to `cargo install` — it does **not** modify your toolchain by default. Pass `--install-binstall` to have it auto-install `cargo binstall` when needed.
 
 ### Install from source
 

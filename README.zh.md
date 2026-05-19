@@ -54,7 +54,7 @@ or
 cargo binstall cargo-fresh
 ```
 
-**注意**: `cargo binstall` 通过下载预编译的二进制文件而不是从源码编译来提供更快的安装速度。如果您没有安装 `cargo binstall`，cargo-fresh 会在需要时自动为您安装。
+**注意**: `cargo binstall` 通过下载预编译的二进制文件而不是从源码编译来提供更快的安装速度。如果未安装 `cargo binstall`，cargo-fresh 会打印一行提示并回退到 `cargo install`——默认**不会**改动你的工具链。加 `--install-binstall` 可让它在需要时自动安装 `cargo binstall`。
 
 ### 从源码安装
 
