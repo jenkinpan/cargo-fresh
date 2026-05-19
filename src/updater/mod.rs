@@ -265,8 +265,10 @@ pub async fn update_package(
     package_name: &str,
     target_version: Option<&str>,
     source: &PackageSource,
+    install_opts: Option<&InstallOpts>,
     dry_run: bool,
     install_binstall: bool,
+    verbose: bool,
 ) -> Result<UpdateResult> {
     let language = detect_language();
     let old_version = get_installed_version(package_name).await.ok().flatten();
@@ -277,29 +279,43 @@ pub async fn update_package(
     // - Crates 源 binstall 不可用、且用户未开启 install_binstall：打 Hint，
     //   走 `cargo install` 路径，不触发任何安装副作用
     // - Git / Path 源不走 binstall（binstall 仅支持 crates.io）
+    // 包带非默认 features 时不能走 binstall——binstall 下的是上游预编译
+    // 二进制，无法应用任意 --features。此时强制走 cargo install。
+    let opts_allow_binstall = install_opts.is_none_or(|o| o.is_default());
     let use_binstall = match source {
         PackageSource::Crates => {
-            if is_binstall_available() {
+            if is_binstall_available() && opts_allow_binstall {
                 true
-            } else if install_binstall && !dry_run {
+            } else if install_binstall && !dry_run && opts_allow_binstall {
                 ensure_binstall_available().await.unwrap_or(false)
             } else {
-                // 静默地提示一次，给 CI/审计场景留个线索而不打扰主输出
-                status_dim(
-                    "Hint",
-                    language.get_text("binstall_hint"),
-                );
+                if opts_allow_binstall {
+                    // binstall 本身不可用——给 CI/审计场景留个线索
+                    status_dim("Hint", language.get_text("binstall_hint"));
+                } else if verbose {
+                    // 包带非默认 features，走 cargo install 才能生效
+                    status_dim(
+                        "Check",
+                        &format!("{package_name} has custom features, using cargo install"),
+                    );
+                }
                 false
             }
         }
         _ => false,
     };
 
-    // Task 6 将把这里的 None 换成真实 install_opts；本任务先用 None 保持可独立编译
-    let primary_args = build_args(use_binstall, package_name, target_version, source, None);
+    if verbose && install_opts.is_none() {
+        status_dim(
+            "Check",
+            &format!("{package_name} no install metadata, using default features"),
+        );
+    }
+    let primary_args =
+        build_args(use_binstall, package_name, target_version, source, install_opts);
     // 只有 Crates 源走 binstall 时才有 install 回退
     let fallback_args = if use_binstall {
-        Some(build_args(false, package_name, target_version, source, None))
+        Some(build_args(false, package_name, target_version, source, install_opts))
     } else {
         None
     };
