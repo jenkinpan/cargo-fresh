@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-05-19
+
+打磨型小版本，全是为 1.0 合约清理边角。无 BREAKING、无 BEHAVIOR——可放心从 0.10.1 升级。
+
+### Added
+
+- **stdout / stderr 分流明确化**: 所有 `status*` / 进度条 / prompt 经 `anstream::eprintln!` 走 stderr；`--format=json` 的报告独占 stdout 一行。下游 `cargo fresh --format=json | jq` 不再需要任何过滤，`cargo fresh > /dev/null` 仍然看得到进度。两条回归测试钉合约
+- **`docs/json-schema.json`**: JSON Schema Draft 2020-12 描述 `JsonReport schema_version=1` 的完整字段形状。1.x 内只新增字段、不重命名/删除。README 加 "Output streams" + jq 用例小节
+- **`cargo fresh man`**: 用 `clap_mangen` 把同一份 `Cli::command()` 渲染成 roff 到 stdout。`cargo fresh man > ~/.local/share/man/man1/cargo-fresh.1` 后 `man cargo-fresh` 走系统 man 索引。镜像 `completion` 子命令的设计，不接触发布流程、不需要 build.rs
+- **`audit.yml` CI workflow**: 跑 `cargo-deny check advisories licenses sources bans` + `cargo-audit`。触发面是 manifest / Cargo.lock / deny.toml 改动的 push & PR，外加每周一 06:00 UTC cron——新出现的 RustSec 公告能被定期扫到。`deny.toml` 的 license allowlist 基于 `cargo license` 实盘点
+
+### Changed
+
+- **颜色管线接 `anstream`**: `colored` 继续提供 `.green().bold()` 的人体工学 API，但是否真的输出 ANSI 由 `anstream::AutoStream::choice(&stderr)` 一处决定后下发给 `colored::control::set_override`。`NO_COLOR` / `CLICOLOR_FORCE` / `TERM=dumb` / TTY 检测全部经一处，不再两套逻辑互相打架。两条回归测试覆盖 `NO_COLOR=1` 必须 ANSI-free、`CLICOLOR_FORCE=1` 即便 stderr 不是 TTY 也保留颜色码
+
+### Tests
+
+- 集成测试 `tests/cli.rs` 从 5 条扩到 10 条：`json_mode_keeps_stdout_clean` / `non_json_mode_keeps_status_off_stdout` / `man_subcommand_emits_roff` / `no_color_env_strips_ansi_from_stderr` / `clicolor_force_keeps_ansi_when_redirected`——把 1.0 对外契约的几条关键合约都钉在 CI 上
+
 ## [0.10.1] - 2026-05-18
 
 ### BEHAVIOR
