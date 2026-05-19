@@ -1,0 +1,46 @@
+name: Security audit
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - "deny.toml"
+      - ".github/workflows/audit.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - "deny.toml"
+      - ".github/workflows/audit.yml"
+  schedule:
+    # 每周一 06:00 UTC — 即使没人推代码，新出现的 RustSec 公告也会触发一次
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  # cargo-audit 在 PR 上以 check-run 形式回报需要 checks:write
+  checks: write
+  issues: write
+
+jobs:
+  cargo-deny:
+    name: cargo-deny (advisories / licenses / sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # 显式列出，CI 输出更可读；任何一个 fail 就让作业红
+          command: check advisories licenses sources bans
+
+  cargo-audit:
+    name: cargo-audit (Cargo.lock vs RustSec DB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

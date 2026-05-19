@@ -1,0 +1,53 @@
+# cargo-deny configuration. See https://embarkstudios.github.io/cargo-deny/
+#
+# 三类检查：
+#  - advisories：RustSec DB（与 cargo-audit 互补，cargo-deny 还覆盖 yanked / unsound）
+#  - licenses：所有依赖必须落在 allow 列表里；OR 表达式只要有一支命中就过
+#  - sources：禁止使用 crates.io 以外的注册表 / git 源
+#  - bans：包级别黑名单（目前为空），多版本只发 warning 不 fail
+
+[graph]
+all-features = false
+no-default-features = false
+
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# RUSTSEC-2024-XXXX 出现误报时在这里加 ignore，注释清楚原因和复查日期
+ignore = []
+yanked = "deny"
+
+[licenses]
+version = 2
+# 实际依赖树里出现过的许可证（基于 `cargo license` 的盘点）。
+# 新增依赖前若引入新许可证，CI 会失败——补一行 + 在 PR 描述里说明为何 OK。
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "Zlib",
+    "Unicode-3.0",
+    "Unlicense",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+# 显式禁止某些 crate（例如已知问题的旧版 openssl 之类）可以加在这里
+deny = []
+# 允许的多版本组合（例如 syn 1.x/2.x 同时存在）
+skip = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

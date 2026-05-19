@@ -127,6 +127,7 @@ No exceptions remain — `--verbose` package-level output was migrated to `statu
 
 Releases are fully automated via GitHub Actions:
 - **`ci.yml`**: every push/PR to master runs `cargo check --all-targets`, `cargo clippy --all-targets -- -D warnings`, `cargo test` on stable; separate job runs `cargo check --locked --lib --bins` on the MSRV toolchain (1.86 today). MSRV job intentionally excludes `--all-targets` so dev-deps' MSRV drift doesn't break it
+- **`audit.yml`**: runs `cargo-deny check advisories licenses sources bans` and `cargo-audit` against `Cargo.lock`. Triggers: push/PR that touches manifests or `deny.toml`, plus a weekly cron (Mon 06:00 UTC) so new RustSec advisories show up even without code changes. Config in `deny.toml`: license allowlist mirrors the actual dep-tree footprint, sources locked to crates.io, multiple-versions is `warn` (zero-duplicates is unrealistic)
 - **`crate.yml`**: triggered on `v*` tag push; publishes to crates.io using OIDC, creates a GitHub release
 - **`release.yml`**: triggered by crate.yml completion; builds for macOS ARM64/x86_64 and Linux x86_64, uploads binaries, updates Homebrew tap
 
