@@ -79,6 +79,11 @@ pub enum Commands {
         #[arg(long)]
         cargo_fresh: bool,
     },
+    /// Generate man page (roff) to stdout
+    ///
+    /// Pipe to a pager (`cargo fresh man | man -l -`) or save to MANPATH
+    /// (`cargo fresh man > ~/.local/share/man/man1/cargo-fresh.1`).
+    Man,
 }
 
 /// 输出格式。Human 是 cargo 风格的状态行；Json 用于 CI / 脚本消费。
@@ -137,6 +142,15 @@ impl Cli {
             .subcommand(fresh);
 
         Self::generate_completion_for_shell(shell, &mut cargo_cmd, "cargo");
+    }
+
+    /// 把同一个 derive 出来的 Command 渲染成 roff 格式的 man page 写到 stdout。
+    /// `man -l -` 直接消费，或 `> ~/.local/share/man/man1/cargo-fresh.1` 落盘后被
+    /// 系统 man 索引到——和 `completion` 一样不写文件、不接触发布流程。
+    pub fn generate_man() -> std::io::Result<()> {
+        let cmd = Self::command();
+        let man = clap_mangen::Man::new(cmd);
+        man.render(&mut std::io::stdout())
     }
 }
 

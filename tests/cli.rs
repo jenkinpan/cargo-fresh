@@ -66,6 +66,21 @@ fn completion_fish_emits_script() {
 }
 
 #[test]
+fn man_subcommand_emits_roff() {
+    // `cargo fresh man` 输出 troff/roff 格式的 man page 到 stdout，
+    // 应包含 .TH 头、NAME/SYNOPSIS/OPTIONS 段，以及若干核心标志名
+    let assert = bin().arg("man").assert().success();
+    let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert!(out.starts_with(".ie") || out.contains(".TH"), "man output missing roff header:\n{}", &out[..out.len().min(200)]);
+    for marker in [".TH cargo-fresh", ".SH NAME", ".SH SYNOPSIS", ".SH OPTIONS"] {
+        assert!(out.contains(marker), "man output missing {marker}");
+    }
+    for flag in ["\\-\\-dry\\-run", "\\-\\-format", "\\-\\-include\\-prerelease"] {
+        assert!(out.contains(flag), "man output missing {flag}");
+    }
+}
+
+#[test]
 fn json_mode_keeps_stdout_clean() {
     // --format=json 的合约：stdout 只有一行可解析的 JSON；状态行/进度全部走 stderr
     let assert = bin()

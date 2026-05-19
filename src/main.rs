@@ -92,6 +92,10 @@ async fn run() -> Result<i32> {
                 }
                 return Ok(EXIT_OK);
             }
+            Commands::Man => {
+                Cli::generate_man()?;
+                return Ok(EXIT_OK);
+            }
         }
     }
 

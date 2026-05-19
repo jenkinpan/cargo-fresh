@@ -226,6 +226,10 @@ cargo fresh completion fish   # Generate fish completion
 # Generate cargo fresh subcommand completion
 cargo fresh completion zsh --cargo-fresh    # Generate cargo fresh zsh completion
 cargo fresh completion bash --cargo-fresh   # Generate cargo fresh bash completion
+
+# Generate the man page (roff to stdout)
+cargo fresh man | man -l -                                          # View directly
+cargo fresh man > ~/.local/share/man/man1/cargo-fresh.1              # Install for `man cargo-fresh`
 ```
 
 ### Shell Completion Installation
