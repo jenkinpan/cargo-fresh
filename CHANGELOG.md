@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Docs
+
+- **README 对比表纠偏**: 之前对 cargo-update 的描述有三处与事实不符——它支持 git 包(非 "Crates only")、包选择是精确名/`--all`(非 "Substring match")、binstall 可用时会自动启用(非 "N/A")。新表如实陈述,并新增 "Install options preserved" 一行坦白 cargo-fresh 目前会把 `--features` 重置为默认(1.0 前修复)
+
 ## [0.10.2] - 2026-05-19
 
 打磨型小版本，全是为 1.0 合约清理边角。无 BREAKING、无 BEHAVIOR——可放心从 0.10.1 升级。
