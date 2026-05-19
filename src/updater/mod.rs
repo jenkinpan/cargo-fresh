@@ -296,7 +296,7 @@ pub async fn update_package(
                     // 包带非默认 features，走 cargo install 才能生效
                     status_dim(
                         "Check",
-                        &format!("{package_name} has custom features, using cargo install"),
+                        &format!("{package_name}: custom features, skipping binstall"),
                     );
                 }
                 false
@@ -305,7 +305,7 @@ pub async fn update_package(
         _ => false,
     };
 
-    if verbose && install_opts.is_none() {
+    if verbose && install_opts.is_none() && matches!(source, PackageSource::Crates) {
         status_dim(
             "Check",
             &format!("{package_name} no install metadata, using default features"),

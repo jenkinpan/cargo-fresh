@@ -228,7 +228,7 @@ async fn run() -> Result<i32> {
             let source = selected_pkg
                 .map(|p| p.source.clone())
                 .unwrap_or(PackageSource::Crates);
-            let install_opts = selected_pkg.and_then(|p| p.install_opts.clone());
+            let install_opts = selected_pkg.and_then(|p| p.install_opts.as_ref());
 
             if total_packages > 1 {
                 status_dim(
@@ -241,7 +241,7 @@ async fn run() -> Result<i32> {
                 package_name,
                 target_version,
                 &source,
-                install_opts.as_ref(),
+                install_opts,
                 cli.dry_run,
                 cli.install_binstall,
                 cli.verbose,
