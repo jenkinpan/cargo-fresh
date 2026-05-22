@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- **binstall 回退后不再跑回 binstall**: 之前重试循环始终重跑主命令——binstall 失败、回退到 `cargo install` 也失败后,第 2/3 次重试又跑回 `cargo binstall`。binstall 一旦在当前环境失败(典型是无预编译产物、退化成从源码构建后仍失败),重试它只会重复那条又慢又必然失败的路径。现在引入 `CommandSelector`:首次回退后把 `cargo install` 锁定为后续每一次重试的命令,worst-case 命令序列从 `binstall, install, binstall, binstall` 修正为 `binstall, install, install, install`
 - **更新不再静默丢 features**: 之前 `cargo install --force <name>` 不带任何 `--features`,把以自定义特性安装的包(如 `ripgrep --features pcre2`)悄悄退回默认特性。现在从 `.crates2.json` 还原并保留 `--features` / `--no-default-features` / `--all-features`
 
 ### Docs

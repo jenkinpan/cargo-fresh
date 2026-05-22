@@ -157,6 +157,51 @@ fn build_args(
     args
 }
 
+/// 重试循环的命令选择器。
+///
+/// 持有主命令（Crates 源通常是 `cargo binstall`）和可选的 `cargo install`
+/// 回退命令。第一次 [`switch_to_fallback`](Self::switch_to_fallback) 把活动
+/// 命令一次性、永久地切到回退命令——之后每一次重试都跑 `cargo install`。
+///
+/// 这是修复 "binstall 失败回退到 install 后，后续重试又跑回 binstall" bug
+/// 的关键：binstall 一旦在当前环境失败（典型是没有预编译产物、退化成从
+/// 源码构建后仍失败），重试它只会重复那条又慢又必然失败的路径。
+struct CommandSelector {
+    primary: Vec<String>,
+    fallback: Option<Vec<String>>,
+    fell_back: bool,
+}
+
+impl CommandSelector {
+    fn new(primary: Vec<String>, fallback: Option<Vec<String>>) -> Self {
+        Self {
+            primary,
+            fallback,
+            fell_back: false,
+        }
+    }
+
+    /// 当前重试步应执行的 cargo 参数。
+    fn current(&self) -> &[String] {
+        match (self.fell_back, &self.fallback) {
+            (true, Some(fb)) => fb,
+            _ => &self.primary,
+        }
+    }
+
+    /// 当前命令失败后调用。若存在回退命令且尚未切换，则切到回退命令并
+    /// 返回 `true`（调用方据此打印 `Fallback` 状态行并立即重跑一次）。
+    /// 已经回退过、或根本没有回退命令时返回 `false`。
+    fn switch_to_fallback(&mut self) -> bool {
+        if !self.fell_back && self.fallback.is_some() {
+            self.fell_back = true;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 async fn run_cargo(pb: &ProgressBar, args: &[String]) -> Result<Output> {
     pb_status_dim(pb, "Running", &format!("cargo {}", args.join(" ")));
     pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
@@ -390,6 +435,8 @@ pub async fn update_package(
         }
     }
 
+    let mut selector = CommandSelector::new(primary_args, fallback_args);
+
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
         if attempt > 1 {
             pb.set_message(language.format_text(
@@ -401,11 +448,11 @@ pub async fn update_package(
             ));
         }
 
-        let output = run_cargo(&pb, &primary_args).await?;
+        let output = run_cargo(&pb, selector.current()).await?;
 
         if output.status.success() {
             let result = verify_and_report_update(&pb, package_name, &old_version).await;
-            // 命令成功但读不到新版本时，给主路径一次重试机会（保留原行为）
+            // 命令成功但读不到新版本时，给当前路径一次重试机会（保留原行为）
             if result.new_version.is_none() && attempt < MAX_RETRY_ATTEMPTS {
                 pb_status_dim(&pb, "Retry", language.get_text("waiting_retry"));
                 tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
@@ -414,10 +461,13 @@ pub async fn update_package(
             return Ok(result);
         }
 
-        // binstall 第一次失败：立刻尝试 install 回退（不消耗 attempt 计数器中的剩余次数）
-        if let (Some(args), 1) = (fallback_args.as_ref(), attempt) {
+        // 命令失败。binstall 第一次失败时立刻切到 cargo install 并就地重跑
+        // 一次（这次回退不消耗 attempt 计数器）。关键：switch_to_fallback
+        // 之后 selector.current() 对后续每一次重试都返回 install——不再
+        // 跑回 binstall（已修复"回退后重试又跑 binstall"的 bug）。
+        if selector.switch_to_fallback() {
             pb_status_warn(&pb, "Fallback", language.get_text("binstall_failed_fallback"));
-            let fb_output = run_cargo(&pb, args).await?;
+            let fb_output = run_cargo(&pb, selector.current()).await?;
             if fb_output.status.success() {
                 return Ok(verify_and_report_update(&pb, package_name, &old_version).await);
             }
@@ -450,11 +500,53 @@ pub async fn update_package(
 
 #[cfg(test)]
 mod tests {
-    use super::build_args;
+    use super::{build_args, CommandSelector};
     use crate::models::{InstallOpts, PackageSource};
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn selector_starts_on_primary() {
+        let primary = s(&["binstall", "--force", "mdbook"]);
+        let fallback = s(&["install", "--force", "mdbook"]);
+        let sel = CommandSelector::new(primary.clone(), Some(fallback));
+        assert_eq!(sel.current(), primary.as_slice());
+    }
+
+    #[test]
+    fn selector_sticks_to_fallback_across_retries() {
+        // 复现并锁定 bug：binstall 失败回退到 cargo install 后，后续每次
+        // 重试都必须继续跑 install，绝不回到 binstall（binstall 一旦在当前
+        // 环境失败，重试它只会重复又慢又必然失败的从源码构建路径）。
+        let primary = s(&["binstall", "--force", "mdbook", "--version", "0.5.3"]);
+        let fallback = s(&["install", "--force", "mdbook", "--version", "0.5.3"]);
+        let mut sel = CommandSelector::new(primary.clone(), Some(fallback.clone()));
+
+        // attempt 1：跑主命令 binstall
+        assert_eq!(sel.current(), primary.as_slice());
+
+        // binstall 失败 → 回退，且首次回退返回 true（调用方据此打印 Fallback）
+        assert!(sel.switch_to_fallback());
+        assert_eq!(sel.current(), fallback.as_slice());
+
+        // attempt 2、3：依旧是 install——不再回退、绝不回到 binstall
+        assert!(!sel.switch_to_fallback());
+        assert_eq!(sel.current(), fallback.as_slice());
+        assert!(!sel.switch_to_fallback());
+        assert_eq!(sel.current(), fallback.as_slice());
+    }
+
+    #[test]
+    fn selector_without_fallback_always_primary() {
+        // 非 binstall 路径（git/path 源，或 binstall 不可用）：没有回退命令，
+        // 每次重试都跑主命令，switch_to_fallback 永远返回 false。
+        let primary = s(&["install", "--force", "ripgrep"]);
+        let mut sel = CommandSelector::new(primary.clone(), None);
+        assert_eq!(sel.current(), primary.as_slice());
+        assert!(!sel.switch_to_fallback());
+        assert_eq!(sel.current(), primary.as_slice());
     }
 
     #[test]
