@@ -386,6 +386,7 @@ fn build_report<'a>(
         .map(|p| JsonSkipped {
             name: p.name.as_str(),
             source: p.source.kind_str(),
+            reason_code: p.source.skip_reason_code(),
             reason: "non-crates source: version check skipped",
         })
         .collect();
@@ -478,5 +479,18 @@ mod tests {
         assert_eq!(report.format, "cargo-fresh-v1");
         assert_eq!(report.summary.checked, 1);
         assert_eq!(report.fresh, vec!["ripgrep"]);
+    }
+
+    #[test]
+    fn build_report_sets_skip_reason_code() {
+        let cli = empty_cli();
+        let packages = vec![PackageInfo::with_source(
+            "my-tool".into(),
+            Some("0.1.0".into()),
+            PackageSource::Git { url: "u".into(), rev: None },
+        )];
+        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now());
+        assert_eq!(report.skipped.len(), 1);
+        assert_eq!(report.skipped[0].reason_code, "git_source");
     }
 }

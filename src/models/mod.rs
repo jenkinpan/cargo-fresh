@@ -49,6 +49,17 @@ impl PackageSource {
             PackageSource::Unknown(_) => "[unknown source]",
         }
     }
+
+    /// JSON `skipped[].reason_code`——稳定可判别的枚举字符串。
+    /// `skipped[]` 只收非 crates 源，`Crates` 分支不会被实际输出。
+    pub fn skip_reason_code(&self) -> &'static str {
+        match self {
+            PackageSource::Crates => "crates_source",
+            PackageSource::Git { .. } => "git_source",
+            PackageSource::Path { .. } => "path_source",
+            PackageSource::Unknown(_) => "unknown_source",
+        }
+    }
 }
 
 /// 一个包安装时使用的 Cargo 特性选项，从 `$CARGO_HOME/.crates2.json` 解析而来。
@@ -174,6 +185,7 @@ pub struct JsonUpdateCandidate<'a> {
 pub struct JsonSkipped<'a> {
     pub name: &'a str,
     pub source: &'static str,
+    pub reason_code: &'static str,
     pub reason: &'static str,
 }
 
@@ -267,5 +279,21 @@ mod tests {
     fn package_info_install_opts_defaults_none() {
         let p = PackageInfo::new("ripgrep".to_string(), Some("14.0.0".to_string()));
         assert!(p.install_opts.is_none());
+    }
+
+    #[test]
+    fn skip_reason_code_maps_each_source() {
+        assert_eq!(
+            PackageSource::Path { dir: "/x".into() }.skip_reason_code(),
+            "path_source"
+        );
+        assert_eq!(
+            PackageSource::Git { url: "u".into(), rev: None }.skip_reason_code(),
+            "git_source"
+        );
+        assert_eq!(
+            PackageSource::Unknown("weird".into()).skip_reason_code(),
+            "unknown_source"
+        );
     }
 }
