@@ -1,6 +1,6 @@
 # ROADMAP
 
-**Current**: 0.10.2 shipped. P0 (1.0 blockers) + P1 (1.0.0-rc.1 prereqs) + P1-ext (1.0 contract polish) all done. We're in the **1.0 feedback window** (until **2026-06-30**) — see pinned issue [#3](https://github.com/jenkinpan/cargo-fresh/issues/3).
+**Current**: 0.10.3 shipped. P0 (1.0 blockers) + P1 (1.0.0-rc.1 prereqs) + P1-ext (1.0 contract polish) + P1-ext2 (install-option preservation + JSON contract additions) all done. We're in the **1.0 feedback window** (until **2026-06-30**) — see pinned issue [#3](https://github.com/jenkinpan/cargo-fresh/issues/3).
 
 This file is the durable plan. CLAUDE.md tracks the high-level status; CHANGELOG.md tracks what shipped and when.
 
@@ -41,6 +41,15 @@ This file is the durable plan. CLAUDE.md tracks the high-level status; CHANGELOG
 | P1e-4 | Color detection via `anstream` | `NO_COLOR` / `CLICOLOR_FORCE` / `TERM=dumb` / TTY 检测集中到一处；`colored` 仍提供 `.green().bold()` 人体工学 API，是否真的输出 ANSI 由 anstream 决定。两条回归测试覆盖 |
 | P1e-5 | `audit.yml` CI workflow | `cargo-deny check advisories licenses sources bans` + `cargo-audit`；push/PR + 每周一 06:00 UTC cron；`deny.toml` allowlist 基于 `cargo license` 实盘点 |
 | P1e-6 | `release.yml` 版本解析硬失败 | 之前 `workflow_run.head_branch` 解析漏洞会 fall back 到默认 `0.1.0`，污染 ghost release。新逻辑：解析失败 `::error::` + exit 1，绝不带默认值继续 |
+
+## ✅ P1-ext2 — install-option preservation + JSON contract additions (shipped in 0.10.3)
+
+| # | Item | Note |
+|---|------|------|
+| P1e2-1 | `.crates2.json` install-option preservation | 新增 `src/package/crates2.rs`：解析 `$CARGO_HOME/.crates2.json` 还原每个包的 features 选项，更新时透传给 `cargo install`。尽力而为——文件缺失/损坏一律静默回退默认，绝不让它成为更新失败原因 |
+| P1e2-2 | 带非默认 features 的包跳过 binstall (BEHAVIOR) | binstall 下的是上游预编译二进制，无法应用任意 features；这类包直接走 `cargo install`。无自定义 features 的包行为不变 |
+| P1e2-3 | binstall 回退后重试不再跑回 binstall | `CommandSelector` 让首次回退后的 `cargo install` 对后续每次重试都生效；worst-case 序列 `binstall, install, binstall, binstall` 修正为 `binstall, install, install, install` |
+| P1e2-4 | `--format=json` 机器可读字段补全 | `skipped[].reason_code` 稳定枚举、`version_check_errors[]`（修复查询失败的包被悄悄混进 `fresh[]`）、`summary` 新增 `selected`/`attempted`/`check_errors` 计数。全部在 `schema_version=1` 下additive，`docs/json-schema.json` 同步更新 |
 
 ## 🔄 Now — 1.0 feedback window
 

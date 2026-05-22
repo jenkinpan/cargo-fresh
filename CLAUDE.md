@@ -14,7 +14,7 @@ cargo run -- [flags]
 # Lint (zero warnings policy enforced)
 cargo clippy --all-targets -- -D warnings
 
-# Test (108 unit + 15 integration as of unreleased)
+# Test (110 unit + 18 integration as of 0.10.3)
 cargo test
 
 # Install locally for testing
@@ -139,12 +139,13 @@ To release: bump version in `Cargo.toml`, move `[Unreleased]` content to a dated
 
 ## Roadmap to 1.0
 
-Detailed item-by-item plan lives in `ROADMAP.md`. Status as of **v0.10.2**:
+Detailed item-by-item plan lives in `ROADMAP.md`. Status as of **v0.10.3**:
 
 - ✅ **0.9.10–0.9.14** — Cargo.lock, semver, sparse index, cargo-style output, PbGuard
 - ✅ **0.10.0** — `--include-prerelease` strict (BREAKING), `--registry-url`, mirror auto-detect, Ctrl-C cancel, `--format=json` + exit code contract
 - ✅ **0.10.1** — async cargo subprocess, `--no-cargo-search-fallback`, `--install-binstall` (BEHAVIOR), non-TTY downgrade, `SlowGuard` 30s watchdog, `PackageSource::Unknown`, `errors::hint_for`, `tests/` integration suite, MSRV 1.86, ISSUE/PR/CONTRIBUTING/SECURITY, README Stability + cargo-update comparison
 - ✅ **0.10.2** — 1.0 contract polish (no BREAKING / no BEHAVIOR): explicit stdout/stderr split via `anstream::eprintln!`, `docs/json-schema.json` (Draft 2020-12 for `schema_version=1`), `cargo fresh man` subcommand (clap_mangen), `anstream` color pipeline (`NO_COLOR`/`CLICOLOR_FORCE`/TTY detection centralized), `audit.yml` CI (cargo-deny + cargo-audit + weekly cron), strict `release.yml` version parsing
+- ✅ **0.10.3** — `.crates2.json` install-option preservation (`src/package/crates2.rs`, features passthrough), binstall-skip for non-default-features packages (BEHAVIOR), sticky binstall→install fallback fix (`CommandSelector`), `--format=json` additions under `schema_version=1` (`skipped[].reason_code`, `version_check_errors[]`, `summary.selected`/`attempted`/`check_errors`)
 - 🔄 **Feedback window** — pinned meta issue #3 collecting 1.0-contract feedback. Window closes **2026-06-30**, then `1.0.0-rc.1` cut from master
 - ⏭ **1.0.0-rc.1** — only ships if 0.10.x picks up BREAKING-class feedback that needs to bake before 1.0
 - ⏭ **1.0.0** — promote `schema_version=1`, exit codes, CLI flag inventory to permanent contract

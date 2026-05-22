@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-05-22
+
+收尾型小版本：补全 `.crates2.json` 安装选项保留、修正 binstall 回退重试逻辑、扩充 `--format=json` 的机器可读字段。含一处 BEHAVIOR——带非默认 features 的包更新时跳过 binstall，无自定义 features 的包行为不变。
+
 ### BEHAVIOR
 
 - **带非默认 features 的包跳过 binstall**: 一个包若以 `--features` / `--no-default-features` / `--all-features` 安装,更新时直接走 `cargo install`(binstall 下的是上游预编译二进制,无法应用任意 features)。无自定义 features 的包行为不变,仍优先 binstall
@@ -628,7 +632,17 @@
 - 支持批量更新包
 - 支持命令行参数配置
 
-[Unreleased]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/jenkinpan/cargo-fresh/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/jenkinpan/cargo-fresh/compare/v0.10.2...v0.10.3
+[0.10.2]: https://github.com/jenkinpan/cargo-fresh/compare/v0.10.1...v0.10.2
+[0.10.1]: https://github.com/jenkinpan/cargo-fresh/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/jenkinpan/cargo-fresh/compare/v0.9.14...v0.10.0
+[0.9.14]: https://github.com/jenkinpan/cargo-fresh/compare/v0.9.13...v0.9.14
+[0.9.13]: https://github.com/jenkinpan/cargo-fresh/compare/v0.9.12...v0.9.13
+[0.9.12]: https://github.com/jenkinpan/cargo-fresh/compare/v0.9.11...v0.9.12
+[0.9.11]: https://github.com/jenkinpan/cargo-fresh/compare/v0.9.10...v0.9.11
+[0.9.10]: https://github.com/jenkinpan/cargo-fresh/compare/v0.9.9...v0.9.10
+[0.9.9]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.9.0...v0.9.9
 [0.9.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/jenkinpan/pkg-checker-rs/compare/v0.7.0...v0.8.0

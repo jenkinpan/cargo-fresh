@@ -155,7 +155,7 @@ This means `cargo fresh --format=json | jq '.'` works without filtering, and `ca
 
 The full schema is at [`docs/json-schema.json`](docs/json-schema.json) (JSON Schema Draft 2020-12). The `schema_version=1` field shape is the 1.0 contract — within 1.x, fields are only added (never removed or renamed).
 
-Three fields were added under `schema_version=1` (no version bump):
+Three fields were added in 0.10.3 under `schema_version=1` (additive only — no `schema_version` bump):
 
 - **`skipped[].reason_code`** — a stable enum (`path_source` / `git_source` / `unknown_source`). Branch on this in scripts rather than the prose `reason` string.
 - **`version_check_errors[]`** — crates.io packages whose latest-version lookup failed, each with a `name`, `kind` (`not_found` / `unavailable`), and a human-readable `error` message. `fresh[]` excludes these packages, so an empty `updates_available` list can be trusted even when checks failed.
