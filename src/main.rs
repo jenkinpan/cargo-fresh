@@ -114,7 +114,7 @@ async fn run() -> Result<i32> {
     if packages.is_empty() {
         status_warn("Note", language.get_text("no_packages_found"));
         if json_mode {
-            emit_report(&cli, &[], &[], &[], false, run_start);
+            emit_report(&cli, &[], &[], &[], false, run_start, 0);
         }
         return Ok(EXIT_OK);
     }
@@ -128,7 +128,7 @@ async fn run() -> Result<i32> {
     if (cli.filter.is_some() || !cli.exclude.is_empty()) && packages.is_empty() {
         status_warn("Note", language.get_text("no_packages_found"));
         if json_mode {
-            emit_report(&cli, &[], &[], &[], false, run_start);
+            emit_report(&cli, &[], &[], &[], false, run_start, 0);
         }
         return Ok(EXIT_OK);
     }
@@ -172,7 +172,7 @@ async fn run() -> Result<i32> {
     if all_updates.is_empty() {
         status("Finished", language.get_text("all_up_to_date"));
         if json_mode {
-            emit_report(&cli, &packages, &[], &[], false, run_start);
+            emit_report(&cli, &packages, &[], &[], false, run_start, 0);
         }
         return Ok(EXIT_OK);
     }
@@ -330,6 +330,7 @@ async fn run() -> Result<i32> {
             &update_results,
             aborted,
             run_start,
+            selections.len(),
         );
     }
 
@@ -360,6 +361,7 @@ fn build_report<'a>(
     update_results: &'a [UpdateResult],
     aborted: bool,
     start: std::time::Instant,
+    selected: usize,
 ) -> JsonReport<'a> {
     let updates_available: Vec<JsonUpdateCandidate> = all_updates
         .iter()
@@ -407,6 +409,8 @@ fn build_report<'a>(
     let summary = JsonSummary {
         checked: packages.len(),
         available: updates_available.len(),
+        selected,
+        attempted: results.len(),
         succeeded,
         failed,
         skipped: skipped.len(),
@@ -435,6 +439,7 @@ fn emit_report(
     update_results: &[UpdateResult],
     aborted: bool,
     start: std::time::Instant,
+    selected: usize,
 ) {
     print_json(&build_report(
         cli,
@@ -443,6 +448,7 @@ fn emit_report(
         update_results,
         aborted,
         start,
+        selected,
     ));
 }
 
@@ -474,7 +480,7 @@ mod tests {
         let packages = vec![
             PackageInfo::with_source("ripgrep".into(), Some("14.1.1".into()), PackageSource::Crates),
         ];
-        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now());
+        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
         assert_eq!(report.schema_version, 1);
         assert_eq!(report.format, "cargo-fresh-v1");
         assert_eq!(report.summary.checked, 1);
@@ -489,8 +495,24 @@ mod tests {
             Some("0.1.0".into()),
             PackageSource::Git { url: "u".into(), rev: None },
         )];
-        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now());
+        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
         assert_eq!(report.skipped.len(), 1);
         assert_eq!(report.skipped[0].reason_code, "git_source");
+    }
+
+    #[test]
+    fn build_report_summary_has_selection_counts() {
+        let cli = empty_cli();
+        let report = build_report(
+            &cli,
+            &[],
+            &[],
+            &[],
+            false,
+            std::time::Instant::now(),
+            3,
+        );
+        assert_eq!(report.summary.selected, 3);
+        assert_eq!(report.summary.attempted, 0);
     }
 }

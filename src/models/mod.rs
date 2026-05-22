@@ -201,6 +201,8 @@ pub struct JsonResult<'a> {
 pub struct JsonSummary {
     pub checked: usize,
     pub available: usize,
+    pub selected: usize,
+    pub attempted: usize,
     pub succeeded: usize,
     pub failed: usize,
     pub skipped: usize,
