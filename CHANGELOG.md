@@ -13,9 +13,9 @@
 
 ### Added
 
-- `--format=json`: `skipped[].reason_code` — a stable enum (`path_source` / `git_source` / `unknown_source`) so scripts need not branch on the prose `reason`.
-- `--format=json`: `version_check_errors[]` — crates.io packages whose latest-version lookup failed, each with a `kind` (`not_found` / `unavailable`). `fresh[]` now excludes these instead of silently reporting them as up to date.
-- `--format=json`: `summary.selected`, `summary.attempted`, `summary.check_errors` counts.
+- **`--format=json` 新增 `skipped[].reason_code`**: 稳定的机器可读枚举(`path_source` / `git_source` / `unknown_source`),脚本可据此分支,不必再解析人类可读的 `reason` 文案
+- **`--format=json` 新增 `version_check_errors[]`**: crates.io 包的最新版本查询失败时记录于此,每项带 `name`、`kind`(`not_found` / `unavailable`)和人类可读的 `error`。`fresh[]` 现在会排除这些包——此前查询失败的包会被悄悄当作"已是最新"混入 `fresh[]`,导致空的 `updates_available` 不可信。CI 可据此区分"无更新"与"无法确认是否最新"
+- **`--format=json` 的 `summary` 新增 `selected` / `attempted` / `check_errors` 计数**: 分别为本次选中更新的包数、实际执行了安装命令的包数、以及 `version_check_errors[]` 的长度。自动化可据此区分"有更新但策略未应用"与"无可操作项"
 - **`.crates2.json` 安装选项保留**: 新增 `src/package/crates2.rs`,从 `$CARGO_HOME/.crates2.json` 解析每个包安装时的 features 选项,更新时透传给 `cargo install`。尽力而为——文件缺失/损坏/无匹配条目一律静默回退默认行为,绝不让它成为更新失败的原因
 
 ### Fixed

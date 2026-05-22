@@ -59,20 +59,7 @@
     "version_check_errors": {
       "type": "array",
       "description": "crates.io packages whose latest-version lookup failed; fresh[] excludes these so an empty updates list can be trusted.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "kind": {
-            "type": "string",
-            "enum": ["not_found", "unavailable"],
-            "description": "not_found = absent from the registry index (permanent: renamed crate or misconfigured registry); unavailable = network/timeout/5xx/parse (transient: a retried run may succeed)."
-          },
-          "error": { "type": "string", "description": "Human-readable message; not stable, do not branch on it." }
-        },
-        "required": ["name", "kind", "error"],
-        "additionalProperties": false
-      }
+      "items": { "$ref": "#/$defs/checkError" }
     },
     "results": {
       "type": "array",
@@ -136,6 +123,20 @@
         "success": { "type": "boolean" }
       }
     },
+    "checkError": {
+      "type": "object",
+      "required": ["name", "kind", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["not_found", "unavailable"],
+          "description": "not_found = absent from the registry index (permanent: renamed crate or misconfigured registry); unavailable = network/timeout/5xx/parse (transient: a retried run may succeed)."
+        },
+        "error": { "type": "string", "description": "Human-readable message; not stable, do not branch on it." }
+      }
+    },
     "summary": {
       "type": "object",
       "required": ["checked", "available", "succeeded", "failed", "skipped", "selected", "attempted", "check_errors", "duration_ms"],
@@ -145,9 +146,9 @@
         "succeeded": { "type": "integer", "minimum": 0 },
         "failed": { "type": "integer", "minimum": 0 },
         "skipped": { "type": "integer", "minimum": 0 },
-        "selected": { "type": "integer", "minimum": 0, "description": "Packages chosen for update this run. Always 0 in non-batch JSON mode (a read-only probe selects nothing)." },
+        "selected": { "type": "integer", "minimum": 0, "description": "Packages chosen for update this run. When --format=json is used without --batch, selection is skipped (equivalent to --no-interactive), so this is always 0 in that mode." },
         "attempted": { "type": "integer", "minimum": 0, "description": "Packages an install command was actually run for (equals succeeded + failed)." },
-        "check_errors": { "type": "integer", "minimum": 0, "description": "Length of version_check_errors[]." },
+        "check_errors": { "type": "integer", "minimum": 0, "description": "Number of crates.io packages whose version lookup failed this run. Equals the length of version_check_errors[]; convenient to read without iterating the array." },
         "duration_ms": {
           "type": "integer",
           "minimum": 0,

@@ -158,7 +158,7 @@ The full schema is at [`docs/json-schema.json`](docs/json-schema.json) (JSON Sch
 Three fields were added under `schema_version=1` (no version bump):
 
 - **`skipped[].reason_code`** — a stable enum (`path_source` / `git_source` / `unknown_source`). Branch on this in scripts rather than the prose `reason` string.
-- **`version_check_errors[]`** — crates.io packages whose latest-version lookup failed, each with a `name`, `kind` (`not_found` | `unavailable`), and a human-readable `error` message. `fresh[]` excludes these packages, so an empty `updates_available` list can be trusted even when checks failed.
+- **`version_check_errors[]`** — crates.io packages whose latest-version lookup failed, each with a `name`, `kind` (`not_found` / `unavailable`), and a human-readable `error` message. `fresh[]` excludes these packages, so an empty `updates_available` list can be trusted even when checks failed.
 - **`summary.selected`**, **`summary.attempted`**, **`summary.check_errors`** — count of packages chosen for update, packages an install command was run for, and length of `version_check_errors[]` respectively.
 
 ```bash
