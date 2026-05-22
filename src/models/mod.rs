@@ -80,6 +80,32 @@ impl InstallOpts {
     }
 }
 
+/// 版本检查失败的可判别分类。决定 JSON `version_check_errors[].kind`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckErrorKind {
+    /// registry index 里没有这个包（4xx）——重试无意义，可能是改名 / 配错 registry。
+    NotFound,
+    /// 网络 / 超时 / 5xx / 解析失败——瞬时故障，重试 CI 作业可能恢复。
+    Unavailable,
+}
+
+impl CheckErrorKind {
+    /// JSON 里用 "not_found" / "unavailable" 短串表示。
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            CheckErrorKind::NotFound => "not_found",
+            CheckErrorKind::Unavailable => "unavailable",
+        }
+    }
+}
+
+/// 一个包版本检查失败的记录。`message` 是人读的文案，不保证稳定、不要据此分支。
+#[derive(Debug, Clone)]
+pub struct CheckError {
+    pub kind: CheckErrorKind,
+    pub message: String,
+}
+
 #[derive(Debug)]
 pub struct PackageInfo {
     pub name: String,
@@ -87,6 +113,7 @@ pub struct PackageInfo {
     pub latest_version: Option<String>,
     pub source: PackageSource,
     pub install_opts: Option<InstallOpts>,
+    pub check_error: Option<CheckError>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +142,7 @@ impl PackageInfo {
             latest_version: None,
             source,
             install_opts: None,
+            check_error: None,
         }
     }
 
@@ -297,5 +325,11 @@ mod tests {
             PackageSource::Unknown("weird".into()).skip_reason_code(),
             "unknown_source"
         );
+    }
+
+    #[test]
+    fn check_error_kind_str_maps_both_variants() {
+        assert_eq!(CheckErrorKind::NotFound.kind_str(), "not_found");
+        assert_eq!(CheckErrorKind::Unavailable.kind_str(), "unavailable");
     }
 }
