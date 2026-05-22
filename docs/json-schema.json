@@ -13,6 +13,7 @@
     "updates_available",
     "fresh",
     "skipped",
+    "version_check_errors",
     "results",
     "summary",
     "aborted"
@@ -55,6 +56,24 @@
       "description": "Packages whose version check was skipped (non-crates source or unknown registry).",
       "items": { "$ref": "#/$defs/skipped" }
     },
+    "version_check_errors": {
+      "type": "array",
+      "description": "crates.io packages whose latest-version lookup failed; fresh[] excludes these so an empty updates list can be trusted.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["not_found", "unavailable"],
+            "description": "not_found = absent from the registry index (permanent: renamed crate or misconfigured registry); unavailable = network/timeout/5xx/parse (transient: a retried run may succeed)."
+          },
+          "error": { "type": "string", "description": "Human-readable message; not stable, do not branch on it." }
+        },
+        "required": ["name", "kind", "error"],
+        "additionalProperties": false
+      }
+    },
     "results": {
       "type": "array",
       "description": "Outcomes of actual `cargo install` invocations. Empty when no updates were applied (e.g. dry-run still records each attempt; --no-interactive with no selection yields an empty array).",
@@ -89,13 +108,18 @@
     },
     "skipped": {
       "type": "object",
-      "required": ["name", "source", "reason"],
+      "required": ["name", "source", "reason_code", "reason"],
       "properties": {
         "name": { "type": "string" },
         "source": { "$ref": "#/$defs/sourceKind" },
+        "reason_code": {
+          "type": "string",
+          "enum": ["path_source", "git_source", "unknown_source"],
+          "description": "Stable machine-readable skip reason. Branch on this, not on `reason`."
+        },
         "reason": {
           "type": "string",
-          "description": "Human-readable reason. Stable enough to log; not stable enough to branch on — match on `source` instead."
+          "description": "Human-readable skip reason; stable enough to log, not to branch on — use reason_code instead."
         }
       }
     },
@@ -114,13 +138,16 @@
     },
     "summary": {
       "type": "object",
-      "required": ["checked", "available", "succeeded", "failed", "skipped", "duration_ms"],
+      "required": ["checked", "available", "succeeded", "failed", "skipped", "selected", "attempted", "check_errors", "duration_ms"],
       "properties": {
-        "checked": { "type": "integer", "minimum": 0 },
+        "checked": { "type": "integer", "minimum": 0, "description": "Total packages discovered (counts every discovered package, including skipped and check-errored ones)." },
         "available": { "type": "integer", "minimum": 0 },
         "succeeded": { "type": "integer", "minimum": 0 },
         "failed": { "type": "integer", "minimum": 0 },
         "skipped": { "type": "integer", "minimum": 0 },
+        "selected": { "type": "integer", "minimum": 0, "description": "Packages chosen for update this run. Always 0 in non-batch JSON mode (a read-only probe selects nothing)." },
+        "attempted": { "type": "integer", "minimum": 0, "description": "Packages an install command was actually run for (equals succeeded + failed)." },
+        "check_errors": { "type": "integer", "minimum": 0, "description": "Length of version_check_errors[]." },
         "duration_ms": {
           "type": "integer",
           "minimum": 0,

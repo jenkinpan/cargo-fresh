@@ -155,6 +155,12 @@ This means `cargo fresh --format=json | jq '.'` works without filtering, and `ca
 
 The full schema is at [`docs/json-schema.json`](docs/json-schema.json) (JSON Schema Draft 2020-12). The `schema_version=1` field shape is the 1.0 contract — within 1.x, fields are only added (never removed or renamed).
 
+Three fields were added under `schema_version=1` (no version bump):
+
+- **`skipped[].reason_code`** — a stable enum (`path_source` / `git_source` / `unknown_source`). Branch on this in scripts rather than the prose `reason` string.
+- **`version_check_errors[]`** — crates.io packages whose latest-version lookup failed, each with a `name`, `kind` (`not_found` | `unavailable`), and a human-readable `error` message. `fresh[]` excludes these packages, so an empty `updates_available` list can be trusted even when checks failed.
+- **`summary.selected`**, **`summary.attempted`**, **`summary.check_errors`** — count of packages chosen for update, packages an install command was run for, and length of `version_check_errors[]` respectively.
+
 ```bash
 # List names of packages that have updates available
 cargo fresh --format=json | jq -r '.updates_available[].name'
@@ -167,6 +173,12 @@ cargo fresh --format=json | jq '.updates_available[] | select(.source == "git")'
 
 # Detect a Ctrl-C abort
 cargo fresh --format=json --batch | jq '.aborted'
+
+# Show packages whose version check failed (transient network issues etc.)
+cargo fresh --format=json | jq '.version_check_errors[]'
+
+# Branch on stable reason codes for skipped packages
+cargo fresh --format=json | jq '.skipped[] | select(.reason_code == "git_source")'
 ```
 
 ### Examples

@@ -13,6 +13,9 @@
 
 ### Added
 
+- `--format=json`: `skipped[].reason_code` — a stable enum (`path_source` / `git_source` / `unknown_source`) so scripts need not branch on the prose `reason`.
+- `--format=json`: `version_check_errors[]` — crates.io packages whose latest-version lookup failed, each with a `kind` (`not_found` / `unavailable`). `fresh[]` now excludes these instead of silently reporting them as up to date.
+- `--format=json`: `summary.selected`, `summary.attempted`, `summary.check_errors` counts.
 - **`.crates2.json` 安装选项保留**: 新增 `src/package/crates2.rs`,从 `$CARGO_HOME/.crates2.json` 解析每个包安装时的 features 选项,更新时透传给 `cargo install`。尽力而为——文件缺失/损坏/无匹配条目一律静默回退默认行为,绝不让它成为更新失败的原因
 
 ### Fixed
