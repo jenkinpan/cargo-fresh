@@ -12,8 +12,8 @@ use cargo_fresh::display::{
 };
 use cargo_fresh::locale::detect_language;
 use cargo_fresh::models::{
-    JsonReport, JsonResult, JsonSkipped, JsonSummary, JsonUpdateCandidate, PackageInfo,
-    PackageSource, UpdateResult,
+    JsonCheckError, JsonReport, JsonResult, JsonSkipped, JsonSummary, JsonUpdateCandidate,
+    PackageInfo, PackageSource, UpdateResult,
 };
 use cargo_fresh::package::{
     check_package_updates, exclude_packages, filter_packages, get_installed_packages,
@@ -378,7 +378,7 @@ fn build_report<'a>(
 
     let fresh: Vec<&str> = packages
         .iter()
-        .filter(|p| !p.has_update() && p.source.is_crates())
+        .filter(|p| !p.has_update() && p.source.is_crates() && p.check_error.is_none())
         .map(|p| p.name.as_str())
         .collect();
 
@@ -390,6 +390,17 @@ fn build_report<'a>(
             source: p.source.kind_str(),
             reason_code: p.source.skip_reason_code(),
             reason: "non-crates source: version check skipped",
+        })
+        .collect();
+
+    let version_check_errors: Vec<JsonCheckError> = packages
+        .iter()
+        .filter_map(|p| {
+            p.check_error.as_ref().map(|e| JsonCheckError {
+                name: p.name.as_str(),
+                kind: e.kind.kind_str(),
+                error: e.message.as_str(),
+            })
         })
         .collect();
 
@@ -414,6 +425,7 @@ fn build_report<'a>(
         succeeded,
         failed,
         skipped: skipped.len(),
+        check_errors: version_check_errors.len(),
         duration_ms: start.elapsed().as_millis(),
     };
 
@@ -426,6 +438,7 @@ fn build_report<'a>(
         updates_available,
         fresh,
         skipped,
+        version_check_errors,
         results,
         summary,
         aborted,
@@ -498,6 +511,36 @@ mod tests {
         let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
         assert_eq!(report.skipped.len(), 1);
         assert_eq!(report.skipped[0].reason_code, "git_source");
+    }
+
+    #[test]
+    fn build_report_excludes_check_error_packages_from_fresh() {
+        use cargo_fresh::models::{CheckError, CheckErrorKind};
+
+        let cli = empty_cli();
+        let mut errored = PackageInfo::with_source(
+            "bat".into(),
+            Some("0.24.0".into()),
+            PackageSource::Crates,
+        );
+        errored.check_error = Some(CheckError {
+            kind: CheckErrorKind::Unavailable,
+            message: "sparse index HTTP 503".into(),
+        });
+        let fresh_pkg = PackageInfo::with_source(
+            "ripgrep".into(),
+            Some("14.1.1".into()),
+            PackageSource::Crates,
+        );
+        let packages = vec![errored, fresh_pkg];
+
+        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
+
+        assert_eq!(report.fresh, vec!["ripgrep"]);
+        assert_eq!(report.version_check_errors.len(), 1);
+        assert_eq!(report.version_check_errors[0].name, "bat");
+        assert_eq!(report.version_check_errors[0].kind, "unavailable");
+        assert_eq!(report.summary.check_errors, 1);
     }
 
     #[test]

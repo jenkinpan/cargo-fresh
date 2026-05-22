@@ -195,6 +195,7 @@ pub struct JsonReport<'a> {
     pub updates_available: Vec<JsonUpdateCandidate<'a>>,
     pub fresh: Vec<&'a str>,
     pub skipped: Vec<JsonSkipped<'a>>,
+    pub version_check_errors: Vec<JsonCheckError<'a>>,
     pub results: Vec<JsonResult<'a>>,
     pub summary: JsonSummary,
     pub aborted: bool,
@@ -218,6 +219,13 @@ pub struct JsonSkipped<'a> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct JsonCheckError<'a> {
+    pub name: &'a str,
+    pub kind: &'static str,
+    pub error: &'a str,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct JsonResult<'a> {
     pub name: &'a str,
     pub old_version: Option<&'a str>,
@@ -234,6 +242,7 @@ pub struct JsonSummary {
     pub succeeded: usize,
     pub failed: usize,
     pub skipped: usize,
+    pub check_errors: usize,
     pub duration_ms: u128,
 }
 
