@@ -137,3 +137,28 @@ async fn check_package_updates_records_unavailable_error() {
     assert_eq!(err.kind, CheckErrorKind::Unavailable);
     assert!(packages[0].latest_version.is_none());
 }
+
+#[tokio::test]
+async fn check_package_updates_records_not_found_error() {
+    use cargo_fresh::models::{CheckErrorKind, PackageInfo, PackageSource};
+    use cargo_fresh::package::check_package_updates;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    let mut packages = vec![PackageInfo::with_source(
+        "nonexistent-crate".into(),
+        Some("0.1.0".into()),
+        PackageSource::Crates,
+    )];
+    check_package_updates(&mut packages, false, false, Some(server.uri()), true)
+        .await
+        .unwrap();
+
+    let err = packages[0].check_error.as_ref().expect("check_error set");
+    assert_eq!(err.kind, CheckErrorKind::NotFound);
+    assert!(packages[0].latest_version.is_none());
+}

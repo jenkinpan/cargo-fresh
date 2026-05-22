@@ -393,6 +393,7 @@ pub fn cargo_search_fallback_disabled(cli_flag: bool) -> bool {
 
 /// `fetch_latest_versions` 的返回值：版本号 + 可选的检查失败信息。
 /// `error` 为 `Some` 时表示既没拿到 sparse index 结果，兜底也失败了。
+#[derive(Debug)]
 pub struct VersionLookup {
     pub versions: sparse_index::LatestVersions,
     pub error: Option<crate::models::CheckError>,
