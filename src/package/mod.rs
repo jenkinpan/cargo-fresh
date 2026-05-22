@@ -391,6 +391,29 @@ pub fn cargo_search_fallback_disabled(cli_flag: bool) -> bool {
         .unwrap_or(false)
 }
 
+/// `fetch_latest_versions` 的返回值：版本号 + 可选的检查失败信息。
+/// `error` 为 `Some` 时表示既没拿到 sparse index 结果，兜底也失败了。
+#[derive(Debug)]
+pub struct VersionLookup {
+    pub versions: sparse_index::LatestVersions,
+    pub error: Option<crate::models::CheckError>,
+}
+
+/// 把 sparse index 的失败分类成对外的 `CheckError`。
+fn classify_sparse_error(e: &sparse_index::SparseIndexError) -> crate::models::CheckError {
+    use crate::models::{CheckError, CheckErrorKind};
+    match e {
+        sparse_index::SparseIndexError::NotFound => CheckError {
+            kind: CheckErrorKind::NotFound,
+            message: "package not found in registry index".to_string(),
+        },
+        sparse_index::SparseIndexError::Unavailable(err) => CheckError {
+            kind: CheckErrorKind::Unavailable,
+            message: err.to_string(),
+        },
+    }
+}
+
 /// 拉取一个包的稳定 + 预发布最新版本。
 ///
 /// 主路径走 sparse index（快、并发友好）；任何失败时回退到 `cargo search`。
@@ -408,36 +431,54 @@ pub async fn fetch_latest_versions(
     registry_override: Option<&str>,
     no_fallback: bool,
     verbose: bool,
-) -> sparse_index::LatestVersions {
+) -> VersionLookup {
     let base = registry::sparse_index_base(registry_override);
-    match sparse_index::fetch_latest(http_client(), &base, package_name).await {
-        Ok(v) => v,
-        Err(_) if no_fallback => sparse_index::LatestVersions::default(),
-        Err(_) => {
-            if verbose {
-                crate::display::status_dim(
-                    "Fallback",
-                    &format!("cargo search (slow path) for {}", package_name.cyan()),
-                );
-            }
-            // 回退到 cargo search——只能拿一个版本，根据需求填入对应字段
-            match cargo_search_fallback(package_name, include_prerelease).await {
-                Ok(Some(v)) => {
-                    if is_stable_version(&v) {
-                        sparse_index::LatestVersions {
-                            stable: Some(v),
-                            prerelease: None,
-                        }
-                    } else {
-                        sparse_index::LatestVersions {
-                            stable: None,
-                            prerelease: Some(v),
-                        }
-                    }
+    let sparse_err = match sparse_index::fetch_latest(http_client(), &base, package_name).await {
+        Ok(v) => {
+            return VersionLookup {
+                versions: v,
+                error: None,
+            };
+        }
+        Err(e) => e,
+    };
+
+    if no_fallback {
+        return VersionLookup {
+            versions: sparse_index::LatestVersions::default(),
+            error: Some(classify_sparse_error(&sparse_err)),
+        };
+    }
+
+    if verbose {
+        crate::display::status_dim(
+            "Fallback",
+            &format!("cargo search (slow path) for {}", package_name.cyan()),
+        );
+    }
+    // 回退到 cargo search——只能拿一个版本，根据需求填入对应字段
+    match cargo_search_fallback(package_name, include_prerelease).await {
+        Ok(Some(v)) => {
+            let versions = if is_stable_version(&v) {
+                sparse_index::LatestVersions {
+                    stable: Some(v),
+                    prerelease: None,
                 }
-                _ => sparse_index::LatestVersions::default(),
+            } else {
+                sparse_index::LatestVersions {
+                    stable: None,
+                    prerelease: Some(v),
+                }
+            };
+            VersionLookup {
+                versions,
+                error: None,
             }
         }
+        _ => VersionLookup {
+            versions: sparse_index::LatestVersions::default(),
+            error: Some(classify_sparse_error(&sparse_err)),
+        },
     }
 }
 
@@ -448,7 +489,9 @@ pub async fn get_latest_version(
     include_prerelease: bool,
 ) -> Result<Option<String>> {
     let latest =
-        fetch_latest_versions(package_name, include_prerelease, None, false, false).await;
+        fetch_latest_versions(package_name, include_prerelease, None, false, false)
+            .await
+            .versions;
     Ok(if include_prerelease {
         latest.prerelease.or(latest.stable)
     } else {
@@ -526,7 +569,7 @@ pub async fn check_package_updates(
                     ),
                 );
             }
-            let latest = fetch_latest_versions(
+            let lookup = fetch_latest_versions(
                 &package_name,
                 true,
                 override_clone.as_deref(),
@@ -534,13 +577,13 @@ pub async fn check_package_updates(
                 verbose,
             )
             .await;
-            (index, package_name, latest)
+            (index, package_name, lookup)
         });
         handles.push(handle);
     }
 
     for handle in handles {
-        let Ok((index, package_name, latest)) = handle.await else {
+        let Ok((index, package_name, lookup)) = handle.await else {
             if verbose {
                 crate::display::status_warn("Check", language.get_text("check_failed"));
             }
@@ -549,8 +592,8 @@ pub async fn check_package_updates(
 
         let current = packages[index].current_version.clone();
         let chosen = choose_latest(
-            latest.stable.as_deref(),
-            latest.prerelease.as_deref(),
+            lookup.versions.stable.as_deref(),
+            lookup.versions.prerelease.as_deref(),
             current.as_deref(),
             include_prerelease,
         );
@@ -577,6 +620,7 @@ pub async fn check_package_updates(
             }
         }
         packages[index].latest_version = chosen;
+        packages[index].check_error = lookup.error;
     }
 
     Ok(())
@@ -897,6 +941,7 @@ mod tests {
             latest_version: Some(latest.to_string()),
             source: PackageSource::Crates,
             install_opts: None,
+            check_error: None,
         }
     }
 

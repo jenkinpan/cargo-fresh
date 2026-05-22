@@ -9,7 +9,7 @@
 //!
 //! 跑这些不联网，纯粹验证客户端行为。
 
-use cargo_fresh::package::sparse_index::fetch_latest;
+use cargo_fresh::package::sparse_index::{fetch_latest, SparseIndexError};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -51,7 +51,7 @@ async fn not_found_is_not_retried() {
     let err = fetch_latest(&client(), &server.uri(), "cargo-nonexistent")
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("404"), "err = {err}");
+    assert!(matches!(err, SparseIndexError::NotFound), "err = {err:?}");
 }
 
 #[tokio::test]
@@ -64,8 +64,15 @@ async fn server_error_is_retried_once_then_fails() {
         .mount(&server)
         .await;
 
-    let err = fetch_latest(&client(), &server.uri(), "ripgrep").await.unwrap_err();
-    assert!(err.to_string().contains("503"), "err = {err}");
+    let err = fetch_latest(&client(), &server.uri(), "ripgrep")
+        .await
+        .unwrap_err();
+    match err {
+        SparseIndexError::Unavailable(e) => {
+            assert!(e.to_string().contains("503"), "inner = {e}");
+        }
+        other => panic!("expected Unavailable, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -103,4 +110,55 @@ async fn empty_body_returns_empty_versions() {
 
     let v = fetch_latest(&client(), &server.uri(), "cargo-fresh").await.unwrap();
     assert!(v.stable.is_none() && v.prerelease.is_none());
+}
+
+#[tokio::test]
+async fn check_package_updates_records_unavailable_error() {
+    use cargo_fresh::models::{CheckErrorKind, PackageInfo, PackageSource};
+    use cargo_fresh::package::check_package_updates;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    let mut packages = vec![PackageInfo::with_source(
+        "ripgrep".into(),
+        Some("14.0.0".into()),
+        PackageSource::Crates,
+    )];
+    // no_fallback = true 跳过 cargo search 慢路径，保证离线确定性
+    check_package_updates(&mut packages, false, false, Some(server.uri()), true)
+        .await
+        .unwrap();
+
+    let err = packages[0].check_error.as_ref().expect("check_error set");
+    assert_eq!(err.kind, CheckErrorKind::Unavailable);
+    assert!(packages[0].latest_version.is_none());
+}
+
+#[tokio::test]
+async fn check_package_updates_records_not_found_error() {
+    use cargo_fresh::models::{CheckErrorKind, PackageInfo, PackageSource};
+    use cargo_fresh::package::check_package_updates;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    let mut packages = vec![PackageInfo::with_source(
+        "nonexistent-crate".into(),
+        Some("0.1.0".into()),
+        PackageSource::Crates,
+    )];
+    check_package_updates(&mut packages, false, false, Some(server.uri()), true)
+        .await
+        .unwrap();
+
+    let err = packages[0].check_error.as_ref().expect("check_error set");
+    assert_eq!(err.kind, CheckErrorKind::NotFound);
+    assert!(packages[0].latest_version.is_none());
 }

@@ -12,8 +12,8 @@ use cargo_fresh::display::{
 };
 use cargo_fresh::locale::detect_language;
 use cargo_fresh::models::{
-    JsonReport, JsonResult, JsonSkipped, JsonSummary, JsonUpdateCandidate, PackageInfo,
-    PackageSource, UpdateResult,
+    JsonCheckError, JsonReport, JsonResult, JsonSkipped, JsonSummary, JsonUpdateCandidate,
+    PackageInfo, PackageSource, UpdateResult,
 };
 use cargo_fresh::package::{
     check_package_updates, exclude_packages, filter_packages, get_installed_packages,
@@ -114,7 +114,7 @@ async fn run() -> Result<i32> {
     if packages.is_empty() {
         status_warn("Note", language.get_text("no_packages_found"));
         if json_mode {
-            emit_empty_report(&cli, run_start);
+            emit_report(&cli, &[], &[], &[], false, run_start, 0);
         }
         return Ok(EXIT_OK);
     }
@@ -128,7 +128,7 @@ async fn run() -> Result<i32> {
     if (cli.filter.is_some() || !cli.exclude.is_empty()) && packages.is_empty() {
         status_warn("Note", language.get_text("no_packages_found"));
         if json_mode {
-            emit_empty_report(&cli, run_start);
+            emit_report(&cli, &[], &[], &[], false, run_start, 0);
         }
         return Ok(EXIT_OK);
     }
@@ -172,7 +172,7 @@ async fn run() -> Result<i32> {
     if all_updates.is_empty() {
         status("Finished", language.get_text("all_up_to_date"));
         if json_mode {
-            emit_report(&cli, &packages, &[], &[], false, run_start);
+            emit_report(&cli, &packages, &[], &[], false, run_start, 0);
         }
         return Ok(EXIT_OK);
     }
@@ -330,6 +330,7 @@ async fn run() -> Result<i32> {
             &update_results,
             aborted,
             run_start,
+            selections.len(),
         );
     }
 
@@ -351,39 +352,17 @@ async fn run() -> Result<i32> {
     Ok(code)
 }
 
-/// 提前退出（没有任何包）时打一份空 JSON 报告，保持 stdout 始终单行可解析。
-fn emit_empty_report(cli: &Cli, start: std::time::Instant) {
-    let report = JsonReport {
-        schema_version: 1,
-        format: "cargo-fresh-v1",
-        include_prerelease: cli.include_prerelease,
-        dry_run: cli.dry_run,
-        registry_url: cli.registry_url.as_deref(),
-        updates_available: vec![],
-        fresh: vec![],
-        skipped: vec![],
-        results: vec![],
-        summary: JsonSummary {
-            checked: 0,
-            available: 0,
-            succeeded: 0,
-            failed: 0,
-            skipped: 0,
-            duration_ms: start.elapsed().as_millis(),
-        },
-        aborted: false,
-    };
-    print_json(&report);
-}
-
-fn emit_report(
-    cli: &Cli,
-    packages: &[PackageInfo],
-    all_updates: &[&PackageInfo],
-    update_results: &[UpdateResult],
+/// 纯函数：把整次运行的快照组装成 JSON 报告结构。
+/// 不做 I/O，便于单元测试；`emit_report` 负责真正写 stdout。
+fn build_report<'a>(
+    cli: &'a Cli,
+    packages: &'a [PackageInfo],
+    all_updates: &[&'a PackageInfo],
+    update_results: &'a [UpdateResult],
     aborted: bool,
     start: std::time::Instant,
-) {
+    selected: usize,
+) -> JsonReport<'a> {
     let updates_available: Vec<JsonUpdateCandidate> = all_updates
         .iter()
         .filter_map(|p| {
@@ -399,18 +378,29 @@ fn emit_report(
 
     let fresh: Vec<&str> = packages
         .iter()
-        .filter(|p| !p.has_update() && p.source.is_crates())
+        .filter(|p| !p.has_update() && p.source.is_crates() && p.check_error.is_none())
         .map(|p| p.name.as_str())
         .collect();
 
-    // 跳过的包：git / path 源没有版本检查
     let skipped: Vec<JsonSkipped> = packages
         .iter()
         .filter(|p| !p.source.is_crates())
         .map(|p| JsonSkipped {
             name: p.name.as_str(),
             source: p.source.kind_str(),
+            reason_code: p.source.skip_reason_code(),
             reason: "non-crates source: version check skipped",
+        })
+        .collect();
+
+    let version_check_errors: Vec<JsonCheckError> = packages
+        .iter()
+        .filter_map(|p| {
+            p.check_error.as_ref().map(|e| JsonCheckError {
+                name: p.name.as_str(),
+                kind: e.kind.kind_str(),
+                error: e.message.as_str(),
+            })
         })
         .collect();
 
@@ -430,13 +420,16 @@ fn emit_report(
     let summary = JsonSummary {
         checked: packages.len(),
         available: updates_available.len(),
+        selected,
+        attempted: results.len(),
         succeeded,
         failed,
         skipped: skipped.len(),
+        check_errors: version_check_errors.len(),
         duration_ms: start.elapsed().as_millis(),
     };
 
-    let report = JsonReport {
+    JsonReport {
         schema_version: 1,
         format: "cargo-fresh-v1",
         include_prerelease: cli.include_prerelease,
@@ -445,12 +438,31 @@ fn emit_report(
         updates_available,
         fresh,
         skipped,
+        version_check_errors,
         results,
         summary,
         aborted,
-    };
+    }
+}
 
-    print_json(&report);
+fn emit_report(
+    cli: &Cli,
+    packages: &[PackageInfo],
+    all_updates: &[&PackageInfo],
+    update_results: &[UpdateResult],
+    aborted: bool,
+    start: std::time::Instant,
+    selected: usize,
+) {
+    print_json(&build_report(
+        cli,
+        packages,
+        all_updates,
+        update_results,
+        aborted,
+        start,
+        selected,
+    ));
 }
 
 fn print_json(report: &JsonReport) {
@@ -462,5 +474,88 @@ fn print_json(report: &JsonReport) {
                 "{{\"schema_version\":1,\"error\":\"failed to serialize report: {}\"}}", e
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    use cargo_fresh::models::{PackageInfo, PackageSource};
+
+    fn empty_cli() -> Cli {
+        Cli::parse_from(["cargo-fresh"])
+    }
+
+    #[test]
+    fn build_report_counts_packages_and_sets_format() {
+        let cli = empty_cli();
+        let packages = vec![
+            PackageInfo::with_source("ripgrep".into(), Some("14.1.1".into()), PackageSource::Crates),
+        ];
+        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
+        assert_eq!(report.schema_version, 1);
+        assert_eq!(report.format, "cargo-fresh-v1");
+        assert_eq!(report.summary.checked, 1);
+        assert_eq!(report.fresh, vec!["ripgrep"]);
+    }
+
+    #[test]
+    fn build_report_sets_skip_reason_code() {
+        let cli = empty_cli();
+        let packages = vec![PackageInfo::with_source(
+            "my-tool".into(),
+            Some("0.1.0".into()),
+            PackageSource::Git { url: "u".into(), rev: None },
+        )];
+        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
+        assert_eq!(report.skipped.len(), 1);
+        assert_eq!(report.skipped[0].reason_code, "git_source");
+    }
+
+    #[test]
+    fn build_report_excludes_check_error_packages_from_fresh() {
+        use cargo_fresh::models::{CheckError, CheckErrorKind};
+
+        let cli = empty_cli();
+        let mut errored = PackageInfo::with_source(
+            "bat".into(),
+            Some("0.24.0".into()),
+            PackageSource::Crates,
+        );
+        errored.check_error = Some(CheckError {
+            kind: CheckErrorKind::Unavailable,
+            message: "sparse index HTTP 503".into(),
+        });
+        let fresh_pkg = PackageInfo::with_source(
+            "ripgrep".into(),
+            Some("14.1.1".into()),
+            PackageSource::Crates,
+        );
+        let packages = vec![errored, fresh_pkg];
+
+        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
+
+        assert_eq!(report.fresh, vec!["ripgrep"]);
+        assert_eq!(report.version_check_errors.len(), 1);
+        assert_eq!(report.version_check_errors[0].name, "bat");
+        assert_eq!(report.version_check_errors[0].kind, "unavailable");
+        assert_eq!(report.summary.check_errors, 1);
+    }
+
+    #[test]
+    fn build_report_summary_has_selection_counts() {
+        let cli = empty_cli();
+        let report = build_report(
+            &cli,
+            &[],
+            &[],
+            &[],
+            false,
+            std::time::Instant::now(),
+            3,
+        );
+        assert_eq!(report.summary.selected, 3);
+        assert_eq!(report.summary.attempted, 0);
     }
 }

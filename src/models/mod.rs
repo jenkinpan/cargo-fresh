@@ -49,6 +49,17 @@ impl PackageSource {
             PackageSource::Unknown(_) => "[unknown source]",
         }
     }
+
+    /// JSON `skipped[].reason_code`——稳定可判别的枚举字符串。
+    /// `skipped[]` 只收非 crates 源，`Crates` 分支不会被实际输出。
+    pub fn skip_reason_code(&self) -> &'static str {
+        match self {
+            PackageSource::Crates => "crates_source",
+            PackageSource::Git { .. } => "git_source",
+            PackageSource::Path { .. } => "path_source",
+            PackageSource::Unknown(_) => "unknown_source",
+        }
+    }
 }
 
 /// 一个包安装时使用的 Cargo 特性选项，从 `$CARGO_HOME/.crates2.json` 解析而来。
@@ -69,6 +80,32 @@ impl InstallOpts {
     }
 }
 
+/// 版本检查失败的可判别分类。决定 JSON `version_check_errors[].kind`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckErrorKind {
+    /// registry index 里没有这个包（4xx）——重试无意义，可能是改名 / 配错 registry。
+    NotFound,
+    /// 网络 / 超时 / 5xx / 解析失败——瞬时故障，重试 CI 作业可能恢复。
+    Unavailable,
+}
+
+impl CheckErrorKind {
+    /// JSON 里用 "not_found" / "unavailable" 短串表示。
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            CheckErrorKind::NotFound => "not_found",
+            CheckErrorKind::Unavailable => "unavailable",
+        }
+    }
+}
+
+/// 一个包版本检查失败的记录。`message` 是人读的文案，不保证稳定、不要据此分支。
+#[derive(Debug, Clone)]
+pub struct CheckError {
+    pub kind: CheckErrorKind,
+    pub message: String,
+}
+
 #[derive(Debug)]
 pub struct PackageInfo {
     pub name: String,
@@ -76,6 +113,7 @@ pub struct PackageInfo {
     pub latest_version: Option<String>,
     pub source: PackageSource,
     pub install_opts: Option<InstallOpts>,
+    pub check_error: Option<CheckError>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +142,7 @@ impl PackageInfo {
             latest_version: None,
             source,
             install_opts: None,
+            check_error: None,
         }
     }
 
@@ -156,6 +195,7 @@ pub struct JsonReport<'a> {
     pub updates_available: Vec<JsonUpdateCandidate<'a>>,
     pub fresh: Vec<&'a str>,
     pub skipped: Vec<JsonSkipped<'a>>,
+    pub version_check_errors: Vec<JsonCheckError<'a>>,
     pub results: Vec<JsonResult<'a>>,
     pub summary: JsonSummary,
     pub aborted: bool,
@@ -174,7 +214,15 @@ pub struct JsonUpdateCandidate<'a> {
 pub struct JsonSkipped<'a> {
     pub name: &'a str,
     pub source: &'static str,
+    pub reason_code: &'static str,
     pub reason: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonCheckError<'a> {
+    pub name: &'a str,
+    pub kind: &'static str,
+    pub error: &'a str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -189,9 +237,12 @@ pub struct JsonResult<'a> {
 pub struct JsonSummary {
     pub checked: usize,
     pub available: usize,
+    pub selected: usize,
+    pub attempted: usize,
     pub succeeded: usize,
     pub failed: usize,
     pub skipped: usize,
+    pub check_errors: usize,
     pub duration_ms: u128,
 }
 
@@ -267,5 +318,27 @@ mod tests {
     fn package_info_install_opts_defaults_none() {
         let p = PackageInfo::new("ripgrep".to_string(), Some("14.0.0".to_string()));
         assert!(p.install_opts.is_none());
+    }
+
+    #[test]
+    fn skip_reason_code_maps_each_source() {
+        assert_eq!(
+            PackageSource::Path { dir: "/x".into() }.skip_reason_code(),
+            "path_source"
+        );
+        assert_eq!(
+            PackageSource::Git { url: "u".into(), rev: None }.skip_reason_code(),
+            "git_source"
+        );
+        assert_eq!(
+            PackageSource::Unknown("weird".into()).skip_reason_code(),
+            "unknown_source"
+        );
+    }
+
+    #[test]
+    fn check_error_kind_str_maps_both_variants() {
+        assert_eq!(CheckErrorKind::NotFound.kind_str(), "not_found");
+        assert_eq!(CheckErrorKind::Unavailable.kind_str(), "unavailable");
     }
 }
