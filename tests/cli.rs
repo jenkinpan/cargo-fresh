@@ -105,6 +105,26 @@ fn json_mode_keeps_stdout_clean() {
 }
 
 #[test]
+fn json_mode_emits_new_contract_fields() {
+    // 1.0 合约新增字段（schema_version=1 增量）必须始终出现在 JSON 报告中，
+    // 即便本次运行匹配不到任何包——下游脚本据此可无条件解析这些键
+    let assert = bin()
+        .args(["--batch", "--dry-run", "--format=json", "--filter=__nonexistent_pkg_xyz__"])
+        .assert()
+        .success();
+    let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    let trimmed = out.trim();
+    for key in [
+        "\"version_check_errors\":",
+        "\"selected\":",
+        "\"attempted\":",
+        "\"check_errors\":",
+    ] {
+        assert!(trimmed.contains(key), "JSON missing {key}\n{out}");
+    }
+}
+
+#[test]
 fn no_color_env_strips_ansi_from_stderr() {
     // NO_COLOR=1 + 非 TTY stderr：anstream 应该把 ANSI 序列裁干净
     let assert = bin()
