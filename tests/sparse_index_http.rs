@@ -9,7 +9,7 @@
 //!
 //! 跑这些不联网，纯粹验证客户端行为。
 
-use cargo_fresh::package::sparse_index::fetch_latest;
+use cargo_fresh::package::sparse_index::{fetch_latest, SparseIndexError};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -51,7 +51,7 @@ async fn not_found_is_not_retried() {
     let err = fetch_latest(&client(), &server.uri(), "cargo-nonexistent")
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("404"), "err = {err}");
+    assert!(matches!(err, SparseIndexError::NotFound), "err = {err:?}");
 }
 
 #[tokio::test]
@@ -64,8 +64,15 @@ async fn server_error_is_retried_once_then_fails() {
         .mount(&server)
         .await;
 
-    let err = fetch_latest(&client(), &server.uri(), "ripgrep").await.unwrap_err();
-    assert!(err.to_string().contains("503"), "err = {err}");
+    let err = fetch_latest(&client(), &server.uri(), "ripgrep")
+        .await
+        .unwrap_err();
+    match err {
+        SparseIndexError::Unavailable(e) => {
+            assert!(e.to_string().contains("503"), "inner = {e}");
+        }
+        other => panic!("expected Unavailable, got {other:?}"),
+    }
 }
 
 #[tokio::test]

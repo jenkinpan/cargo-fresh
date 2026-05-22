@@ -9,7 +9,6 @@
 //!
 //! 参考：<https://doc.rust-lang.org/cargo/reference/registry-index.html#index-files>
 
-use anyhow::Result;
 use semver::Version;
 use serde::Deserialize;
 
@@ -28,6 +27,15 @@ struct IndexEntry {
 pub struct LatestVersions {
     pub stable: Option<String>,
     pub prerelease: Option<String>,
+}
+
+/// `fetch_latest` 的失败分类——决定 JSON `version_check_errors[].kind`。
+#[derive(Debug)]
+pub enum SparseIndexError {
+    /// sparse index 返回 4xx——包不在该 registry，重试无意义。
+    NotFound,
+    /// 网络错误 / 超时 / 5xx 重试耗尽 / 响应体读取失败——可能是瞬时故障。
+    Unavailable(anyhow::Error),
 }
 
 /// 按 crates.io 规则计算包名在 sparse index 中的相对路径。
@@ -99,13 +107,15 @@ pub async fn fetch_latest(
     client: &reqwest::Client,
     base_url: &str,
     name: &str,
-) -> Result<LatestVersions> {
+) -> std::result::Result<LatestVersions, SparseIndexError> {
     const MAX_ATTEMPTS: u32 = 2;
     const RETRY_DELAY_MS: u64 = 500;
 
     let path = index_path(name);
     if path.is_empty() {
-        anyhow::bail!("empty package name");
+        return Err(SparseIndexError::Unavailable(anyhow::anyhow!(
+            "empty package name"
+        )));
     }
     let url = format!("{}/{}", base_url.trim_end_matches('/'), path);
 
@@ -115,12 +125,14 @@ pub async fn fetch_latest(
             Ok(resp) => {
                 let status = resp.status();
                 if status.is_success() {
-                    let body = resp.text().await?;
+                    let body = resp.text().await.map_err(|e| {
+                        SparseIndexError::Unavailable(anyhow::Error::new(e))
+                    })?;
                     return Ok(parse_index_body(&body));
                 }
                 // 4xx 不重试——通常是真的没这个包，再请求一次浪费时间
                 if status.is_client_error() {
-                    anyhow::bail!("sparse index HTTP {}", status);
+                    return Err(SparseIndexError::NotFound);
                 }
                 last_err = Some(anyhow::anyhow!("sparse index HTTP {}", status));
             }
@@ -132,7 +144,9 @@ pub async fn fetch_latest(
             tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
         }
     }
-    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("sparse index: all retries exhausted")))
+    Err(SparseIndexError::Unavailable(last_err.unwrap_or_else(|| {
+        anyhow::anyhow!("sparse index: all retries exhausted")
+    })))
 }
 
 #[cfg(test)]
