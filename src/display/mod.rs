@@ -5,7 +5,7 @@ use dialoguer::{Confirm, MultiSelect};
 use indicatif::ProgressBar;
 
 use crate::locale::Language;
-use crate::models::{PackageInfo, UpdateResult};
+use crate::models::{BinstallKind, PackageInfo, UpdateResult};
 
 /// JSON mode 开关：在 main 早期被设置一次，之后所有 status* / print_* /
 /// dialoguer 调用都自动 no-op，避免污染 JSON 输出。
@@ -121,13 +121,28 @@ fn package_transition(package: &PackageInfo, language: Language) -> String {
     } else {
         format!(" {}", marker.dimmed())
     };
+    let binstall_suffix = match package.binstall_kind {
+        Some(kind) => format!(" {}", binstall_marker(kind)),
+        None => String::new(),
+    };
     format!(
-        "{} {} -> {}{}",
+        "{} {} -> {}{}{}",
         package.name.cyan(),
         current.red(),
         latest.green(),
-        suffix
+        suffix,
+        binstall_suffix
     )
+}
+
+/// 给 binstall 预检标记上色:预编译绿(好消息)、源码构建黄(预警:这次升级
+/// 会慢)、无法判别 dim。`--check-binstall` 时挂在 `Updating` 行尾。
+fn binstall_marker(kind: BinstallKind) -> String {
+    match kind {
+        BinstallKind::Prebuilt => kind.marker().green().to_string(),
+        BinstallKind::SourceBuild => kind.marker().yellow().to_string(),
+        BinstallKind::Unknown => kind.marker().dimmed().to_string(),
+    }
 }
 
 /// 把 (old, new) 渲染成 "old -> new"（带颜色），或 "old (unchanged)"。

@@ -150,6 +150,16 @@ async fn run() -> Result<i32> {
     )
     .await?;
 
+    // --check-binstall:对更新候选并发跑 `cargo binstall --dry-run`,提前标出
+    // "会拿预编译产物(快)"还是"会从源码构建(慢)"。binstall 没装就只给 Hint。
+    if cli.check_binstall {
+        if cargo_fresh::package::is_binstall_available() {
+            cargo_fresh::package::binstall_probe::annotate_updates(&mut packages).await;
+        } else {
+            status_dim("Hint", language.get_text("binstall_hint"));
+        }
+    }
+
     let stable_updates: Vec<&PackageInfo> = packages
         .iter()
         .filter(|p| {
@@ -245,16 +255,23 @@ async fn run() -> Result<i32> {
                 cli.dry_run,
                 cli.install_binstall,
                 cli.verbose,
+                &cancel,
             )
             .await
             {
-                Ok(result) => {
+                Ok(Some(result)) => {
                     if result.success {
                         success_count += 1;
                     } else {
                         fail_count += 1;
                     }
                     update_results.push(result);
+                }
+                Ok(None) => {
+                    // update_package 执行中途检测到 Ctrl-C:这个包既不算成功
+                    // 也不算失败,不计入 update_results。标记中止、停止后续包。
+                    aborted_at = Some(i);
+                    break;
                 }
                 Err(e) => {
                     status_err(
@@ -372,6 +389,7 @@ fn build_report<'a>(
                 latest,
                 source: p.source.kind_str(),
                 prerelease: p.is_prerelease(),
+                binstall: p.binstall_kind.map(|k| k.kind_str()),
             })
         })
         .collect();
@@ -541,6 +559,57 @@ mod tests {
         assert_eq!(report.version_check_errors[0].name, "bat");
         assert_eq!(report.version_check_errors[0].kind, "unavailable");
         assert_eq!(report.summary.check_errors, 1);
+    }
+
+    #[test]
+    fn build_report_maps_binstall_kind_to_json() {
+        // --check-binstall 探测出的 BinstallKind 必须落到 updates_available[].binstall
+        use cargo_fresh::models::BinstallKind;
+        let cli = empty_cli();
+        let mut pkg = PackageInfo::with_source(
+            "cargo-deny".into(),
+            Some("0.19.6".into()),
+            PackageSource::Crates,
+        );
+        pkg.latest_version = Some("0.19.7".into());
+        pkg.binstall_kind = Some(BinstallKind::SourceBuild);
+        let packages = vec![pkg];
+        let all_updates: Vec<&PackageInfo> = packages.iter().collect();
+        let report = build_report(
+            &cli,
+            &packages,
+            &all_updates,
+            &[],
+            false,
+            std::time::Instant::now(),
+            0,
+        );
+        assert_eq!(report.updates_available.len(), 1);
+        assert_eq!(report.updates_available[0].binstall, Some("source_build"));
+    }
+
+    #[test]
+    fn build_report_binstall_is_null_when_not_probed() {
+        // 没跑 --check-binstall 时 binstall_kind 为 None,JSON 里应是 null
+        let cli = empty_cli();
+        let mut pkg = PackageInfo::with_source(
+            "ripgrep".into(),
+            Some("14.1.0".into()),
+            PackageSource::Crates,
+        );
+        pkg.latest_version = Some("14.1.1".into());
+        let packages = vec![pkg];
+        let all_updates: Vec<&PackageInfo> = packages.iter().collect();
+        let report = build_report(
+            &cli,
+            &packages,
+            &all_updates,
+            &[],
+            false,
+            std::time::Instant::now(),
+            0,
+        );
+        assert_eq!(report.updates_available[0].binstall, None);
     }
 
     #[test]

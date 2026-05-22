@@ -116,6 +116,7 @@ cargo-fresh
 - `--dry-run`: Print the cargo commands that would run without executing them
 - `--registry-url <URL>`: Override sparse index base URL (mirror support)
 - `--format <FORMAT>`: `human` (default) or `json` for CI consumption
+- `--check-binstall`: Probe each update candidate with `cargo binstall --dry-run` during the check phase and mark whether binstall would fetch a prebuilt binary (`[binstall: prebuilt]`) or compile from source (`[binstall: source build]`). Off by default — each probe spawns cargo and hits the network (~10s/package, run concurrently); requires `cargo-binstall` to be installed
 - `-h, --help`: Show help information
 - `-V, --version`: Show version information
 

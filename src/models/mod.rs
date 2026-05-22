@@ -106,6 +106,42 @@ pub struct CheckError {
     pub message: String,
 }
 
+/// `cargo binstall --dry-run` 对一个更新候选的预检结论。
+///
+/// 仅在 CLI `--check-binstall` 时填充——对每个有更新的 crates.io 包跑一次
+/// dry-run,提前看出这次升级是拿预编译二进制(快)还是退化成源码构建(慢)。
+/// 这正是"crates.io 已发布新版、但 GitHub release 二进制还没传完"那段
+/// 窗口期里 binstall 会闷头编译十几分钟的场景——预检能提前把它标出来。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinstallKind {
+    /// binstall 能拉到预编译二进制(GitHub release / QuickInstall)——快。
+    Prebuilt,
+    /// binstall 找不到预编译产物,会退化成 `cargo install` 从源码构建——慢。
+    SourceBuild,
+    /// dry-run 输出无法判别(binstall 报错、网络问题、输出格式变化等)。
+    Unknown,
+}
+
+impl BinstallKind {
+    /// JSON `updates_available[].binstall` 用的稳定短串。
+    pub fn kind_str(self) -> &'static str {
+        match self {
+            BinstallKind::Prebuilt => "prebuilt",
+            BinstallKind::SourceBuild => "source_build",
+            BinstallKind::Unknown => "unknown",
+        }
+    }
+
+    /// 挂在 `Updating` 行尾的 UI 标记。
+    pub fn marker(self) -> &'static str {
+        match self {
+            BinstallKind::Prebuilt => "[binstall: prebuilt]",
+            BinstallKind::SourceBuild => "[binstall: source build]",
+            BinstallKind::Unknown => "[binstall: unknown]",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PackageInfo {
     pub name: String,
@@ -114,6 +150,9 @@ pub struct PackageInfo {
     pub source: PackageSource,
     pub install_opts: Option<InstallOpts>,
     pub check_error: Option<CheckError>,
+    /// binstall 预检结论。`None` = 未探测(没加 `--check-binstall`,或 binstall
+    /// 没装,或这个包不是更新候选)。
+    pub binstall_kind: Option<BinstallKind>,
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +182,7 @@ impl PackageInfo {
             source,
             install_opts: None,
             check_error: None,
+            binstall_kind: None,
         }
     }
 
@@ -208,6 +248,9 @@ pub struct JsonUpdateCandidate<'a> {
     pub latest: &'a str,
     pub source: &'static str,
     pub prerelease: bool,
+    /// binstall 预检结论:`"prebuilt"` / `"source_build"` / `"unknown"`,
+    /// 未跑 `--check-binstall` 时为 `null`。
+    pub binstall: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]

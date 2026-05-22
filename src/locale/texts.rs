@@ -96,6 +96,7 @@ pub fn get_english_text(key: &str) -> &'static str {
         "using_binstall" => "cargo binstall",
         "using_install_fallback" => "cargo install",
         "binstall_failed_fallback" => "binstall failed, falling back to cargo install",
+        "checking_binstall" => "binstall availability for {} update candidate(s)",
 
         // Timing
         "total_time_seconds" => "in {}s",
@@ -203,6 +204,7 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "using_binstall" => "cargo binstall",
         "using_install_fallback" => "cargo install",
         "binstall_failed_fallback" => "binstall 失败，回退到 cargo install",
+        "checking_binstall" => "{} 个更新候选的 binstall 可用性",
 
         // 时间
         "total_time_seconds" => "耗时 {}s",
@@ -301,6 +303,7 @@ mod tests {
             "checking_package",
             "unable_to_get_latest_version",
             "check_failed",
+            "checking_binstall",
         ];
 
         for key in &english_keys {

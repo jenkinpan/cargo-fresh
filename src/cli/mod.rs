@@ -64,6 +64,15 @@ pub struct Cli {
     #[arg(long)]
     pub install_binstall: bool,
 
+    /// Probe each update candidate with `cargo binstall --dry-run` during the
+    /// check phase, and mark whether binstall would fetch a prebuilt binary
+    /// (fast) or fall back to compiling from source (slow). Off by default —
+    /// each probe spawns cargo and hits the network (~10s/package, run
+    /// concurrently). Requires cargo-binstall to be installed; otherwise the
+    /// run prints a hint and proceeds without markers.
+    #[arg(long)]
+    pub check_binstall: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

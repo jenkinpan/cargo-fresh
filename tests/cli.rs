@@ -33,6 +33,7 @@ fn help_lists_core_flags() {
         "--format",
         "--no-cargo-search-fallback",
         "--install-binstall",
+        "--check-binstall",
     ] {
         assert!(out.contains(flag), "help missing {flag}\n--- help ---\n{out}");
     }

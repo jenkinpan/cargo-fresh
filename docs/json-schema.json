@@ -75,7 +75,7 @@
   "$defs": {
     "updateCandidate": {
       "type": "object",
-      "required": ["name", "current", "latest", "source", "prerelease"],
+      "required": ["name", "current", "latest", "source", "prerelease", "binstall"],
       "properties": {
         "name": { "type": "string" },
         "current": {
@@ -90,6 +90,11 @@
         "prerelease": {
           "type": "boolean",
           "description": "True when `latest` is a SemVer prerelease (only possible with --include-prerelease)."
+        },
+        "binstall": {
+          "type": ["string", "null"],
+          "enum": ["prebuilt", "source_build", "unknown", null],
+          "description": "cargo-binstall pre-check result, populated only when --check-binstall was used: 'prebuilt' = binstall would fetch a prebuilt binary (fast), 'source_build' = binstall would compile from source (slow), 'unknown' = could not be determined. null when --check-binstall was not passed."
         }
       }
     },

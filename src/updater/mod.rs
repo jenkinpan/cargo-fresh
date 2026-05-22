@@ -2,6 +2,7 @@ use anyhow::Result;
 use colored::*;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::process::Output;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::process::Command;
 
 use crate::display::{pb_status, pb_status_dim, pb_status_err, pb_status_warn, status, status_dim};
@@ -306,6 +307,18 @@ fn report_command_failure(pb: &ProgressBar, package_name: &str, output: &Output)
     }
 }
 
+/// 更新单个包。
+///
+/// 返回 `Ok(None)` 表示**用户按 Ctrl-C 中途取消了这个包**——它既不是成功
+/// 也不是失败,调用方应据此停止后续包并标记中止,不要把它计入失败数。
+/// `cancel` 是 `main` 持有的取消标志:Ctrl-C 的信号处理任务把它置位。
+/// 没有它,本函数的重试循环会把一次取消放大成多次"假失败"——因为同进程组
+/// 的 SIGINT 会顺带杀死 cargo 子进程,`status.code()` 变成 `None`(显示为
+/// `exit code: -1`),被旧逻辑误判成普通命令失败而触发回退 + 重试。
+// 参数已到 8 个(本就贴着 clippy 阈值,`cancel` 把它顶过线)。这些是
+// "每包参数 + 全程运行上下文"的混合,真要收拢应抽 UpdateContext 结构体——
+// 留作独立重构,不塞进这次取消 bug 修复。
+#[allow(clippy::too_many_arguments)]
 pub async fn update_package(
     package_name: &str,
     target_version: Option<&str>,
@@ -314,7 +327,12 @@ pub async fn update_package(
     dry_run: bool,
     install_binstall: bool,
     verbose: bool,
-) -> Result<UpdateResult> {
+    cancel: &AtomicBool,
+) -> Result<Option<UpdateResult>> {
+    // 在做任何事(连 cargo install --list 都还没查)之前先看取消标志。
+    if cancel.load(Ordering::SeqCst) {
+        return Ok(None);
+    }
     let language = detect_language();
     let old_version = get_installed_version(package_name).await.ok().flatten();
 
@@ -384,12 +402,12 @@ pub async fn update_package(
                 &format!("cargo {}", fb.join(" ")),
             );
         }
-        return Ok(UpdateResult::new(
+        return Ok(Some(UpdateResult::new(
             package_name.to_string(),
             old_version.clone(),
             old_version,
             true,
-        ));
+        )));
     }
 
     let pb = create_progress_bar(package_name);
@@ -426,18 +444,25 @@ pub async fn update_package(
             // 不应该到这一步——main 不会把 unknown 包放进 selections。
             // 万一来到，给个明显的错误信息而不是默默走 cargo install。
             pb_status_warn(&pb, "Skip", &format!("{} {}", package_name, source.marker()));
-            return Ok(UpdateResult::new(
+            return Ok(Some(UpdateResult::new(
                 package_name.to_string(),
                 old_version,
                 None,
                 false,
-            ));
+            )));
         }
     }
 
     let mut selector = CommandSelector::new(primary_args, fallback_args);
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
+        // 每次重试前检查取消标志:用户按 Ctrl-C 后立即停手,不再消耗重试
+        // 次数,也不再 spawn 一个注定被同进程组 SIGINT 杀死的子进程。
+        if cancel.load(Ordering::SeqCst) {
+            pb_status_warn(&pb, "Aborted", &package_name.cyan().to_string());
+            return Ok(None);
+        }
+
         if attempt > 1 {
             pb.set_message(language.format_text(
                 "retry_attempt",
@@ -458,18 +483,31 @@ pub async fn update_package(
                 tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                 continue;
             }
-            return Ok(result);
+            return Ok(Some(result));
         }
 
-        // 命令失败。binstall 第一次失败时立刻切到 cargo install 并就地重跑
-        // 一次（这次回退不消耗 attempt 计数器）。关键：switch_to_fallback
-        // 之后 selector.current() 对后续每一次重试都返回 install——不再
-        // 跑回 binstall（已修复"回退后重试又跑 binstall"的 bug）。
+        // 命令失败。先分辨是"用户取消"还是"真实失败":Ctrl-C 会把同进程组
+        // 的 cargo 子进程一起杀掉,这条命令的失败其实是被取消造成的。此时
+        // 立即返回 None——不回退、不重试,否则会把一次取消放大成多次假失败。
+        if cancel.load(Ordering::SeqCst) {
+            pb_status_warn(&pb, "Aborted", &package_name.cyan().to_string());
+            return Ok(None);
+        }
+
+        // binstall 第一次失败时立刻切到 cargo install 并就地重跑一次（这次
+        // 回退不消耗 attempt 计数器）。关键：switch_to_fallback 之后
+        // selector.current() 对后续每一次重试都返回 install——不再跑回
+        // binstall（已修复"回退后重试又跑 binstall"的 bug）。
         if selector.switch_to_fallback() {
             pb_status_warn(&pb, "Fallback", language.get_text("binstall_failed_fallback"));
             let fb_output = run_cargo(&pb, selector.current()).await?;
             if fb_output.status.success() {
-                return Ok(verify_and_report_update(&pb, package_name, &old_version).await);
+                return Ok(Some(verify_and_report_update(&pb, package_name, &old_version).await));
+            }
+            // 回退命令也失败:同样先排除"是用户取消造成的"。
+            if cancel.load(Ordering::SeqCst) {
+                pb_status_warn(&pb, "Aborted", &package_name.cyan().to_string());
+                return Ok(None);
             }
             report_command_failure(&pb, package_name, &fb_output);
         } else {
@@ -482,20 +520,20 @@ pub async fn update_package(
             continue;
         }
 
-        return Ok(UpdateResult::new(
+        return Ok(Some(UpdateResult::new(
             package_name.to_string(),
             old_version,
             None,
             false,
-        ));
+        )));
     }
 
-    Ok(UpdateResult::new(
+    Ok(Some(UpdateResult::new(
         package_name.to_string(),
         old_version,
         None,
         false,
-    ))
+    )))
 }
 
 #[cfg(test)]
@@ -505,6 +543,32 @@ mod tests {
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[tokio::test]
+    async fn cancelled_before_start_returns_none() {
+        // 复现并锁定 bug:用户按下 Ctrl-C 后,update_package 必须立即返回
+        // None 表示"被取消"——绝不当成更新失败,绝不 spawn cargo 子进程。
+        // 修复前 update_package 根本不接收取消标志,把一次取消放大成 3 次
+        // 假的 `Failed ... exit code: -1`,并在总结里把包标成"失败"。
+        use std::sync::atomic::AtomicBool;
+        let cancel = AtomicBool::new(true);
+        let result = super::update_package(
+            "cargo-fresh-no-such-package",
+            Some("9.9.9"),
+            &PackageSource::Crates,
+            None,
+            false, // dry_run
+            false, // install_binstall
+            false, // verbose
+            &cancel,
+        )
+        .await
+        .expect("update_package 不应返回 Err");
+        assert!(
+            result.is_none(),
+            "已取消时 update_package 必须返回 None,而不是一个结果"
+        );
     }
 
     #[test]
