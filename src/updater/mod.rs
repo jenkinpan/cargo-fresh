@@ -102,17 +102,24 @@ fn build_args(
 ) -> Vec<String> {
     let mut args: Vec<String> = match source {
         PackageSource::Crates => {
-            let subcmd = if use_binstall { "binstall" } else { "install" };
-            match version {
-                Some(v) => vec![
-                    subcmd.into(),
-                    "--force".into(),
-                    package_name.into(),
-                    "--version".into(),
-                    v.into(),
-                ],
-                None => vec![subcmd.into(), "--force".into(), package_name.into()],
+            let mut a: Vec<String> =
+                vec![if use_binstall { "binstall".into() } else { "install".into() }];
+            // cargo binstall 默认交互确认:打印 "Do you wish to continue? [yes]/no"
+            // 并阻塞读 stdin。cargo-fresh 用管道捕获 binstall 的 stdout/stderr——
+            // 提示文字被吞进管道、用户看不见;binstall 又继承 cargo-fresh 的
+            // TTY stdin,于是死等一个用户根本不知道要给的 "yes",整个更新无声
+            // 挂死(此前被误判成"从源码构建 13 分钟")。--no-confirm 关掉交互。
+            // cargo install 无此提示、也不认识 --no-confirm,故只对 binstall 加。
+            if use_binstall {
+                a.push("--no-confirm".into());
             }
+            a.push("--force".into());
+            a.push(package_name.into());
+            if let Some(v) = version {
+                a.push("--version".into());
+                a.push(v.into());
+            }
+            a
         }
         PackageSource::Git { url, rev } => {
             let mut a: Vec<String> =
@@ -208,6 +215,11 @@ async fn run_cargo(pb: &ProgressBar, args: &[String]) -> Result<Output> {
     pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
     let output = Command::new("cargo")
         .args(args)
+        // stdin 接 /dev/null:cargo-fresh 已替用户做过确认,任何 cargo 子命令
+        // 都不该再交互。即便哪天某个命令仍想提示,继承 /dev/null 会让它立刻
+        // 读到 EOF、走默认或快速失败,而不是顶着被管道吞掉的提示符无声挂死。
+        // 这是 --no-confirm 之外的第二层防线(防同类 bug 从别的路径复发)。
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
@@ -623,6 +635,29 @@ mod tests {
     }
 
     #[test]
+    fn binstall_command_includes_no_confirm() {
+        // cargo binstall 默认打印 "Do you wish to continue? [yes]/no" 并等 stdin。
+        // cargo-fresh 用管道捕获 binstall 的 stdout/stderr——提示文字被吞掉、
+        // 用户看不见;binstall 又继承 cargo-fresh 的 TTY stdin,于是死等一个
+        // 用户根本不知道要给的 "yes",整个更新无声挂死。必须带 --no-confirm。
+        let got = build_args(true, "cargo-deny", Some("0.19.7"), &PackageSource::Crates, None);
+        assert!(
+            got.contains(&"--no-confirm".to_string()),
+            "cargo binstall 必须带 --no-confirm,否则挂在交互提示符上。实际: {got:?}"
+        );
+    }
+
+    #[test]
+    fn cargo_install_command_omits_no_confirm() {
+        // cargo install 无交互提示,也不认识 --no-confirm——绝不能加上
+        let got = build_args(false, "cargo-deny", Some("0.19.7"), &PackageSource::Crates, None);
+        assert!(
+            !got.contains(&"--no-confirm".to_string()),
+            "cargo install 不该带 --no-confirm。实际: {got:?}"
+        );
+    }
+
+    #[test]
     fn crates_with_features() {
         let opts = InstallOpts {
             no_default_features: false,
@@ -699,7 +734,8 @@ mod tests {
     fn default_opts_some_but_empty_adds_nothing() {
         let opts = InstallOpts::default();
         let got = build_args(true, "tool", None, &PackageSource::Crates, Some(&opts));
-        assert_eq!(got, s(&["binstall", "--force", "tool"]));
+        // 默认 features 不追加任何 feature flag;binstall 路径恒带 --no-confirm
+        assert_eq!(got, s(&["binstall", "--no-confirm", "--force", "tool"]));
     }
 
     #[test]

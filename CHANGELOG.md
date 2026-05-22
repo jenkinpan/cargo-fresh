@@ -7,12 +7,17 @@
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-05-22
+
+修复型小版本:根因修复 `cargo binstall` 更新挂死在交互确认提示上的问题;新增 `--check-binstall` 检查阶段预检;修正 Ctrl-C 取消被误报成更新失败。无 BREAKING、无 BEHAVIOR——可放心从 0.10.3 升级。
+
 ### Added
 
 - **`--check-binstall` —— 检查阶段的 binstall 预检**: 加上这个 flag 后,cargo-fresh 在检查阶段对每个更新候选并发跑 `cargo binstall --dry-run`,在 `Updating` 行尾标出这次升级会拿到预编译二进制(`[binstall: prebuilt]`,绿)还是退化成从源码构建(`[binstall: source build]`,黄)。专治"crate 刚发版、crates.io 已有新版但 GitHub release 二进制还没传完"那段窗口期——此时 binstall 会闷头编译十几分钟,预检能在启动更新前就把它标出来。默认关闭(每个候选的 dry-run 约 10s,会 spawn cargo 并联网,已并发执行);binstall 未安装时打一行 Hint 并照常继续。`--format=json` 的 `updates_available[]` 同步新增 `binstall` 字段(`prebuilt` / `source_build` / `unknown` / `null`,`schema_version=1` 增量)
 
 ### Fixed
 
+- **`cargo binstall` 更新不再挂死在交互确认提示上**: `cargo binstall` 默认会打印 `Do you wish to continue? [yes]/no` 并阻塞读 stdin。cargo-fresh 用管道捕获 binstall 的 stdout/stderr——提示文字被吞进管道、用户看不见;binstall 又继承了 cargo-fresh 的 TTY stdin,于是死等一个用户根本不知道要回答的 "yes",整个更新无声挂死。`Slow` watchdog 此前把这种挂起误报成"从源码构建",`--check-binstall` 也能查到预编译产物却照样挂——因为问题根本不是源码构建。现在 binstall 命令恒带 `--no-confirm`;另外 `run_cargo` 把子进程 stdin 接到 `/dev/null` 作为第二层防线,任何 cargo 子命令都无法再卡在交互提示上
 - **Ctrl-C 不再被误报成更新失败**: 之前 `update_package` 不接收取消标志,`cancel` 只在 `main` 的包循环顶层检查一次。用户按 Ctrl-C 中断一个慢更新时,同进程组的 SIGINT 会顺带杀死 cargo 子进程(`status.code()` 变成 `None`,显示为 `exit code: -1`),旧逻辑把它当成普通命令失败,触发 binstall→install 回退、再重试 3 次,最后在总结里把这个包标成"失败"。现在取消标志贯穿 `update_package` 的整个重试循环:命中即立即停手——不回退、不重试,该包标为 `Aborted` 而非 `Failed`,也不计入失败数
 
 ## [0.10.3] - 2026-05-22
