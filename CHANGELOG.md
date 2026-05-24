@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+## [0.10.6] - 2026-05-24
+
+发布流程小修：GitHub Release 页面现在显示当前版本对应的 CHANGELOG 章节，不再是那段千篇一律的 "This release includes the latest updates" 模板；新增 CI `changelog-sync` job，`Cargo.toml` bump 时若没把 `[Unreleased]` 内容搬到对应版本节就直接 fail，避免 tag push 后才发现。无代码变更、无 BREAKING、无 BEHAVIOR。
+
+### Changed
+
+- **GitHub Release body 改为从 `CHANGELOG.md` 抽取**: `crate.yml` 用 awk 切出 `## [X.Y.Z]` 到下一个 `## [` 之间的内容写入 release body，附上指向上一 tag 的 `Full Changelog` compare 链接。抽不到对应章节硬 fail——空 body 比废话 body 难看，但比悄悄回退到模板可控。`actions/checkout@v5` 加 `fetch-depth: 0` 以便能看到全部历史 tag
+
+### Added
+
+- **CI `changelog-sync` job**: 在 `ci.yml` 里加一个独立 job，校验 `Cargo.toml` 当前 version 在 `CHANGELOG.md` 里必须有 `## [VERSION]` 章节。PR 阶段就把"忘了写 changelog 就 tag 了"挡掉，不让 `release.yml` 的 hard-fail 出现在 tag push 的红字邮件里
+- **CONTRIBUTING 注明 release body 来源**: 显式写出 GitHub Release body 由 CHANGELOG 对应章节生成，提醒维护者把每个版本节当成对用户的发版说明来写
+
 ## [0.10.5] - 2026-05-24
 
 修复型小版本：`cargo fresh man` 在 TTY 下自动用系统 `man` 渲染分页；fish `--cargo-fresh` 补全生成时打印安装路径 hint，避开 `cargo-fresh.fish` 文件名陷阱。无 BREAKING、无 BEHAVIOR。

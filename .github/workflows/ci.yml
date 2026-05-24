@@ -24,6 +24,27 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
 
+  changelog-sync:
+    name: CHANGELOG matches Cargo.toml version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # release.yml 在 tag push 时硬要求 CHANGELOG 有对应版本节,缺失就 fail——
+      # 这里把检查提前到 PR/master push,避免发版那一刻才发现忘了写 changelog。
+      - name: Verify CHANGELOG has a section for Cargo.toml version
+        run: |
+          VERSION=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)
+          if [ -z "$VERSION" ]; then
+            echo "::error::could not parse version from Cargo.toml"
+            exit 1
+          fi
+          ESCAPED="${VERSION//./\\.}"
+          if ! grep -qE "^## \[${ESCAPED}\]" CHANGELOG.md; then
+            echo "::error::Cargo.toml is at $VERSION but CHANGELOG.md has no '## [$VERSION]' section. Move [Unreleased] content to a dated section before tagging."
+            exit 1
+          fi
+          echo "OK: CHANGELOG.md contains a section for $VERSION"
+
   msrv:
     name: MSRV (1.86)
     runs-on: ubuntu-latest

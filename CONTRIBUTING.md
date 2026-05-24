@@ -78,6 +78,8 @@ git push origin master vX.Y.Z
 
 GitHub Actions handles crates.io publishing and multi-platform binaries from there.
 
+The GitHub release **body** is built from the matching `## [X.Y.Z]` section of `CHANGELOG.md` — write that section like users will read it, because they will. A CI job (`changelog-sync`) fails on PRs that bump `Cargo.toml` without moving `[Unreleased]` into a dated section, so the boilerplate "this release includes the latest updates" body can no longer leak through.
+
 ## Stability before 1.0
 
 See the "Stability Guarantees" section in README. In short: CLI exit codes and `--format=json schema_version=1` fields are committed; colors and locale wording may shift.
