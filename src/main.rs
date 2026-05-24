@@ -93,10 +93,11 @@ async fn run() -> Result<i32> {
         match command {
             Commands::Completion { shell, cargo_fresh } => {
                 if cargo_fresh {
-                    Cli::generate_cargo_fresh_completion(shell);
+                    Cli::generate_cargo_fresh_completion(shell.clone());
                 } else {
-                    Cli::generate_completion(shell);
+                    Cli::generate_completion(shell.clone());
                 }
+                Cli::maybe_hint_fish_install(&shell, cargo_fresh);
                 return Ok(EXIT_OK);
             }
             Commands::Man => {

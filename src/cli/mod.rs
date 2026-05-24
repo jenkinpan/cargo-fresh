@@ -1,3 +1,5 @@
+use std::io::{IsTerminal, Write};
+
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use clap_complete_nushell::Nushell;
@@ -88,10 +90,12 @@ pub enum Commands {
         #[arg(long)]
         cargo_fresh: bool,
     },
-    /// Generate man page (roff) to stdout
+    /// Show the man page
     ///
-    /// Pipe to a pager (`cargo fresh man | man -l -`) or save to MANPATH
-    /// (`cargo fresh man > ~/.local/share/man/man1/cargo-fresh.1`).
+    /// When stdout is a TTY, renders via the system `man` command (with pager).
+    /// When redirected/piped, emits raw roff to stdout — save it to MANPATH
+    /// (`cargo fresh man > ~/.local/share/man/man1/cargo-fresh.1`) or pipe to
+    /// `mandoc` / `groff -Tutf8 -man`.
     Man,
 }
 
@@ -153,13 +157,58 @@ impl Cli {
         Self::generate_completion_for_shell(shell, &mut cargo_cmd, "cargo");
     }
 
-    /// 把同一个 derive 出来的 Command 渲染成 roff 格式的 man page 写到 stdout。
-    /// `man -l -` 直接消费，或 `> ~/.local/share/man/man1/cargo-fresh.1` 落盘后被
-    /// 系统 man 索引到——和 `completion` 一样不写文件、不接触发布流程。
+    /// 把同一个 derive 出来的 Command 渲染成 roff。
+    ///
+    /// stdout 是 TTY 时：写到临时文件并 `exec man <tmpfile>`，让系统 man 处理渲染+分页。
+    /// stdout 不是 TTY 时（重定向/管道/CI）：把 raw roff 写到 stdout，保持
+    /// `cargo fresh man > cargo-fresh.1` 与 `cargo fresh man | mandoc` 这条路径不破。
     pub fn generate_man() -> std::io::Result<()> {
         let cmd = Self::command();
         let man = clap_mangen::Man::new(cmd);
-        man.render(&mut std::io::stdout())
+
+        if !std::io::stdout().is_terminal() {
+            return man.render(&mut std::io::stdout());
+        }
+
+        let mut buf = Vec::new();
+        man.render(&mut buf)?;
+
+        let tmp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let tmp_path = tmp_dir.join(format!("cargo-fresh-{pid}.1"));
+        {
+            let mut f = std::fs::File::create(&tmp_path)?;
+            f.write_all(&buf)?;
+        }
+
+        let status = std::process::Command::new("man").arg(&tmp_path).status();
+        let _ = std::fs::remove_file(&tmp_path);
+        match status {
+            Ok(s) if s.success() => Ok(()),
+            Ok(_) | Err(_) => {
+                // man 不可用或失败时退化为 raw roff，便于用户改用管道
+                std::io::stdout().write_all(&buf)
+            }
+        }
+    }
+
+    /// 当用户在 TTY 里跑 `completion fish --cargo-fresh` 时，往 stderr 提示正确的
+    /// 安装路径——直接 `> ~/.config/fish/completions/cargo-fresh.fish` 是常见的失误
+    /// （那个文件名只在输入 `cargo-fresh<TAB>` 时被 fish 自动加载，不会响应
+    /// `cargo fresh<TAB>`）。stdout 留给重定向，提示走 stderr 不污染管道。
+    pub fn maybe_hint_fish_install(shell: &ShellType, cargo_fresh: bool) {
+        if !matches!(shell, ShellType::Fish) || !cargo_fresh {
+            return;
+        }
+        if !std::io::stderr().is_terminal() {
+            return;
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "hint: install to ~/.config/fish/completions/cargo.fish (merges with cargo's own completion) \
+             or ~/.config/fish/conf.d/cargo-fresh.fish (eager-loaded at shell start). \
+             Saving to ~/.config/fish/completions/cargo-fresh.fish will NOT enable `cargo fresh<TAB>`."
+        );
     }
 }
 

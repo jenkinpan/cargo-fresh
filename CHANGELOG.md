@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-05-24
+
+修复型小版本：`cargo fresh man` 在 TTY 下自动用系统 `man` 渲染分页；fish `--cargo-fresh` 补全生成时打印安装路径 hint，避开 `cargo-fresh.fish` 文件名陷阱。无 BREAKING、无 BEHAVIOR。
+
+### Fixed
+
+- **`cargo fresh man` 在 TTY 下自动用 `man` 渲染并分页**: 之前总是把 raw roff 直接 dump 到 stdout，交互式终端里完全不可读。现在 stdout 是 TTY 时，写到临时文件并调用系统 `man <tmpfile>`——让 `man` 处理排版、分页、宽度。stdout 被重定向/管道时仍输出 raw roff，`cargo fresh man > cargo-fresh.1` 与 `cargo fresh man | mandoc` 这条路径不变
+- **fish `--cargo-fresh` 补全生成时打印安装提示**: `~/.config/fish/completions/cargo-fresh.fish` 这个文件名只在输入 `cargo-fresh<TAB>` 时被 fish 自动加载，**不会**响应 `cargo fresh<TAB>`——是 `--cargo-fresh` 这个 flag 上手时最常踩的坑。stdout 重定向、stderr 是 TTY 时，命令尾打一行 hint 指向正确路径（`~/.config/fish/completions/cargo.fish` 或 `~/.config/fish/conf.d/cargo-fresh.fish`）。README 同步更新
+
 ## [0.10.4] - 2026-05-22
 
 修复型小版本:根因修复 `cargo binstall` 更新挂死在交互确认提示上的问题;新增 `--check-binstall` 检查阶段预检;修正 Ctrl-C 取消被误报成更新失败。无 BREAKING、无 BEHAVIOR——可放心从 0.10.3 升级。

@@ -272,10 +272,16 @@ echo 'source ~/.local/share/bash-completion/completions/cargo-fresh' >> ~/.bashr
 
 #### Fish
 ```bash
-# Generate and install fish completion
+# Generate and install fish completion for the cargo-fresh binary
 cargo-fresh completion fish > ~/.config/fish/completions/cargo-fresh.fish
-# Or for cargo fresh subcommand
+
+# For the `cargo fresh` subcommand form, the file MUST be named cargo.fish
+# (fish autoloads completions by command name; cargo-fresh.fish would only
+# fire on `cargo-fresh<TAB>`, never on `cargo fresh<TAB>`).
 cargo-fresh completion fish --cargo-fresh > ~/.config/fish/completions/cargo.fish
+
+# Or, if you want it eager-loaded at shell start (avoids the naming trap):
+cargo-fresh completion fish --cargo-fresh > ~/.config/fish/conf.d/cargo-fresh.fish
 ```
 
 #### Nushell
