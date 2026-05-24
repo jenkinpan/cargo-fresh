@@ -12,6 +12,8 @@ jobs:
       contents: write     # Required for creating releases
     steps:
     - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0  # 需要全部 tags 来计算 PREV_TAG 用于 compare 链接
     - uses: rust-lang/crates-io-auth-action@v1
       id: auth
     - name: Publish to crates.io
@@ -25,41 +27,58 @@ jobs:
         VERSION=${GITHUB_REF#refs/tags/v}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Publishing version: $VERSION"
-    
+
+    - name: Extract changelog section for this version
+      id: changelog
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        # 抽取 CHANGELOG.md 中 `## [VERSION]` 到下一个 `## [` 之间的内容（不含两端的标题行）。
+        # 抽不到就硬失败——空 body 比废话 body 更糟，但我们不想悄悄回退到模板。
+        awk -v ver="$VERSION" '
+          $0 ~ "^## \\[" ver "\\]" { found=1; next }
+          found && /^## \[/        { exit }
+          found                    { print }
+        ' CHANGELOG.md > release_body.md
+
+        if [ ! -s release_body.md ]; then
+          echo "::error::No changelog section found for version $VERSION in CHANGELOG.md"
+          exit 1
+        fi
+
+        # 末尾追加安装说明 + 资产清单 + 上一版本到当前版本的 compare 链接（用 GitHub 默认的
+        # "Full Changelog" 自动生成会把全部 commit 也列出来，比较吵——这里只保留比较链接）。
+        PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | grep -v "^v${VERSION}$" | head -n1 || true)
+        {
+          echo
+          echo "---"
+          echo
+          echo "## Installation"
+          echo
+          echo '```bash'
+          echo "cargo install cargo-fresh"
+          echo "# or"
+          echo "cargo binstall cargo-fresh"
+          echo '```'
+          echo
+          echo "Pre-built binaries (macOS arm64/x86_64, Linux x86_64) are attached below; the Homebrew tap is updated automatically."
+          if [ -n "$PREV_TAG" ]; then
+            echo
+            echo "**Full Changelog**: https://github.com/jenkinpan/cargo-fresh/compare/${PREV_TAG}...v${VERSION}"
+          fi
+        } >> release_body.md
+
+        echo "----- release body preview -----"
+        cat release_body.md
+        echo "----- end preview -----"
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
-        body: |
-          ## What's Changed
-          
-          This release includes the latest updates to cargo-fresh.
-          
-          ### Installation
-          
-          You can install cargo-fresh using:
-          
-          ```bash
-          cargo install cargo-fresh
-          ```
-          or 
-          ```bash
-          cargo binstall cargo-fresh
-          ```
-          
-          Or download pre-built binaries from the assets below.
-          
-          ### Assets
-          
-          Pre-built binaries are available for:
-          - macOS (Intel and Apple Silicon)
-          - Linux (x86_64)
-          
-          See the [releases page](https://github.com/jenkinpan/cargo-fresh/releases) for more details.
+        body_path: release_body.md
         draft: false
         prerelease: false
-        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
