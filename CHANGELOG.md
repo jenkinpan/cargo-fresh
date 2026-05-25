@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+## [0.10.7] - 2026-05-25
+
+测试与文档加固型小版本——把 1.0 对外契约（JSON schema + cargo-style 输出行格式）钉进 CI，让"改了实现忘了改文档"和"顺手把 verb 改了一下"这类静默漂移在 PR diff 上无所遁形。无代码行为变化、无 BREAKING、无 BEHAVIOR。
+
+### Added
+
+- **JSON schema 校验测试 (`tests/json_schema.rs`)**: 用 `jsonschema` crate 把 `cargo_fresh::models::JsonReport` 的实际形状对着 `docs/json-schema.json` 跑校验。4 条 fixture 覆盖空快照 / 全字段满快照（每种 `$defs` 形状各一份）/ binstall 剩余枚举值（`source_build`、`unknown`）/ 反向 case（故意改坏 `format` 字段确认 validator 会报错，不是橡皮图章）。CI 上任何对 `JsonReport` 的字段增删如果忘了同步 schema 文件就直接 fail
+- **状态行 snapshot 测试 (`tests/cli_snapshots.rs`)**: 用 `insta` 锁 8 条核心 verb 的行格式——`Fresh` / `Updating` (含 `[binstall: prebuilt]` 尾标版本) / `Skip [git]` / `Skip [unknown source]` / `Fallback` / `Failed` / `Finished`。ANSI 通过 insta filter 剥掉，`.snap` 文件是纯文本，跨 TTY / `CLICOLOR_FORCE` 环境稳定。任何对 verb 名 / 12 字符宽度 / 来源 marker 拼装的改动会在 PR diff 上以 `.snap` 变化形式出现，reviewer 一眼能看见
+
+### Changed
+
+- **`src/display/mod.rs` 提取 `format_status_line(verb, msg, style)` 纯函数**: 四个 `status*` + 四个 `pb_status*` 函数从各自重复一遍 `format!("{} {}", colored_padded_verb, msg)` 改为全部 delegate。少 ~24 行重复，行为完全等价（snapshot 测试覆盖）。`pub enum StatusStyle { Ok, Warn, Err, Dim }` 为契约层提供单一 render 路径；`package_transition` 改为 `pub` 以便测试直接调
+
+### Docs
+
+- **CLAUDE.md 同步到 0.10.6**: 测试计数从 `110 unit + 18 integration as of 0.10.3` 更新为 `123 unit + 18 integration as of 0.10.6`；新增 `src/package/binstall_probe.rs` 的模块表行；JSON_MODE 设计决策段补全 0.10.3+ 的 `skipped[].reason_code` / `version_check_errors[]` / `summary.selected`/`attempted`/`check_errors` 与 0.10.4 的 `updates_available[].binstall`；新增 `--check-binstall` 预检的设计决策段；Roadmap 状态从 v0.10.3 推到 v0.10.6，补全 0.10.4 / 0.10.5 / 0.10.6 三段（`--check-binstall`、binstall 交互挂死修复、Ctrl-C 取消修复、`man` 自动分页、fish completion hint、CHANGELOG-sourced release body）
+
 ## [0.10.6] - 2026-05-24
 
 发布流程小修：GitHub Release 页面现在显示当前版本对应的 CHANGELOG 章节，不再是那段千篇一律的 "This release includes the latest updates" 模板；新增 CI `changelog-sync` job，`Cargo.toml` bump 时若没把 `[Unreleased]` 内容搬到对应版本节就直接 fail，避免 tag push 后才发现。无代码变更、无 BREAKING、无 BEHAVIOR。
