@@ -1,0 +1,6 @@
+---
+source: tests/cli_snapshots.rs
+assertion_line: 41
+expression: "format_status_line(\"Fresh\", \"ripgrep 14.1.1\", StatusStyle::Dim)"
+---
+       Fresh ripgrep 14.1.1

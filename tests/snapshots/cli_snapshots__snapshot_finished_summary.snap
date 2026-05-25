@@ -1,0 +1,6 @@
+---
+source: tests/cli_snapshots.rs
+assertion_line: 131
+expression: "format_status_line(\"Finished\", \"3 succeeded, 1 failed, in 4.2s\",\nStatusStyle::Ok)"
+---
+    Finished 3 succeeded, 1 failed, in 4.2s

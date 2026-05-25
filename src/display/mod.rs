@@ -26,36 +26,67 @@ pub fn is_json_mode() -> bool {
 /// 主要动词。所有 status 系列函数共用这个宽度，保持视觉上整齐成列。
 const STATUS_WIDTH: usize = 12;
 
+/// status 行的语义色：决定 verb 是绿(Ok)/黄(Warn)/红(Err)/灰(Dim)。
+///
+/// 抽出来让 `format_status_line` 成为纯函数,既消除四个 `status*` /
+/// 四个 `pb_status*` 函数里的重复格式串,也让 snapshot 测试能直接锁住
+/// "verb 名 + 12 字宽对齐 + 颜色选择"这套外观契约。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusStyle {
+    Ok,
+    Warn,
+    Err,
+    Dim,
+}
+
+/// 纯函数:按 cargo 风格组装单行 status——12 字右对齐 verb + 空格 + 描述。
+///
+/// 返回 String,不做 I/O,不查 JSON_MODE。是 verb 字典对外契约的唯一
+/// render 路径——`tests/cli_snapshots.rs` 直接对它的输出做 snapshot,
+/// 任何对 verb 名/宽度/颜色的改动都会在 PR diff 上以 `.snap` 变化形式
+/// 出现。所有 `status*` / `pb_status*` 都委托给这一处。
+///
+/// 颜色码不计入宽度——必须先 pad 再上色,否则 ANSI 序列被算进宽度导致错位。
+pub fn format_status_line(verb: &str, msg: &str, style: StatusStyle) -> String {
+    let padded = format!("{:>w$}", verb, w = STATUS_WIDTH);
+    let colored_verb = match style {
+        StatusStyle::Ok => padded.green().bold().to_string(),
+        StatusStyle::Warn => padded.yellow().bold().to_string(),
+        StatusStyle::Err => padded.red().bold().to_string(),
+        StatusStyle::Dim => padded.dimmed().to_string(),
+    };
+    format!("{} {}", colored_verb, msg)
+}
+
 /// 用 cargo 风格输出一行状态："{右对齐12字符绿色加粗动词} {描述}"。
 ///
 /// 颜色变体：`status_warn` 黄、`status_err` 红、`status_dim` 灰（用于次要信息）。
-/// 颜色码不计入宽度——必须先 pad 再上色，否则 ANSI 序列被算进宽度导致错位。
 pub fn status(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(), msg);
+    anstream::eprintln!("{}", format_status_line(verb, msg, StatusStyle::Ok));
 }
 
 pub fn status_warn(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(), msg);
+    anstream::eprintln!("{}", format_status_line(verb, msg, StatusStyle::Warn));
 }
 
 pub fn status_err(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(), msg);
+    anstream::eprintln!("{}", format_status_line(verb, msg, StatusStyle::Err));
 }
 
 pub fn status_dim(verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    anstream::eprintln!("{} {}", format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(), msg);
+    anstream::eprintln!("{}", format_status_line(verb, msg, StatusStyle::Dim));
 }
 
 /// 同 `status`，但把输出送到指定的 ProgressBar（避免与活动进度条冲突）。
@@ -63,50 +94,34 @@ pub fn pb_status(pb: &ProgressBar, verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    pb.println(format!(
-        "{} {}",
-        format!("{:>w$}", verb, w = STATUS_WIDTH).green().bold(),
-        msg
-    ));
+    pb.println(format_status_line(verb, msg, StatusStyle::Ok));
 }
 
 pub fn pb_status_warn(pb: &ProgressBar, verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    pb.println(format!(
-        "{} {}",
-        format!("{:>w$}", verb, w = STATUS_WIDTH).yellow().bold(),
-        msg
-    ));
+    pb.println(format_status_line(verb, msg, StatusStyle::Warn));
 }
 
 pub fn pb_status_err(pb: &ProgressBar, verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    pb.println(format!(
-        "{} {}",
-        format!("{:>w$}", verb, w = STATUS_WIDTH).red().bold(),
-        msg
-    ));
+    pb.println(format_status_line(verb, msg, StatusStyle::Err));
 }
 
 pub fn pb_status_dim(pb: &ProgressBar, verb: &str, msg: &str) {
     if is_json_mode() {
         return;
     }
-    pb.println(format!(
-        "{} {}",
-        format!("{:>w$}", verb, w = STATUS_WIDTH).dimmed(),
-        msg
-    ));
+    pb.println(format_status_line(verb, msg, StatusStyle::Dim));
 }
 
 /// 拼装单包的"名字 旧版本 -> 新版本 [来源]"展示字符串。
 ///
 /// 颜色约定：包名 cyan、旧版本 red、新版本 green、来源标记 dimmed。
-fn package_transition(package: &PackageInfo, language: Language) -> String {
+pub fn package_transition(package: &PackageInfo, language: Language) -> String {
     let current = package
         .current_version
         .as_deref()

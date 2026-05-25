@@ -1,0 +1,6 @@
+---
+source: tests/cli_snapshots.rs
+assertion_line: 86
+expression: "format_status_line(\"Skip\", &msg, StatusStyle::Warn)"
+---
+        Skip my-tool 0.1.0 -> unknown [git]

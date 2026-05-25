@@ -1,0 +1,6 @@
+---
+source: tests/cli_snapshots.rs
+assertion_line: 120
+expression: "format_status_line(\"Failed\", \"cargo-fresh: exit code 1\", StatusStyle::Err)"
+---
+      Failed cargo-fresh: exit code 1

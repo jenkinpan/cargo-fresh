@@ -1,0 +1,6 @@
+---
+source: tests/cli_snapshots.rs
+assertion_line: 109
+expression: "format_status_line(\"Fallback\",\n\"cargo install --force cargo-fresh --version 1.0.0\", StatusStyle::Warn)"
+---
+    Fallback cargo install --force cargo-fresh --version 1.0.0

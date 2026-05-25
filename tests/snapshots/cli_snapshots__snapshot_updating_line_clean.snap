@@ -1,0 +1,6 @@
+---
+source: tests/cli_snapshots.rs
+assertion_line: 54
+expression: "format_status_line(\"Updating\", &msg, StatusStyle::Ok)"
+---
+    Updating ripgrep 14.1.0 -> 14.1.1
