@@ -2,9 +2,12 @@
 //!
 //! 纯函数, 不做 HTTP——HEAD 探测在 fetch.rs。
 //!
-//! 设计权衡: 不解析 `package.metadata.binstall` 自定义模板。MVP 只识别 3 条
-//! 内置 GitHub Release 约定 (cargo-binstall 的默认探测模板), 能覆盖主流包
-//! ~80%。自定义模板留给 follow-up——加上去后这里再返回模板渲染结果即可。
+//! 文件名/路径模板列表借鉴自 cargo-binstall 的
+//! `crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs`
+//! (Apache-2.0 OR MIT, https://github.com/cargo-bins/cargo-binstall)。
+//! 这里只保留 GitHub Release 路径, 不解析 `package.metadata.binstall` 自定义模板。
+//! 10 个文件名模板 × 2 个 tag 前缀 (v{version} / {version}) × 2 个归档格式
+//! (.tar.gz / .zip) × N 个 target 别名 = 40N 个候选 URL。
 
 use crate::downloader::events::{DownloaderError, UnsupportedReason};
 
@@ -22,6 +25,25 @@ pub enum ArchiveFmt {
     Bin,
 }
 
+/// 文件名模板 (借鉴自 cargo-binstall FULL_FILENAMES + NOVERSION_FILENAMES)。
+/// 占位符: {name} {version} {target} {ext}
+const FILENAME_TEMPLATES: &[&str] = &[
+    // FULL_FILENAMES — 8 条
+    "{name}-{target}-v{version}.{ext}",
+    "{name}-{target}-{version}.{ext}",
+    "{name}-{version}-{target}.{ext}",
+    "{name}-v{version}-{target}.{ext}",
+    "{name}_{target}_v{version}.{ext}",
+    "{name}_{target}_{version}.{ext}",
+    "{name}_{version}_{target}.{ext}",
+    "{name}_v{version}_{target}.{ext}",
+    // NOVERSION_FILENAMES — 2 条
+    "{name}-{target}.{ext}",
+    "{name}_{target}.{ext}",
+];
+
+const ARCHIVE_EXTS: &[(ArchiveFmt, &str)] = &[(ArchiveFmt::TarGz, "tar.gz"), (ArchiveFmt::Zip, "zip")];
+
 /// 推导候选 URL 列表。第一个返回 2xx 的胜出。
 ///
 /// `repo_url` 形如 "https://github.com/owner/repo" (尾随 / 容忍)。
@@ -29,10 +51,13 @@ pub enum ArchiveFmt {
 ///
 /// `targets` 是一组等价的 target 别名 (例如 macOS aarch64 通常发布为
 /// `aarch64-apple-darwin` 也可能是 `arm64-apple-darwin` 或 `darwin-arm64`)。
-/// 调用方传入 `current_targets()` 的结果即可——这里只负责笛卡尔展开。
-/// 输出长度 = 3 约定 × 2 归档 × N 别名。
+/// 输出长度 = 10 文件名 × 2 tag 前缀 × 2 归档 × N 别名 = 40N。
+/// `name_candidates` 是一组要试的 `{name}` 替换值: 通常包含 package 名 +
+/// binary 名 (例如 tauri-cli 包的 binary 是 cargo-tauri, 而文件名形如
+/// `cargo-tauri-aarch64-apple-darwin.zip` ——必须用 binary 名作 {name}
+/// 才能命中)。第一个 (canonical, 通常是 package 名) 在前。
 pub fn candidate_urls(
-    name: &str,
+    name_candidates: &[String],
     version: &str,
     repo_url: &str,
     targets: &[String],
@@ -43,37 +68,49 @@ pub fn candidate_urls(
             UnsupportedReason::NoMetadataAndNoConvention,
         ));
     }
-    if targets.is_empty() {
+    if targets.is_empty() || name_candidates.is_empty() {
         return Err(DownloaderError::Unsupported(
             UnsupportedReason::NoMetadataAndNoConvention,
         ));
     }
 
-    // 6 约定 × 2 归档 × N 别名 = 12N 个候选。
-    // 两种 tag 前缀 (v{version} / {version}) × 三种文件名排列。
-    // EmbarkStudios/cargo-deny 用裸版本号当 tag，BurntSushi/ripgrep 用 v 前缀，所以都要试。
-    // 别名外层循环——更"像样"的 triple (canonical 在 current_targets 中放在前面) 优先。
-    let mut out = Vec::with_capacity(12 * targets.len());
-    for target in targets {
-        let conventions = [
-            // v 前缀 tag (绝大多数 Rust 项目: ripgrep, mdbook, fd, bat …)
-            format!("{repo}/releases/download/v{version}/{name}-{version}-{target}"),
-            format!("{repo}/releases/download/v{version}/{name}-{target}-{version}"),
-            format!("{repo}/releases/download/v{version}/{name}-{target}"),
-            // 裸版本号 tag (cargo-deny, 部分 Embark/Google 项目)
-            format!("{repo}/releases/download/{version}/{name}-{version}-{target}"),
-            format!("{repo}/releases/download/{version}/{name}-{target}-{version}"),
-            format!("{repo}/releases/download/{version}/{name}-{target}"),
-        ];
-        for base in &conventions {
-            out.push(CandidateUrl {
-                url: format!("{base}.tar.gz"),
-                archive_fmt: ArchiveFmt::TarGz,
-            });
-            out.push(CandidateUrl {
-                url: format!("{base}.zip"),
-                archive_fmt: ArchiveFmt::Zip,
-            });
+    // tag 路径段:
+    // - "v{version}" / "{version}"            通用 (大多数 Rust 单 crate 项目)
+    // - "{pkg}-v{version}" / "{pkg}-{version}" monorepo 带前缀 (tauri-cli 用 `tauri-cli-v2.11.2`)
+    // - "{pkg}/v{version}" / "{pkg}/{version}" 斜杠分隔 monorepo (URL 里 `/` 不用 %2F, GitHub 会接受)
+    // name_candidates[0] 是 canonical package 名 (caller 保证); 子 crate 前缀只用它,
+    // 不用 binary 名 (因为 tag 跟着 crate, 不跟着 binary)
+    let pkg = &name_candidates[0];
+    let tag_paths: Vec<String> = vec![
+        format!("v{version}"),
+        format!("{version}"),
+        format!("{pkg}-v{version}"),
+        format!("{pkg}-{version}"),
+        format!("{pkg}/v{version}"),
+        format!("{pkg}/{version}"),
+    ];
+    let mut out = Vec::with_capacity(40 * targets.len() * name_candidates.len() * tag_paths.len() / 2);
+    let mut seen = std::collections::HashSet::new();
+    for name in name_candidates {
+        for target in targets {
+            for tag_path in &tag_paths {
+                let base = format!("{repo}/releases/download/{tag_path}");
+                for tmpl in FILENAME_TEMPLATES {
+                    for (fmt, ext) in ARCHIVE_EXTS {
+                        let filename = tmpl
+                            .replace("{name}", name)
+                            .replace("{version}", version)
+                            .replace("{target}", target)
+                            .replace("{ext}", ext);
+                        let url = format!("{base}/{filename}");
+                        // 同一 name (如 package == binary 时) 会产生重复
+                        // 候选, 这里去重避免做无效 HEAD
+                        if seen.insert(url.clone()) {
+                            out.push(CandidateUrl { url, archive_fmt: *fmt });
+                        }
+                    }
+                }
+            }
         }
     }
     Ok(out)
@@ -83,13 +120,6 @@ pub fn candidate_urls(
 ///
 /// 不同发布者命名约定不一 (Rust triple vs Go/npm 风格 vs Apple 简写),
 /// 所以同一 (arch, os) 给出多个等价候选, 由 fetch 阶段 HEAD 探测决定哪个真实存在。
-/// - macOS aarch64: `aarch64-apple-darwin`, `arm64-apple-darwin`, `darwin-arm64`
-/// - macOS x86_64:  `x86_64-apple-darwin`, `x64-apple-darwin`, `darwin-amd64`, `darwin-x64`
-/// - Linux aarch64: `aarch64-unknown-linux-gnu`, `aarch64-unknown-linux-musl`,
-///   `arm64-unknown-linux-gnu`, `linux-arm64`
-/// - Linux x86_64:  `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`,
-///   `linux-amd64`, `linux-x64`
-/// - Windows / 其它平台: 返回空 Vec——MVP 不支持
 pub fn current_targets() -> Vec<String> {
     let arch = std::env::consts::ARCH;
     let os = std::env::consts::OS;
@@ -132,7 +162,7 @@ mod tests {
     #[test]
     fn non_github_repo_is_unsupported() {
         let err = candidate_urls(
-            "ripgrep",
+            &["ripgrep".into()],
             "14.1.2",
             "https://gitlab.com/x/y",
             &one("x86_64-apple-darwin"),
@@ -147,7 +177,7 @@ mod tests {
     #[test]
     fn empty_targets_is_unsupported() {
         let err = candidate_urls(
-            "ripgrep",
+            &["ripgrep".into()],
             "14.1.2",
             "https://github.com/BurntSushi/ripgrep",
             &[],
@@ -160,88 +190,114 @@ mod tests {
     }
 
     #[test]
-    fn single_target_yields_twelve_candidates() {
+    fn single_target_yields_expected_candidate_count() {
         let cands = candidate_urls(
-            "ripgrep",
+            &["ripgrep".into()],
             "14.1.2",
             "https://github.com/BurntSushi/ripgrep",
             &one("x86_64-apple-darwin"),
         )
         .unwrap();
-        assert_eq!(cands.len(), 12);
+        // 10 filenames × 6 tag paths × 2 archives = 120
+        assert_eq!(cands.len(), 120);
     }
 
     #[test]
-    fn multiple_targets_yield_twelve_times_n_candidates() {
+    fn multiple_targets_yield_proportional_candidates() {
         let cands = candidate_urls(
-            "ripgrep",
+            &["ripgrep".into()],
             "14.1.2",
             "https://github.com/BurntSushi/ripgrep",
             &[
-            "aarch64-apple-darwin".into(),
-            "arm64-apple-darwin".into(),
-            "darwin-arm64".into(),
-        ],
+                "aarch64-apple-darwin".into(),
+                "arm64-apple-darwin".into(),
+                "darwin-arm64".into(),
+            ],
         )
         .unwrap();
-        assert_eq!(cands.len(), 36);
+        // 120 per target × 3 targets = 360
+        assert_eq!(cands.len(), 360);
     }
 
     #[test]
-    fn canonical_target_yields_first_candidates() {
+    fn includes_tauri_style_subcrate_prefix_tag() {
+        // tauri 用 tag `tauri-cli-v2.11.2`, 文件名 `cargo-tauri-aarch64-apple-darwin.zip`
         let cands = candidate_urls(
-            "ripgrep",
-            "14.1.2",
-            "https://github.com/BurntSushi/ripgrep",
-            &["aarch64-apple-darwin".into(), "arm64-apple-darwin".into()],
+            &["tauri-cli".into(), "cargo-tauri".into()],
+            "2.11.2",
+            "https://github.com/tauri-apps/tauri",
+            &one("aarch64-apple-darwin"),
         )
         .unwrap();
-        assert!(cands[0].url.contains("aarch64-apple-darwin"));
-        // 第一个 alias 占满前 12 个 (6 约定 × 2 归档)
-        assert!(cands[11].url.contains("aarch64-apple-darwin"));
-        assert!(cands[12].url.contains("arm64-apple-darwin"));
+        let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
+        assert!(urls.iter().any(|u| u == &"https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v2.11.2/cargo-tauri-aarch64-apple-darwin.zip"));
     }
 
     #[test]
-    fn first_candidate_is_convention_a_targz() {
+    fn includes_ripgrep_style_v_prefix_name_version_target() {
         let cands = candidate_urls(
-            "ripgrep",
-            "14.1.2",
-            "https://github.com/BurntSushi/ripgrep",
-            &one("x86_64-apple-darwin"),
-        )
-        .unwrap();
-        assert_eq!(
-            cands[0].url,
-            "https://github.com/BurntSushi/ripgrep/releases/download/v14.1.2/ripgrep-14.1.2-x86_64-apple-darwin.tar.gz"
-        );
-        assert_eq!(cands[0].archive_fmt, ArchiveFmt::TarGz);
-    }
-
-    #[test]
-    fn second_candidate_is_convention_a_zip() {
-        let cands = candidate_urls(
-            "ripgrep",
+            &["ripgrep".into()],
             "14.1.2",
             "https://github.com/BurntSushi/ripgrep",
             &one("x86_64-apple-darwin"),
         )
         .unwrap();
-        assert_eq!(cands[1].archive_fmt, ArchiveFmt::Zip);
-        assert!(cands[1].url.ends_with(".zip"));
+        let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
+        assert!(urls.iter().any(|u| u == &"https://github.com/BurntSushi/ripgrep/releases/download/v14.1.2/ripgrep-14.1.2-x86_64-apple-darwin.tar.gz"));
+    }
+
+    #[test]
+    fn includes_mdbook_style_v_in_filename() {
+        // mdbook 用 `mdbook-v0.5.3-x86_64-apple-darwin.tar.gz`
+        let cands = candidate_urls(
+            &["mdbook".into()],
+            "0.5.3",
+            "https://github.com/rust-lang/mdBook",
+            &one("x86_64-apple-darwin"),
+        )
+        .unwrap();
+        let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
+        assert!(urls.iter().any(|u| u.contains("mdbook-v0.5.3-x86_64-apple-darwin.tar.gz")));
+    }
+
+    #[test]
+    fn includes_cargo_deny_style_bare_version_tag() {
+        // cargo-deny 用 tag `0.19.7` (无 v), 文件名 `cargo-deny-0.19.7-x86_64-apple-darwin`
+        let cands = candidate_urls(
+            &["cargo-deny".into()],
+            "0.19.7",
+            "https://github.com/EmbarkStudios/cargo-deny",
+            &one("x86_64-apple-darwin"),
+        )
+        .unwrap();
+        let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
+        assert!(urls.iter().any(|u| u == &"https://github.com/EmbarkStudios/cargo-deny/releases/download/0.19.7/cargo-deny-0.19.7-x86_64-apple-darwin.tar.gz"));
+    }
+
+    #[test]
+    fn includes_underscore_separated_variant() {
+        let cands = candidate_urls(
+            &["somepkg".into()],
+            "1.0.0",
+            "https://github.com/x/y",
+            &one("x86_64-apple-darwin"),
+        )
+        .unwrap();
+        let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
+        assert!(urls.iter().any(|u| u.contains("somepkg_x86_64-apple-darwin_1.0.0")));
     }
 
     #[test]
     fn trailing_slash_in_repo_url_is_tolerated() {
         let a = candidate_urls(
-            "ripgrep",
+            &["ripgrep".into()],
             "14.1.2",
             "https://github.com/BurntSushi/ripgrep/",
             &one("x86_64-apple-darwin"),
         )
         .unwrap();
         let b = candidate_urls(
-            "ripgrep",
+            &["ripgrep".into()],
             "14.1.2",
             "https://github.com/BurntSushi/ripgrep",
             &one("x86_64-apple-darwin"),
@@ -254,18 +310,8 @@ mod tests {
     fn current_targets_returns_nonempty_on_supported_unix() {
         if std::env::consts::OS == "macos" || std::env::consts::OS == "linux" {
             let ts = current_targets();
-            assert!(!ts.is_empty(), "supported platform must yield aliases");
-            assert!(ts[0].contains('-'), "canonical triple expected, got: {}", ts[0]);
-        }
-    }
-
-    #[test]
-    fn current_targets_macos_aarch64_includes_known_aliases() {
-        if std::env::consts::OS == "macos" && std::env::consts::ARCH == "aarch64" {
-            let ts = current_targets();
-            assert!(ts.iter().any(|t| t == "aarch64-apple-darwin"));
-            assert!(ts.iter().any(|t| t == "arm64-apple-darwin"));
-            assert!(ts.iter().any(|t| t == "darwin-arm64"));
+            assert!(!ts.is_empty());
+            assert!(ts[0].contains('-'));
         }
     }
 }

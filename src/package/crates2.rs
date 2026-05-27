@@ -104,6 +104,37 @@ pub fn match_install_opts(
     Some(candidates[0].1.clone())
 }
 
+/// 查 `.crates2.json` 拿到 `package_name` 对应的 bins 列表。
+///
+/// 包名 != binary 名时 (ripgrep -> rg, tauri-cli -> cargo-tauri),
+/// downloader 必须知道实际的 binary 名才能在解压后定位文件。
+/// 文件缺失 / 包不在文件里 → 返回空 Vec, caller fallback 到 package_name 本身。
+pub fn lookup_bins(cargo_home: &std::path::Path, package_name: &str) -> Vec<String> {
+    let path = cargo_home.join(".crates2.json");
+    let body = match std::fs::read_to_string(&path) {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+    let json: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let installs = match json.get("installs").and_then(|v| v.as_object()) {
+        Some(m) => m,
+        None => return Vec::new(),
+    };
+    installs
+        .iter()
+        .find(|(k, _)| k.starts_with(&format!("{package_name} ")))
+        .and_then(|(_, v)| v.get("bins").and_then(|b| b.as_array()))
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|b| b.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// 把一次成功的 binary 安装写回 `.crates2.json`——更新该包的
 /// `version_req` 字段。如果包不在文件里就新增条目。
 ///

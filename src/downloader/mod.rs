@@ -24,6 +24,10 @@ pub struct InstallSpec {
     pub name: String,
     pub version: String,
     pub repo_url: Option<String>,
+    /// binary 名候选——`.crates2.json` 的 bins[] 直接搬过来。
+    /// 包名 != binary 名时 (ripgrep -> rg) 必须填, 否则解压找不到文件。
+    /// 空 Vec → fallback 到 `name` 自身。
+    pub bins: Vec<String>,
 }
 
 pub struct InstallOutcome {
@@ -57,7 +61,16 @@ pub async fn download_and_install(
         .as_deref()
         .ok_or(DownloaderError::Unsupported(UnsupportedReason::NoMetadataAndNoConvention))?;
 
-    let candidates = resolve::candidate_urls(&spec.name, &spec.version, repo_url, &targets)?;
+    // {name} 候选: package 名先 (canonical, 多数包文件名沿用), 再加 binary 名
+    // (覆盖 tauri-cli 这种情况: 包名 tauri-cli, 二进制 cargo-tauri,
+    //  release 文件名是 `cargo-tauri-aarch64-apple-darwin.zip`)
+    let mut name_candidates: Vec<String> = vec![spec.name.clone()];
+    for b in &spec.bins {
+        if !name_candidates.contains(b) {
+            name_candidates.push(b.clone());
+        }
+    }
+    let candidates = resolve::candidate_urls(&name_candidates, &spec.version, repo_url, &targets)?;
 
     let fetched = fetch::fetch(client, &spec.name, &candidates, &events, cancel.clone()).await?;
 
@@ -76,9 +89,13 @@ pub async fn download_and_install(
         resolve::ArchiveFmt::TarGz
     };
 
-    // binary_name 通常等于 spec.name, 但有 cargo subcommand 包 (cargo-deny 装 cargo-deny binary)
-    // 这里直接用 spec.name 作为搜索关键字——edge case 留给 follow-up
-    let extracted = archive::extract(&fetched.archive_path, fmt, &spec.name)?;
+    // 包名 != binary 名时 (ripgrep -> rg), spec.bins 来自 .crates2.json;
+    // 空时 fallback 到 spec.name (单 binary 普通包路径)
+    let mut bin_candidates: Vec<String> = spec.bins.clone();
+    if bin_candidates.is_empty() {
+        bin_candidates.push(spec.name.clone());
+    }
+    let extracted = archive::extract(&fetched.archive_path, fmt, &bin_candidates)?;
 
     if cancel.load(Ordering::SeqCst) {
         return Err(DownloaderError::Cancelled);
@@ -88,8 +105,13 @@ pub async fn download_and_install(
         name: spec.name.clone(),
     });
 
-    let _installed_path =
-        install::install_binary(&extracted.binary_path, &spec.name, &spec.version)?;
+    // 实际找到的 binary 名 (可能是 "rg" 而非 "ripgrep") —— install_binary 用这个
+    // 当作目标文件名, .crates*.json 写入器会通过 bins[] 找到对应包条目
+    let _installed_path = install::install_binary(
+        &extracted.binary_path,
+        &extracted.binary_name,
+        &spec.version,
+    )?;
 
     let _ = events.send(ProgressEvent::Done {
         name: spec.name.clone(),

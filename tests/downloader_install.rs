@@ -26,6 +26,10 @@ fn install_binary_atomically_into_isolated_cargo_home() {
     }"#;
     std::fs::write(cargo_home.path().join(".crates2.json"), crates2).unwrap();
 
+    // .crates.toml fixture —— cargo install --list 真正读的索引文件
+    let crates_toml = "[v1]\n\"ripgrep 14.1.1 (registry+https://github.com/rust-lang/crates.io-index)\" = [\"rg\"]\n";
+    std::fs::write(cargo_home.path().join(".crates.toml"), crates_toml).unwrap();
+
     let src = cargo_home.path().join("src-binary");
     let mut f = std::fs::File::create(&src).unwrap();
     f.write_all(b"#!/bin/sh\necho new rg\n").unwrap();
@@ -57,6 +61,17 @@ fn install_binary_atomically_into_isolated_cargo_home() {
     assert!(
         !keys.iter().any(|k| k.starts_with("ripgrep 14.1.1 ")),
         "old key should be gone: {keys:?}"
+    );
+
+    // Verify .crates.toml updated (cargo install --list 数据源)
+    let toml_body = std::fs::read_to_string(cargo_home.path().join(".crates.toml")).unwrap();
+    assert!(
+        toml_body.contains("\"ripgrep 14.1.2 (registry+"),
+        "expected .crates.toml to have new version, got: {toml_body}"
+    );
+    assert!(
+        !toml_body.contains("\"ripgrep 14.1.1 ("),
+        "old .crates.toml entry should be gone: {toml_body}"
     );
 
     // Verify no leftover .cargo-fresh-*.tmp

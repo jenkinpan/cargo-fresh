@@ -17,15 +17,25 @@ pub struct ExtractResult {
     pub temp_dir: tempfile::TempDir,
     /// 绝对路径到解压出来的可执行文件
     pub binary_path: PathBuf,
+    /// 实际匹配上的 binary 名 (从 `bin_candidates` 里挑出来的那一个,
+    /// 通常 == 文件名)。install.rs 用这个写 .cargo/bin/<name>。
+    pub binary_name: String,
 }
 
 /// 解压 `archive_path` (本身在另一个临时目录里) 到一个新临时目录,
-/// 在里面找到名为 `binary_name` 的可执行文件并返回路径。
+/// 然后在里面挨个尝试 `bin_candidates` 里的 binary 名, 首个找到的胜出。
+///
+/// 候选列表设计动机: 包名 != binary 名 (ripgrep -> rg, tauri-cli -> cargo-tauri)
+/// 时仅传 spec.name 会找不到文件 → 失败回 cargo install。
+/// 这里接收 .crates2.json 的 bins[] 整段, 容忍这类不一致。
 pub fn extract(
     archive_path: &Path,
     fmt: ArchiveFmt,
-    binary_name: &str,
+    bin_candidates: &[String],
 ) -> Result<ExtractResult, DownloaderError> {
+    if bin_candidates.is_empty() {
+        return Err(DownloaderError::Unsupported(UnsupportedReason::UnknownArchiveFormat));
+    }
     let temp_dir = tempfile::tempdir()
         .map_err(|e| failed_extract(anyhow!(e).context("mkdir tempdir for extract")))?;
 
@@ -35,8 +45,8 @@ pub fn extract(
         ArchiveFmt::Zip => extract_zip(archive_path, temp_dir.path())
             .map_err(|e| failed_extract(e.context("extract zip")))?,
         ArchiveFmt::Bin => {
-            // 裸二进制: 直接拷过去, binary_name 就是文件名
-            let dest = temp_dir.path().join(binary_name);
+            // 裸二进制: 直接拷过去, 第一个候选当文件名
+            let dest = temp_dir.path().join(&bin_candidates[0]);
             std::fs::copy(archive_path, &dest)
                 .map_err(|e| failed_extract(anyhow!(e).context("copy raw bin")))?;
             #[cfg(unix)]
@@ -45,14 +55,16 @@ pub fn extract(
         }
     }
 
-    let binary_path = find_binary(temp_dir.path(), binary_name).ok_or_else(|| {
-        DownloaderError::Unsupported(UnsupportedReason::UnknownArchiveFormat)
-    })?;
-
-    Ok(ExtractResult {
-        temp_dir,
-        binary_path,
-    })
+    for name in bin_candidates {
+        if let Some(binary_path) = find_binary(temp_dir.path(), name) {
+            return Ok(ExtractResult {
+                temp_dir,
+                binary_path,
+                binary_name: name.clone(),
+            });
+        }
+    }
+    Err(DownloaderError::Unsupported(UnsupportedReason::UnknownArchiveFormat))
 }
 
 fn extract_targz(archive: &Path, into: &Path) -> Result<()> {
@@ -126,7 +138,7 @@ mod tests {
 
     #[test]
     fn extract_ripgrep_like_targz() {
-        let r = extract(&fixture("ripgrep-like.tar.gz"), ArchiveFmt::TarGz, "rg")
+        let r = extract(&fixture("ripgrep-like.tar.gz"), ArchiveFmt::TarGz, &["rg".into()])
             .expect("extract ok");
         assert!(r.binary_path.exists());
         assert!(r.binary_path.ends_with("rg"));
@@ -134,7 +146,7 @@ mod tests {
 
     #[test]
     fn extract_mdbook_like_targz_root_binary() {
-        let r = extract(&fixture("mdbook-like.tar.gz"), ArchiveFmt::TarGz, "mdbook")
+        let r = extract(&fixture("mdbook-like.tar.gz"), ArchiveFmt::TarGz, &["mdbook".into()])
             .expect("extract ok");
         assert!(r.binary_path.exists());
         assert!(r.binary_path.ends_with("mdbook"));
@@ -145,7 +157,7 @@ mod tests {
         let r = extract(
             &fixture("cargo-deny-like.zip"),
             ArchiveFmt::Zip,
-            "cargo-deny",
+            &["cargo-deny".into()],
         )
         .expect("extract ok");
         assert!(r.binary_path.exists());
@@ -157,7 +169,7 @@ mod tests {
         let err = extract(
             &fixture("ripgrep-like.tar.gz"),
             ArchiveFmt::TarGz,
-            "no-such-binary",
+            &["no-such-binary".into()],
         )
         .unwrap_err();
         assert!(matches!(
@@ -168,7 +180,7 @@ mod tests {
 
     #[test]
     fn temp_dir_cleaned_up_on_drop() {
-        let r = extract(&fixture("mdbook-like.tar.gz"), ArchiveFmt::TarGz, "mdbook")
+        let r = extract(&fixture("mdbook-like.tar.gz"), ArchiveFmt::TarGz, &["mdbook".into()])
             .expect("extract ok");
         let dir_path = r.temp_dir.path().to_owned();
         assert!(dir_path.exists());

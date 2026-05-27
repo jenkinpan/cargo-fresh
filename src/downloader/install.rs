@@ -38,9 +38,12 @@ pub fn install_binary(
         return Err(failed_install(anyhow!(e).context("rename tmp -> dest")));
     }
 
-    // 3. .crates2.json 更新
+    // 3. cargo 元数据更新——两个文件都得写, 不然 `cargo install --list` 还报旧版
+    //    (.crates.toml 是主索引, .crates2.json 是扩展字段)
     crate::package::crates2::write_install_record(&cargo_home, binary_name, new_version)
         .map_err(|e| failed_install(e.context("update .crates2.json")))?;
+    crate::package::crates_toml::write_install_record(&cargo_home, binary_name, new_version)
+        .map_err(|e| failed_install(e.context("update .crates.toml")))?;
 
     Ok(dest)
 }

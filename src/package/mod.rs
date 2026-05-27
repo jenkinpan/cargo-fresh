@@ -19,6 +19,7 @@ use crate::models::{PackageInfo, PackageSource};
 pub mod binstall_probe;
 pub mod crates_api;
 pub mod crates2;
+pub mod crates_toml;
 pub mod registry;
 pub mod sparse_index;
 
