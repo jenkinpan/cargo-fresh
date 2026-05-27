@@ -12,3 +12,4 @@
 pub mod events;
 pub mod resolve;
 pub mod archive;
+pub mod fetch;
