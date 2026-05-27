@@ -155,12 +155,26 @@ pub struct PackageInfo {
     pub binstall_kind: Option<BinstallKind>,
 }
 
+/// 这次更新走了哪条安装路径——给汇总分组用 (rustup 风格:
+/// 末尾告诉用户哪些走的预编译, 哪些是源码编译, 不在过程中刷)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InstallMethod {
+    /// 自托管 downloader 路径——GitHub Release 预编译二进制
+    Downloader,
+    /// `cargo install` 子进程——本地编译 (慢)
+    CargoInstall,
+    /// 未知 / 未尝试 (失败或中止)
+    #[default]
+    Unknown,
+}
+
 #[derive(Debug, Clone)]
 pub struct UpdateResult {
     pub package_name: String,
     pub old_version: Option<String>,
     pub new_version: Option<String>,
     pub success: bool,
+    pub install_method: InstallMethod,
 }
 
 impl PackageInfo {
@@ -313,7 +327,14 @@ impl UpdateResult {
             old_version,
             new_version,
             success,
+            install_method: InstallMethod::Unknown,
         }
+    }
+
+    /// 链式 setter——更新成功的路径调用方在拿到 UpdateResult 后挂上方法标记。
+    pub fn with_install_method(mut self, method: InstallMethod) -> Self {
+        self.install_method = method;
+        self
     }
 }
 

@@ -97,6 +97,8 @@ pub fn get_english_text(key: &str) -> &'static str {
         "using_install_fallback" => "cargo install",
         "binstall_failed_fallback" => "downloader failed, falling back to cargo install",
         "checking_binstall" => "binstall availability for {} update candidate(s)",
+        "summary_prebuilt" => "Prebuilt",
+        "summary_compiled" => "Compiled",
 
         // Timing
         "total_time_seconds" => "in {}s",
@@ -205,6 +207,8 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "using_install_fallback" => "cargo install",
         "binstall_failed_fallback" => "下载器失败，回退到 cargo install",
         "checking_binstall" => "{} 个更新候选的 binstall 可用性",
+        "summary_prebuilt" => "预编译",
+        "summary_compiled" => "源码编译",
 
         // 时间
         "total_time_seconds" => "耗时 {}s",
@@ -281,6 +285,8 @@ mod tests {
             "package_up_to_date",
             "version",
             "update_summary",
+            "summary_prebuilt",
+            "summary_compiled",
             "successful_updates",
             "failed_updates",
             "update_failed",

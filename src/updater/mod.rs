@@ -1,13 +1,13 @@
 use anyhow::Result;
 use colored::*;
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::process::Output;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use crate::display::{pb_status, pb_status_dim, pb_status_err, pb_status_warn, status, status_dim};
+use crate::display::{pb_status_dim, pb_status_err, pb_status_warn, status, status_dim};
 use crate::downloader::{
     self,
     events::{DownloaderError, ProgressEvent},
@@ -15,36 +15,154 @@ use crate::downloader::{
 };
 use crate::locale::detection::detect_language;
 use crate::models::{
-    InstallOpts, PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_TICK_MS,
+    InstallMethod, InstallOpts, PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_TICK_MS,
     RETRY_DELAY_MS, VERSION_UPDATE_DELAY_MS,
 };
 use crate::package::{get_installed_version, invalidate_installed_version};
 
-/// 创建当前正在更新的包的 spinner。
-///
-/// 必须配合 [`PbGuard`] 使用——guard drop 时自动调用 `finish_and_clear()`，
-/// 保证 spinner 残留不会污染输出（任何提前 return 也覆盖到）。
-///
-/// 非 TTY（CI 日志、管道、`tee` 等）下把 draw target 设为 hidden——
-/// spinner 帧在非交互终端没有意义，反而会污染日志。`pb.println` 还会
-/// 正常输出，所以 pb_status* 仍然工作。
-pub fn create_progress_bar(package_name: &str) -> ProgressBar {
-    use std::io::IsTerminal;
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            // {elapsed} 由 indicatif 在每个 tick 重新渲染——和 enable_steady_tick
-            // 一起让用户能看出哪个包正在长跑（典型场景：binstall 没有预编译，
-            // 退化成本地 build 的 ripgrep / cargo-bloat 这种大 crate）
-            .template("{spinner:.green} {msg} {elapsed:.dim}")
-            .unwrap()
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-    );
-    pb.set_message(package_name.cyan().to_string());
-    if !std::io::stderr().is_terminal() || crate::display::is_json_mode() {
-        pb.set_draw_target(ProgressDrawTarget::hidden());
+/// 全局共享的 `MultiProgress` —— 0.11.0 串行只挂一条 bar, 0.12.0 并发调度器
+/// 复用同一个实例同时挂 N 条。`pb.println`/`mp.println` 会在所有 bar 上方
+/// 滚屏, 这样状态行 ("Updating ripgrep ..." 等) 不会被 bar 覆盖。
+pub fn multi_progress() -> &'static MultiProgress {
+    static MP: OnceLock<MultiProgress> = OnceLock::new();
+    MP.get_or_init(|| {
+        use std::io::IsTerminal;
+        let mp = MultiProgress::new();
+        if !std::io::stderr().is_terminal() || crate::display::is_json_mode() {
+            mp.set_draw_target(ProgressDrawTarget::hidden());
+        }
+        mp
+    })
+}
+
+/// rustup-style 下载条样式 —— 名字右对齐到统一宽度, 后接 bar + bytes + speed + ETA。
+fn download_bar_style(name_width: usize) -> ProgressStyle {
+    ProgressStyle::with_template(&format!(
+        "{{msg:>{name_width}.cyan}} [{{bar:24.cyan/blue}}] {{bytes:>8}}/{{total_bytes:>8}} ({{percent:>3}}%) {{binary_bytes_per_sec:>10}} ETA {{eta:>3}}"
+    ))
+    .unwrap()
+    .progress_chars("##-")
+}
+
+/// 非下载阶段 spinner 样式 —— 名字右对齐, 后接 spinner + 状态动词。
+fn spinner_style(name_width: usize) -> ProgressStyle {
+    ProgressStyle::default_spinner()
+        .template(&format!("{{msg:>{name_width}.cyan}} {{spinner:.green}} {{prefix}}"))
+        .unwrap()
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+}
+
+/// 终态静态行: 不带 spinner/bar, 名字右对齐 + 动词 + 详情。
+fn static_style(name_width: usize) -> ProgressStyle {
+    ProgressStyle::with_template(&format!("{{msg:>{name_width}.cyan}} {{prefix}}"))
+        .unwrap()
+}
+
+/// 一组同时显示的包行的视图. main 在更新循环前调用 `Plan::new(names)`,
+/// 然后每个包用 `plan.row(i)` 拿到 PackageRow, 传给 update_package.
+/// 0.12.0 并发调度器同样用这个——只需把循环 spawn 起来。
+pub struct UpdatePlan {
+    rows: Vec<ProgressBar>,
+    name_width: usize,
+}
+
+impl UpdatePlan {
+    pub fn new(names: &[String]) -> Self {
+        let name_width = names.iter().map(|n| n.chars().count()).max().unwrap_or(0).max(10);
+        let mp = multi_progress();
+        let rows: Vec<ProgressBar> = names
+            .iter()
+            .map(|n| {
+                let pb = mp.add(ProgressBar::new_spinner());
+                pb.set_style(static_style(name_width));
+                pb.set_message(n.clone());
+                pb.set_prefix("pending".dimmed().to_string());
+                pb
+            })
+            .collect();
+        Self { rows, name_width }
     }
+    pub fn row(&self, i: usize) -> ProgressBar { self.rows[i].clone() }
+    pub fn name_width(&self) -> usize { self.name_width }
+}
+
+/// 创建当前正在更新的包的 progress bar (初始 spinner 形态)。
+///
+/// 挂在全局 `MultiProgress` 上 —— 0.11.0 一次只有一条, 但 0.12.0 并发调度器
+/// 会同时挂多条; 同一种创建路径方便复用。
+///
+/// 必须配合 [`PbGuard`] 使用——guard drop 时 `finish_and_clear()` 把行
+/// 从 MultiProgress 里摘掉, 残留不会污染输出。
+///
+/// 非 TTY (CI / 管道 / `tee`) 下 MultiProgress 整体走 hidden draw target——
+/// 单条 bar 的样式仍然有效, 但不会向终端写帧, `pb.println` 走标准 eprintln 路径。
+/// 旧入口 (仍被旧测试/旧路径调用)。新 main 路径走 UpdatePlan + activate_row。
+pub fn create_progress_bar(package_name: &str) -> ProgressBar {
+    let pb = multi_progress().add(ProgressBar::new_spinner());
+    let nw = package_name.chars().count().max(10);
+    pb.set_style(spinner_style(nw));
+    pb.set_message(package_name.to_string());
+    pb.set_prefix("pending".dimmed().to_string());
+    pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
     pb
+}
+
+/// 把"pending"行点亮成 spinner 形态 (开 steady_tick), 设置阶段动词。
+pub fn activate_row(pb: &ProgressBar, name_width: usize, verb: &str) {
+    pb.set_style(spinner_style(name_width));
+    pb.set_prefix(verb.green().bold().to_string());
+    pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
+}
+
+/// 切到 rustup 风格的下载条形态.
+pub fn switch_to_download_bar(pb: &ProgressBar, name_width: usize, total: u64) {
+    pb.disable_steady_tick();
+    pb.set_style(download_bar_style(name_width));
+    pb.set_length(total);
+}
+
+/// 下载结束后切回 spinner. 保留 length/position —— finalize 阶段会用它
+/// 算下载尺寸 (显示为 "installed 4.21 MiB")。
+pub fn switch_to_spinner_phase(pb: &ProgressBar, name_width: usize, verb: &str) {
+    pb.set_style(spinner_style(name_width));
+    pb.set_prefix(verb.green().bold().to_string());
+    pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
+}
+
+/// 把行定格成静态"installed"行 (绿)。会调 finish, 之后 pb 不再重画。
+/// 若 pb 持有下载尺寸 (length > 0, 来自 downloader 路径), 显示为 "installed X.XX MiB";
+/// 否则 (cargo install 编译路径) 只显示 "installed"。
+pub fn finalize_installed(pb: &ProgressBar, name_width: usize) {
+    pb.disable_steady_tick();
+    pb.set_style(static_style(name_width));
+    let total = pb.length().unwrap_or(0);
+    let prefix = if total > 0 {
+        format!(
+            "{} {:>10.2} MiB",
+            "installed".green().bold(),
+            total as f64 / 1_048_576.0
+        )
+    } else {
+        "installed".green().bold().to_string()
+    };
+    pb.set_prefix(prefix);
+    pb.finish();
+}
+
+/// 把行定格成静态"failed"行 (红)。
+pub fn finalize_failed(pb: &ProgressBar, name_width: usize, detail: &str) {
+    pb.disable_steady_tick();
+    pb.set_style(static_style(name_width));
+    pb.set_prefix(format!("{} {}", "failed".red().bold(), detail.dimmed()));
+    pb.finish();
+}
+
+/// 把行定格成 aborted (黄).
+pub fn finalize_aborted(pb: &ProgressBar, name_width: usize) {
+    pb.disable_steady_tick();
+    pb.set_style(static_style(name_width));
+    pb.set_prefix("aborted".yellow().bold().to_string());
+    pb.finish();
 }
 
 /// 长跑包的告警阈值——超过这个秒数 spawn 一条 `Slow` 提示，
@@ -238,18 +356,9 @@ async fn verify_and_report_update(
 
     match get_installed_version(package_name).await {
         Ok(Some(new_version)) if old_version.as_ref() != Some(&new_version) => {
-            let unknown = language.get_text("unknown_version").to_string();
-            let old_str = old_version.as_ref().unwrap_or(&unknown);
-            pb_status(
-                pb,
-                "Updated",
-                &format!(
-                    "{} {} -> {}",
-                    package_name.cyan(),
-                    old_str.red(),
-                    new_version.green()
-                ),
-            );
+            // 不再滚屏打 "Updated X 旧 -> 新" —— rustup 风格的行末态 (finalize_installed)
+            // 和末尾 summary 已经各报一次, 这里再来一遍是冗余。
+            let _ = (pb, language); // pb 仍由调用方持有为后续 finalize 用
             UpdateResult::new(
                 package_name.to_string(),
                 old_version.clone(),
@@ -320,6 +429,7 @@ fn report_command_failure(pb: &ProgressBar, package_name: &str, output: &Output)
 /// - `Err(_)`    — Cancelled（Ctrl-C），调用方应立即返回 Ok(None)。
 async fn try_downloader_install(
     pb: &ProgressBar,
+    name_width: usize,
     package_name: &str,
     version: &str,
     old_version: &Option<String>,
@@ -338,23 +448,28 @@ async fn try_downloader_install(
         return Ok(false);
     }
 
+    // 从 .crates2.json 查 bins[] —— ripgrep 包名 vs "rg" binary 名要靠这个区分
+    let bins = crate::package::registry::cargo_home()
+        .map(|home| crate::package::crates2::lookup_bins(&home, package_name))
+        .unwrap_or_default();
+
     let (tx, mut rx) = mpsc::unbounded_channel::<ProgressEvent>();
     let spec = InstallSpec {
         name: package_name.to_string(),
         version: version.to_string(),
         repo_url,
+        bins,
     };
 
-    // 消费进度事件并转成 cargo-style status 行
+    // 消费进度事件 —— 行已经在 main.rs 预注册, 这里只切样式 + 更新 prefix
     let pb_clone = pb.clone();
-    let pkg_name = package_name.to_string();
     let verbose_flag = verbose;
     let event_handle = tokio::spawn(async move {
-        let mut last_got: u64 = 0;
+        let mut bar_initialized = false;
         while let Some(event) = rx.recv().await {
             match event {
                 ProgressEvent::Resolving { .. } => {
-                    pb_status_dim(&pb_clone, "Resolving", &pkg_name.cyan().to_string());
+                    activate_row(&pb_clone, name_width, "resolving");
                 }
                 ProgressEvent::UrlCandidate { url, .. } => {
                     if verbose_flag {
@@ -362,31 +477,43 @@ async fn try_downloader_install(
                     }
                 }
                 ProgressEvent::Downloading { got, total, .. } => {
-                    // 限流：每 256 KB 打一行，避免刷屏
-                    if got.saturating_sub(last_got) >= 256 * 1024 || last_got == 0 {
-                        last_got = got;
-                        let msg = match total {
-                            Some(t) if t > 0 => format!(
-                                "{pkg_name}: {:.1} / {:.1} MB",
-                                got as f64 / 1_048_576.0,
-                                t as f64 / 1_048_576.0
-                            ),
-                            _ => format!(
-                                "{pkg_name}: {:.1} MB",
+                    match (bar_initialized, total) {
+                        (false, Some(t)) if t > 0 => {
+                            switch_to_download_bar(&pb_clone, name_width, t);
+                            pb_clone.set_position(got);
+                            bar_initialized = true;
+                        }
+                        (true, _) => {
+                            pb_clone.set_position(got);
+                        }
+                        _ => {
+                            // 无 content-length —— 留在 spinner 上, 仅更新 prefix
+                            pb_clone.set_prefix(format!(
+                                "{} {:.1} MiB",
+                                "downloading".green().bold(),
                                 got as f64 / 1_048_576.0
-                            ),
-                        };
-                        pb_status_dim(&pb_clone, "Downloading", &msg);
+                            ));
+                        }
                     }
                 }
                 ProgressEvent::Verifying { .. } => {
-                    pb_status_dim(&pb_clone, "Verifying", &pkg_name.cyan().to_string());
+                    if bar_initialized {
+                        switch_to_spinner_phase(&pb_clone, name_width, "verifying");
+                        bar_initialized = false;
+                    } else {
+                        pb_clone.set_prefix("verifying".green().bold().to_string());
+                    }
                 }
                 ProgressEvent::Extracting { .. } => {
-                    pb_status_dim(&pb_clone, "Extracting", &pkg_name.cyan().to_string());
+                    if bar_initialized {
+                        switch_to_spinner_phase(&pb_clone, name_width, "extracting");
+                        bar_initialized = false;
+                    } else {
+                        pb_clone.set_prefix("extracting".green().bold().to_string());
+                    }
                 }
                 ProgressEvent::Installing { .. } => {
-                    pb_status_dim(&pb_clone, "Installing", &pkg_name.cyan().to_string());
+                    pb_clone.set_prefix("installing".green().bold().to_string());
                 }
                 ProgressEvent::Done { .. } | ProgressEvent::Failed { .. } => {
                     // handled by caller
@@ -449,6 +576,7 @@ pub async fn update_package(
     install_binstall: bool,
     verbose: bool,
     cancel: Arc<AtomicBool>,
+    row: Option<(ProgressBar, usize)>,
 ) -> Result<Option<UpdateResult>> {
     // NOTE: `install_binstall` is a deprecated no-op in 0.11. The self-hosted
     // downloader replaces the cargo-binstall subprocess path. The flag is kept
@@ -523,36 +651,27 @@ pub async fn update_package(
         )));
     }
 
-    let pb = create_progress_bar(package_name);
+    // row: 来自 main 的 UpdatePlan 预注册行 + 对齐宽度。
+    // 旧路径 (没传 row, 比如老测试) 仍走 create_progress_bar 自建 spinner。
+    let (pb, name_width) = match row {
+        Some((pb, w)) => {
+            activate_row(&pb, w, "starting");
+            (pb, w)
+        }
+        None => {
+            let pb = create_progress_bar(package_name);
+            let w = package_name.chars().count().max(10);
+            (pb, w)
+        }
+    };
     let _pb_guard = PbGuard(&pb);
     let slow_handle = spawn_slow_warning(pb.clone(), package_name.to_string());
     let _slow_guard = SlowGuard(slow_handle);
-    if let Some(ref version) = old_version {
-        pb_status_dim(
-            &pb,
-            language.get_text("current_version_label"),
-            &version.blue().to_string(),
-        );
-    }
 
     match source {
-        PackageSource::Crates => {
-            if opts_allow_downloader {
-                pb_status_dim(&pb, "Using", language.get_text("using_binstall"));
-            } else {
-                pb_status_dim(&pb, "Using", language.get_text("using_install_fallback"));
-            }
-        }
-        PackageSource::Git { .. } | PackageSource::Path { .. } => {
-            pb_status_dim(
-                &pb,
-                "Using",
-                &format!(
-                    "{} {}",
-                    language.get_text("using_install_fallback"),
-                    source.marker().dimmed(),
-                ),
-            );
+        PackageSource::Crates | PackageSource::Git { .. } | PackageSource::Path { .. } => {
+            // 安装路径 (downloader vs cargo install) 不再逐包播报——
+            // 在 print_update_summary 末尾按方法分组汇报, 减少滚屏噪音
         }
         PackageSource::Unknown(_) => {
             // 不应该到这一步——main 不会把 unknown 包放进 selections。
@@ -571,14 +690,16 @@ pub async fn update_package(
     // Unsupported/Failed → 回退 cargo install。Cancelled → 中止。
     if matches!(source, PackageSource::Crates) && opts_allow_downloader {
         if let Some(v) = target_version {
-            match try_downloader_install(&pb, package_name, v, &old_version, cancel.clone(), verbose).await {
+            match try_downloader_install(&pb, name_width, package_name, v, &old_version, cancel.clone(), verbose).await {
                 Ok(true) => {
-                    let result = verify_and_report_update(&pb, package_name, &old_version).await;
+                    let result = verify_and_report_update(&pb, package_name, &old_version)
+                        .await
+                        .with_install_method(InstallMethod::Downloader);
                     return Ok(Some(result));
                 }
                 Ok(false) => {
-                    // Unsupported or failed — fall through to cargo install subprocess
-                    pb_status_dim(&pb, "Using", language.get_text("using_install_fallback"));
+                    // Unsupported or failed — fall through to cargo install subprocess.
+                    // 不打 Using 行 —— 末尾 summary 按方法分组通报。
                 }
                 Err(DownloaderError::Cancelled) => {
                     pb_status_warn(&pb, "Aborted", &package_name.cyan().to_string());
@@ -590,7 +711,16 @@ pub async fn update_package(
     }
 
     // cargo install subprocess — fallback for Crates (after downloader fail/unsupported),
-    // or primary for Git/Path/custom-features.
+    // or primary for Git/Path/custom-features. 这条路径肯定是源码编译, 让行
+    // 上的 phase 文案直接说 "compiling from source"——用户看到 ripgrep 这种
+    // 走了 fallback 的就会明白接下来要慢一截 (不是卡住), 也对得上末尾 summary
+    // 的 "源码编译" 分组。
+    pb.disable_steady_tick();
+    pb.set_length(0);
+    pb.set_position(0);
+    pb.set_style(spinner_style(name_width));
+    pb.set_prefix("compiling from source".yellow().bold().to_string());
+    pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
     let mut selector = CommandSelector::new(cargo_install_args, None);
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
@@ -614,8 +744,9 @@ pub async fn update_package(
         let output = run_cargo(&pb, selector.current()).await?;
 
         if output.status.success() {
-            let result = verify_and_report_update(&pb, package_name, &old_version).await;
-            // 命令成功但读不到新版本时，给当前路径一次重试机会（保留原行为）
+            let result = verify_and_report_update(&pb, package_name, &old_version)
+                .await
+                .with_install_method(InstallMethod::CargoInstall);
             if result.new_version.is_none() && attempt < MAX_RETRY_ATTEMPTS {
                 pb_status_dim(&pb, "Retry", language.get_text("waiting_retry"));
                 tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
@@ -640,7 +771,10 @@ pub async fn update_package(
             pb_status_warn(&pb, "Fallback", language.get_text("binstall_failed_fallback"));
             let fb_output = run_cargo(&pb, selector.current()).await?;
             if fb_output.status.success() {
-                return Ok(Some(verify_and_report_update(&pb, package_name, &old_version).await));
+                let result = verify_and_report_update(&pb, package_name, &old_version)
+                    .await
+                    .with_install_method(InstallMethod::CargoInstall);
+                return Ok(Some(result));
             }
             // 回退命令也失败:同样先排除"是用户取消造成的"。
             if cancel.load(Ordering::SeqCst) {
@@ -698,6 +832,7 @@ mod tests {
             false, // install_binstall
             false, // verbose
             cancel,
+            None,  // row
         )
         .await
         .expect("update_package 不应返回 Err");

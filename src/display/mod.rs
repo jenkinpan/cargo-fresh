@@ -5,7 +5,7 @@ use dialoguer::{Confirm, MultiSelect};
 use indicatif::ProgressBar;
 
 use crate::locale::Language;
-use crate::models::{BinstallKind, PackageInfo, UpdateResult};
+use crate::models::{BinstallKind, InstallMethod, PackageInfo, UpdateResult};
 
 /// JSON mode 开关：在 main 早期被设置一次，之后所有 status* / print_* /
 /// dialoguer 调用都自动 no-op，避免污染 JSON 输出。
@@ -283,6 +283,25 @@ pub fn print_update_summary(update_results: &[UpdateResult], language: Language)
             };
             status_err("Failed", &detail);
         }
+    }
+
+    // rustup 风格: 末尾按安装方式分组通报, 让用户一眼看出哪些走的预编译
+    // (快) / 哪些是源码编译 (慢). 安装过程中不再逐包播报 "Using ..." 行.
+    let prebuilt: Vec<&str> = success_updates
+        .iter()
+        .filter(|r| r.install_method == InstallMethod::Downloader)
+        .map(|r| r.package_name.as_str())
+        .collect();
+    let compiled: Vec<&str> = success_updates
+        .iter()
+        .filter(|r| r.install_method == InstallMethod::CargoInstall)
+        .map(|r| r.package_name.as_str())
+        .collect();
+    if !prebuilt.is_empty() {
+        status_dim(language.get_text("summary_prebuilt"), &prebuilt.join(", ").cyan().to_string());
+    }
+    if !compiled.is_empty() {
+        status_dim(language.get_text("summary_compiled"), &compiled.join(", ").yellow().to_string());
     }
 }
 

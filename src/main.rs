@@ -219,14 +219,26 @@ async fn run() -> Result<i32> {
 
         let mut all_packages_to_update = stable_updates.clone();
         all_packages_to_update.extend(prerelease_updates.clone());
-        let total_packages = selections.len();
         let mut success_count = 0;
         let mut fail_count = 0;
         let mut aborted_at: Option<usize> = None;
 
+        // 预注册所有选中包成 rustup 风格的对齐行 (pending 状态), 把每行的
+        // ProgressBar + 对齐宽度递给 update_package, 它在 phase 切换里更新这一行
+        let selected_names: Vec<String> = selections
+            .iter()
+            .map(|&i| all_packages_to_update[i].name.clone())
+            .collect();
+        let plan = (!cli.dry_run && !json_mode).then(|| {
+            cargo_fresh::updater::UpdatePlan::new(&selected_names)
+        });
+
         for (i, &index) in selections.iter().enumerate() {
             if cancel.load(Ordering::SeqCst) {
                 aborted_at = Some(i);
+                if let Some(p) = &plan {
+                    cargo_fresh::updater::finalize_aborted(&p.row(i), p.name_width());
+                }
                 break;
             }
             let package_name = &all_packages_to_update[index].name;
@@ -241,12 +253,9 @@ async fn run() -> Result<i32> {
                 .unwrap_or(PackageSource::Crates);
             let install_opts = selected_pkg.and_then(|p| p.install_opts.as_ref());
 
-            if total_packages > 1 {
-                status_dim(
-                    "Package",
-                    &format!("{}/{} {}", i + 1, total_packages, package_name.cyan()),
-                );
-            }
+            let row = plan
+                .as_ref()
+                .map(|p| (p.row(i), p.name_width()));
 
             match update_package(
                 package_name,
@@ -257,10 +266,20 @@ async fn run() -> Result<i32> {
                 cli.install_binstall,
                 cli.verbose,
                 cancel.clone(),
+                row,
             )
             .await
             {
                 Ok(Some(result)) => {
+                    if let Some(p) = &plan {
+                        let row = p.row(i);
+                        if result.success {
+                            // 版本号不在行末态显示, 末尾 summary 统一给出
+                            cargo_fresh::updater::finalize_installed(&row, p.name_width());
+                        } else {
+                            cargo_fresh::updater::finalize_failed(&row, p.name_width(), "");
+                        }
+                    }
                     if result.success {
                         success_count += 1;
                     } else {
@@ -269,22 +288,28 @@ async fn run() -> Result<i32> {
                     update_results.push(result);
                 }
                 Ok(None) => {
-                    // update_package 执行中途检测到 Ctrl-C:这个包既不算成功
-                    // 也不算失败,不计入 update_results。标记中止、停止后续包。
+                    // Ctrl-C
+                    if let Some(p) = &plan {
+                        cargo_fresh::updater::finalize_aborted(&p.row(i), p.name_width());
+                    }
                     aborted_at = Some(i);
                     break;
                 }
                 Err(e) => {
-                    status_err(
-                        "Error",
-                        &language.format_text(
-                            "package_error",
-                            &[
-                                ("name", &package_name.red().to_string()),
-                                ("error", &e.to_string()),
-                            ],
-                        ),
-                    );
+                    if let Some(p) = &plan {
+                        cargo_fresh::updater::finalize_failed(&p.row(i), p.name_width(), &e.to_string());
+                    } else {
+                        status_err(
+                            "Error",
+                            &language.format_text(
+                                "package_error",
+                                &[
+                                    ("name", &package_name.red().to_string()),
+                                    ("error", &e.to_string()),
+                                ],
+                            ),
+                        );
+                    }
                     fail_count += 1;
                     update_results.push(UpdateResult::new(package_name.clone(), None, None, false));
                 }
@@ -305,7 +330,7 @@ async fn run() -> Result<i32> {
                     "aborted_by_user",
                     &[
                         ("done", &done.to_string()),
-                        ("total", &total_packages.to_string()),
+                        ("total", &selections.len().to_string()),
                     ],
                 ),
             );
