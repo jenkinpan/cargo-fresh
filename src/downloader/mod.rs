@@ -10,3 +10,4 @@
 //! 主入口 `download_and_install` 在 Task 7 接入。
 
 pub mod events;
+pub mod resolve;
