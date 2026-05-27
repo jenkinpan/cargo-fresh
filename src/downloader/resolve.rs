@@ -49,13 +49,20 @@ pub fn candidate_urls(
         ));
     }
 
-    // 3 约定 × 2 归档 × N 别名 = 6N 个候选。
+    // 6 约定 × 2 归档 × N 别名 = 12N 个候选。
+    // 两种 tag 前缀 (v{version} / {version}) × 三种文件名排列。
+    // EmbarkStudios/cargo-deny 用裸版本号当 tag，BurntSushi/ripgrep 用 v 前缀，所以都要试。
     // 别名外层循环——更"像样"的 triple (canonical 在 current_targets 中放在前面) 优先。
-    let mut out = Vec::with_capacity(6 * targets.len());
+    let mut out = Vec::with_capacity(12 * targets.len());
     for target in targets {
         let conventions = [
+            // v 前缀 tag (绝大多数 Rust 项目: ripgrep, mdbook, fd, bat …)
             format!("{repo}/releases/download/v{version}/{name}-{version}-{target}"),
             format!("{repo}/releases/download/v{version}/{name}-{target}-{version}"),
+            format!("{repo}/releases/download/v{version}/{name}-{target}"),
+            // 裸版本号 tag (cargo-deny, 部分 Embark/Google 项目)
+            format!("{repo}/releases/download/{version}/{name}-{version}-{target}"),
+            format!("{repo}/releases/download/{version}/{name}-{target}-{version}"),
             format!("{repo}/releases/download/{version}/{name}-{target}"),
         ];
         for base in &conventions {
@@ -153,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn single_target_yields_six_candidates() {
+    fn single_target_yields_twelve_candidates() {
         let cands = candidate_urls(
             "ripgrep",
             "14.1.2",
@@ -161,11 +168,11 @@ mod tests {
             &one("x86_64-apple-darwin"),
         )
         .unwrap();
-        assert_eq!(cands.len(), 6);
+        assert_eq!(cands.len(), 12);
     }
 
     #[test]
-    fn multiple_targets_yield_six_times_n_candidates() {
+    fn multiple_targets_yield_twelve_times_n_candidates() {
         let cands = candidate_urls(
             "ripgrep",
             "14.1.2",
@@ -177,7 +184,7 @@ mod tests {
         ],
         )
         .unwrap();
-        assert_eq!(cands.len(), 18);
+        assert_eq!(cands.len(), 36);
     }
 
     #[test]
@@ -190,8 +197,9 @@ mod tests {
         )
         .unwrap();
         assert!(cands[0].url.contains("aarch64-apple-darwin"));
-        assert!(cands[5].url.contains("aarch64-apple-darwin"));
-        assert!(cands[6].url.contains("arm64-apple-darwin"));
+        // 第一个 alias 占满前 12 个 (6 约定 × 2 归档)
+        assert!(cands[11].url.contains("aarch64-apple-darwin"));
+        assert!(cands[12].url.contains("arm64-apple-darwin"));
     }
 
     #[test]
