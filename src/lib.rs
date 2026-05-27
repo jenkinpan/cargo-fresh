@@ -11,4 +11,5 @@ pub mod errors;
 pub mod locale;
 pub mod models;
 pub mod package;
+pub mod ui;
 pub mod updater;
