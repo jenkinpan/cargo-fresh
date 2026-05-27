@@ -104,6 +104,65 @@ pub fn match_install_opts(
     Some(candidates[0].1.clone())
 }
 
+/// 把一次成功的 binary 安装写回 `.crates2.json`——更新该包的
+/// `version_req` 字段。如果包不在文件里就新增条目。
+///
+/// 文件不存在 / 解析失败的边角:返回 Err, caller (install.rs) 据此决定
+/// 是否要把 InstallFailed 上报到 UI——这次是真失败 (cargo install --list
+/// 后续读不到新版会让用户困惑), 不是悄悄成功。
+pub fn write_install_record(
+    cargo_home: &std::path::Path,
+    package_name: &str,
+    new_version: &str,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    let path = cargo_home.join(".crates2.json");
+    let body = std::fs::read_to_string(&path).context("read .crates2.json")?;
+    let mut json: serde_json::Value = serde_json::from_str(&body).context("parse .crates2.json")?;
+    let installs = json
+        .get_mut("installs")
+        .and_then(|v| v.as_object_mut())
+        .context(".crates2.json missing 'installs' object")?;
+
+    // 找现有 key (形如 "ripgrep 14.1.1 (registry+https://...)")
+    // 先按包名前缀匹配; 找不到时按 bins[] 里的 binary 名匹配
+    // (支持包名和 binary 名不同的情况, 如 ripgrep -> rg)
+    let existing_key: Option<String> = installs
+        .keys()
+        .find(|k| k.starts_with(&format!("{package_name} ")))
+        .cloned()
+        .or_else(|| {
+            installs
+                .iter()
+                .find(|(_, v)| {
+                    v.get("bins")
+                        .and_then(|b| b.as_array())
+                        .map(|arr| arr.iter().any(|b| b.as_str() == Some(package_name)))
+                        .unwrap_or(false)
+                })
+                .map(|(k, _)| k.clone())
+        });
+
+    if let Some(old_key) = existing_key {
+        let entry = installs.remove(&old_key).expect("just found");
+        // key 格式: "<pkg_name> <version> (<source>)"
+        // 从 key 里提取真实包名和旧版本, 然后替换版本段
+        let pkg_name_in_key = old_key.split_whitespace().next().unwrap_or(package_name);
+        let old_version_in_key = old_key.split_whitespace().nth(1).unwrap_or("");
+        let new_key = old_key.replacen(
+            &format!("{pkg_name_in_key} {old_version_in_key}"),
+            &format!("{pkg_name_in_key} {new_version}"),
+            1,
+        );
+        installs.insert(new_key, entry);
+    }
+    // 新条目情况: MVP 不处理 (binstall 路径理论上不会安装全新包,
+    // cargo-fresh 只处理已安装的升级)
+    let new_body = serde_json::to_string_pretty(&json).context("serialize .crates2.json")?;
+    std::fs::write(&path, new_body).context("write .crates2.json")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
