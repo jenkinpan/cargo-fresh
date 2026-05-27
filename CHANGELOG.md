@@ -7,6 +7,43 @@
 
 ## [Unreleased]
 
+0.11.0 验证轮收尾——把下载器从"能跑"推到"能跑得过 binstall"，UI 翻成 rustup 风格。三组改动都没动 schema、没改 CLI flag 表面。
+
+### Added
+
+- **`src/package/crates_toml.rs`**: `.crates.toml` 写入器 (`write_install_record` + 纯函数 `update_record`)。`cargo install --list` 实际读的是这个文件，downloader 路径之前只写 `.crates2.json` 导致升级后 `cargo install --list` 仍报旧版（用户在 cargo-fresh 第二次跑就会看到"Unchanged"假告警）
+- **`crates2::lookup_bins(cargo_home, package_name)`**: 从 `.crates2.json` 提取 `bins[]` 数组。包名 ≠ binary 名 (ripgrep→rg, tauri-cli→cargo-tauri) 时 downloader 现在能正确解压 + 安装到 `~/.cargo/bin/<binary>`
+- **`InstallSpec.bins`** 字段：caller (updater) 把 bins 列表传进下载器，`archive::extract` 接收 `&[String]` 候选并报告实际匹配上的 binary 名（写回 .crates2.json / .crates.toml 用）
+- **`UpdatePlan`** (`src/updater/mod.rs`): rustup 风格行管理器。`new(names)` 一次性把所有选中包注册成对齐的 pending 行；`row(i)` / `name_width()` 给单个包的 update_package 拿到自己的行。0.12.0 并发调度器把外层循环换成 `JoinSet` 就能直接用同一份 API
+- **`finalize_installed` / `finalize_failed` / `finalize_aborted`**: 把行定格成静态终态行（无 spinner / 无 bar），最右显示 `installed X.XX MiB`（downloader 路径）或纯 `installed`（cargo install 编译路径）
+- **`InstallMethod` enum** + `UpdateResult::with_install_method`: 跟踪每包走的安装路径（Downloader/CargoInstall/Unknown），summary 末尾按方法分组通报 `Prebuilt: ...` / `Compiled: ...`
+- **locale 键** `summary_prebuilt` / `summary_compiled` (EN + zh-CN)
+- **`resolve.rs` 测试** `includes_tauri_style_subcrate_prefix_tag`: 锁住 monorepo tag 路径覆盖
+
+### Changed
+
+- **`resolve::candidate_urls(name, ...)` → `candidate_urls(name_candidates: &[String], ...)`**: `{name}` 占位符现在交叉乘 package 名 + binary 名（去重）。tauri-cli 这种文件名用 `cargo-tauri-*` 的现在能命中
+- **tag 路径模板从 2 个扩到 6 个**: 通用 `v{version}` / `{version}` + monorepo 前缀 `{pkg}-v{version}` / `{pkg}-{version}` + 斜杠 `{pkg}/v{version}` / `{pkg}/{version}`。tauri-cli 的 `tauri-cli-v2.11.2/` 路径靠这个走通
+- **HEAD 探测并发化** (`fetch::head_probe_concurrent`): `FuturesUnordered` + `Semaphore(16)` + 每 HEAD 5s 超时。"无 prebuilt" 判定从 6-20s（40-360 串行 × 150ms）降到 ~1-2s，最坏 5s
+- **每包行 phase 文案反映当前阶段**: 不再用 `pb_status_dim` 把每个 phase 滚到上方（4 行 × N 包噪音），而是更新 spinner 的 prefix —— `resolving` / `[bar]` / `verifying` / `extracting` / `installing` 都在同一行原地切。`enable_steady_tick(80ms)` 让 spinner 真转
+- **下载条改 rustup 风格**: `{name:>W} [bar] {bytes}/{total} ({%}) {speed} ETA {eta}`，名字按最长包名右对齐
+- **回退到 cargo install 时行 prefix 切换到 `compiling from source`** (黄色加粗)：用户一眼看出哪些包要慢一截，对得上末尾 summary 的 `Compiled:` 分组
+- **`update_package` 签名**: 新增 `row: Option<(ProgressBar, usize)>` 参数。`None` 走旧路径（自建独立 spinner，给老测试用）；`Some` 走新 rustup 风格行
+- **summary 末尾分组**: success 列表后追加 `Prebuilt: a, b, c` (青) / `Compiled: d, e` (黄)，仅当对应分组非空
+- **`install.rs` 同时写 `.crates2.json` 和 `.crates.toml`**: 两个文件都更新，不再"`cargo install --list` 报旧版"
+
+### Removed
+
+- **`src/ui/download_view.rs`** + 整个 `src/ui/` 模块：dormant 的 crossterm region 渲染器。`MultiProgress` 同时覆盖串行 (0.11.0) 和并发 (0.12.0) 两种场景，二套渲染器在 0.11.0 上线前就重复了
+- **`crossterm` 依赖** (`Cargo.toml`)：只被刚删的 download_view.rs 用，可以一起摘
+- **每包的 `Using 使用下载器` / `Using cargo install` 滚屏行**：summary 末尾按方法分组通报，行内不再赘述
+- **`Updated <pkg> <旧> -> <新>` 滚屏行** (`verify_and_report_update`)：行末态 `installed X.XX MiB` 和 summary 已各报一次，第三次重复属于纯噪音
+
+### Fixed
+
+- **ripgrep / tauri-cli 走 fallback 的根因**: 不只是包名 != binary 名，monorepo tag 前缀也是必修；现在两者一起修了
+- **`cargo-fresh` 二次运行报 Unchanged**: `.crates.toml` 写入修复后 `cargo install --list` 立即反映新版
+
 ## [0.11.0] - 2026-05-27
 
 替换 `cargo binstall` 子进程依赖为自实现的进程内二进制下载器。Crates 来源包的更新路径不再 spawn `cargo binstall`——`cargo-fresh` 自己 HTTP 流式下载 GitHub Release tarball、校验可选的 sha256 sidecar、原子化安装到 `~/.cargo/bin`、同步更新 `.crates2.json`。多 arch 命名变体探测覆盖 Rust triple / Go-style / Apple-short 三种约定，单个包最多 24 个候选 URL（Linux x86_64：3 约定 × 2 归档 × 4 别名）。临时目录全程由 `tempfile::TempDir` RAII 持有，安装结束或失败都不留 `/tmp` 残渣。BEHAVIOR：JSON `results[].phase` 仍是 `"binstall"`/`"install"` 字符串（schema 不变），但 `"binstall"` 现在意味着"downloader 路径成功"而非"`cargo binstall` 子进程成功"。
