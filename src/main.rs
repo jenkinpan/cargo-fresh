@@ -256,7 +256,7 @@ async fn run() -> Result<i32> {
                 cli.dry_run,
                 cli.install_binstall,
                 cli.verbose,
-                &cancel,
+                cancel.clone(),
             )
             .await
             {

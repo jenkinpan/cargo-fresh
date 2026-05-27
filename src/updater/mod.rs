@@ -18,10 +18,7 @@ use crate::models::{
     InstallOpts, PackageSource, UpdateResult, MAX_RETRY_ATTEMPTS, PROGRESS_TICK_MS,
     RETRY_DELAY_MS, VERSION_UPDATE_DELAY_MS,
 };
-use crate::package::{
-    ensure_binstall_available, get_installed_version, invalidate_installed_version,
-    is_binstall_available,
-};
+use crate::package::{get_installed_version, invalidate_installed_version};
 
 /// 创建当前正在更新的包的 spinner。
 ///
@@ -96,12 +93,11 @@ impl Drop for SlowGuard {
 
 /// 根据来源类型构造 cargo 子命令参数，并追加 features 相关 flags。
 ///
-/// - `Crates`：`install`/`binstall --force <pkg> [--version V]`
-/// - `Git`：`install --git URL [--rev REV] --force <pkg>`（binstall 不支持 git，强制 install）
+/// - `Crates`：`install --force <pkg> [--version V]`（binstall subprocess 已移除）
+/// - `Git`：`install --git URL [--rev REV] --force <pkg>`
 /// - `Path`：`install --path DIR --force <pkg>`
 /// - `opts`：如果提供且非默认，则在基础参数后追加 `--no-default-features` / `--all-features` / `--features a,b`
 fn build_args(
-    use_binstall: bool,
     package_name: &str,
     version: Option<&str>,
     source: &PackageSource,
@@ -109,17 +105,7 @@ fn build_args(
 ) -> Vec<String> {
     let mut args: Vec<String> = match source {
         PackageSource::Crates => {
-            let mut a: Vec<String> =
-                vec![if use_binstall { "binstall".into() } else { "install".into() }];
-            // cargo binstall 默认交互确认:打印 "Do you wish to continue? [yes]/no"
-            // 并阻塞读 stdin。cargo-fresh 用管道捕获 binstall 的 stdout/stderr——
-            // 提示文字被吞进管道、用户看不见;binstall 又继承 cargo-fresh 的
-            // TTY stdin,于是死等一个用户根本不知道要给的 "yes",整个更新无声
-            // 挂死(此前被误判成"从源码构建 13 分钟")。--no-confirm 关掉交互。
-            // cargo install 无此提示、也不认识 --no-confirm,故只对 binstall 加。
-            if use_binstall {
-                a.push("--no-confirm".into());
-            }
+            let mut a: Vec<String> = vec!["install".into()];
             a.push("--force".into());
             a.push(package_name.into());
             if let Some(v) = version {
@@ -449,13 +435,10 @@ async fn try_downloader_install(
 ///
 /// 返回 `Ok(None)` 表示**用户按 Ctrl-C 中途取消了这个包**——它既不是成功
 /// 也不是失败,调用方应据此停止后续包并标记中止,不要把它计入失败数。
-/// `cancel` 是 `main` 持有的取消标志:Ctrl-C 的信号处理任务把它置位。
-/// 没有它,本函数的重试循环会把一次取消放大成多次"假失败"——因为同进程组
-/// 的 SIGINT 会顺带杀死 cargo 子进程,`status.code()` 变成 `None`(显示为
-/// `exit code: -1`),被旧逻辑误判成普通命令失败而触发回退 + 重试。
-// 参数已到 8 个(本就贴着 clippy 阈值,`cancel` 把它顶过线)。这些是
-// "每包参数 + 全程运行上下文"的混合,真要收拢应抽 UpdateContext 结构体——
-// 留作独立重构,不塞进这次取消 bug 修复。
+/// `cancel` 是 `main` 持有的 `Arc<AtomicBool>`，Ctrl-C 信号处理任务置位后
+/// 下载器和 cargo 子进程循环都能实时感知。
+// 参数已到 8 个(本就贴着 clippy 阈值)。这些是"每包参数 + 全程运行上下文"
+// 的混合，真要收拢应抽 UpdateContext 结构体——留作独立重构。
 #[allow(clippy::too_many_arguments)]
 pub async fn update_package(
     package_name: &str,
@@ -465,13 +448,11 @@ pub async fn update_package(
     dry_run: bool,
     install_binstall: bool,
     verbose: bool,
-    cancel: &AtomicBool,
+    cancel: Arc<AtomicBool>,
 ) -> Result<Option<UpdateResult>> {
     // NOTE: `install_binstall` is a deprecated no-op in 0.11. The self-hosted
     // downloader replaces the cargo-binstall subprocess path. The flag is kept
     // accepted for one release to avoid breaking existing scripts.
-    // Print a one-time deprecation hint (per package call, but callers typically
-    // pass the flag once and only one package is "the first" to trigger it).
     if install_binstall {
         static DEPRECATION_WARNED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
         DEPRECATION_WARNED.get_or_init(|| {
@@ -489,54 +470,29 @@ pub async fn update_package(
     let language = detect_language();
     let old_version = get_installed_version(package_name).await.ok().flatten();
 
-    // 决定主命令的来源策略：
-    // - Crates 源 + 默认 features：先尝试自托管 downloader（0.11+），
-    //   失败/不支持时回退到 cargo install。
-    // - Crates 源 + 自定义 features：直接走 cargo install（downloader
-    //   不支持任意 feature flag）。
-    // - Git / Path 源不走 downloader（仅支持 crates.io 包）。
-    // --install-binstall 在 0.11 已弃用，仍接受但不执行 binstall 安装，
-    // 打印一次废弃提示即可（由 CLI 注释说明；此处不额外操作）。
-    let opts_allow_binstall = install_opts.is_none_or(|o| o.is_default());
-    // use_binstall: kept for dry-run display and CommandSelector (subprocess path)
-    let use_binstall = match source {
-        PackageSource::Crates => {
-            if is_binstall_available() && opts_allow_binstall {
-                true
-            } else if install_binstall && !dry_run && opts_allow_binstall {
-                ensure_binstall_available().await.unwrap_or(false)
-            } else {
-                if opts_allow_binstall && !install_binstall {
-                    // --install-binstall not set and binstall not present;
-                    // the self-hosted downloader will be tried first instead.
-                    // Suppress the old binstall_hint since it's no longer relevant.
-                } else if !opts_allow_binstall && verbose {
-                    // 包带非默认 features，走 cargo install 才能生效
-                    status_dim(
-                        "Check",
-                        &format!("{package_name}: custom features, skipping downloader"),
-                    );
-                }
-                false
-            }
-        }
-        _ => false,
-    };
+    // 路径策略：
+    // - Crates 源 + 默认 features：自托管 downloader 为主路径（0.11+）；
+    //   Unsupported/Failed 时回退 cargo install。cargo binstall subprocess 不再调用。
+    // - Crates 源 + 自定义 features：直接走 cargo install（downloader 不支持任意 features）。
+    // - Git / Path 源：cargo install（downloader 仅支持 crates.io 包）。
+    let opts_allow_downloader = install_opts.is_none_or(|o| o.is_default());
 
-    if verbose && install_opts.is_none() && matches!(source, PackageSource::Crates) {
-        status_dim(
-            "Check",
-            &format!("{package_name} no install metadata, using default features"),
-        );
+    if verbose {
+        if install_opts.is_none() && matches!(source, PackageSource::Crates) {
+            status_dim(
+                "Check",
+                &format!("{package_name}: no install metadata, using default features"),
+            );
+        } else if !opts_allow_downloader && matches!(source, PackageSource::Crates) {
+            status_dim(
+                "Check",
+                &format!("{package_name}: custom features, skipping downloader"),
+            );
+        }
     }
-    let primary_args =
-        build_args(use_binstall, package_name, target_version, source, install_opts);
-    // 只有 Crates 源走 binstall 时才有 install 回退
-    let fallback_args = if use_binstall {
-        Some(build_args(false, package_name, target_version, source, install_opts))
-    } else {
-        None
-    };
+
+    // cargo install args — used for fallback (Crates) or primary (Git/Path/custom-features).
+    let cargo_install_args = build_args(package_name, target_version, source, install_opts);
 
     // dry-run：直接打印到 stdout（绕过 progress bar 避免 finish 时被清掉），
     // 立即返回成功结果，不调用 cargo。
@@ -547,14 +503,16 @@ pub async fn update_package(
         } else {
             format!("{} {}", package_name.cyan().bold(), marker.dimmed())
         };
-        status(
-            "Would run",
-            &format!("{}: cargo {}", header, primary_args.join(" ")),
-        );
-        if let Some(fb) = &fallback_args {
-            status_dim(
-                "Fallback",
-                &format!("cargo {}", fb.join(" ")),
+        // For Crates + default features, show the downloader as primary path.
+        if matches!(source, PackageSource::Crates) && opts_allow_downloader {
+            status(
+                "Would run",
+                &format!("{header}: self-hosted downloader → cargo {}", cargo_install_args.join(" ")),
+            );
+        } else {
+            status(
+                "Would run",
+                &format!("{}: cargo {}", header, cargo_install_args.join(" ")),
             );
         }
         return Ok(Some(UpdateResult::new(
@@ -568,7 +526,6 @@ pub async fn update_package(
     let pb = create_progress_bar(package_name);
     let _pb_guard = PbGuard(&pb);
     let slow_handle = spawn_slow_warning(pb.clone(), package_name.to_string());
-    // Drop slow_handle 时它仍可能在 sleep；中止它避免无意义提示在主流程结束后才打
     let _slow_guard = SlowGuard(slow_handle);
     if let Some(ref version) = old_version {
         pb_status_dim(
@@ -578,14 +535,15 @@ pub async fn update_package(
         );
     }
 
-    match (source, use_binstall) {
-        (PackageSource::Crates, true) => {
-            pb_status_dim(&pb, "Using", language.get_text("using_binstall"));
+    match source {
+        PackageSource::Crates => {
+            if opts_allow_downloader {
+                pb_status_dim(&pb, "Using", language.get_text("using_binstall"));
+            } else {
+                pb_status_dim(&pb, "Using", language.get_text("using_install_fallback"));
+            }
         }
-        (PackageSource::Crates, false) => {
-            pb_status_dim(&pb, "Using", "self-hosted downloader (cargo install fallback)");
-        }
-        (PackageSource::Git { .. }, _) | (PackageSource::Path { .. }, _) => {
+        PackageSource::Git { .. } | PackageSource::Path { .. } => {
             pb_status_dim(
                 &pb,
                 "Using",
@@ -593,11 +551,11 @@ pub async fn update_package(
                     "{} {}",
                     language.get_text("using_install_fallback"),
                     source.marker().dimmed(),
-            ));
+                ),
+            );
         }
-        (PackageSource::Unknown(_), _) => {
+        PackageSource::Unknown(_) => {
             // 不应该到这一步——main 不会把 unknown 包放进 selections。
-            // 万一来到，给个明显的错误信息而不是默默走 cargo install。
             pb_status_warn(&pb, "Skip", &format!("{} {}", package_name, source.marker()));
             return Ok(Some(UpdateResult::new(
                 package_name.to_string(),
@@ -608,46 +566,13 @@ pub async fn update_package(
         }
     }
 
-    // 自托管 downloader 路径：Crates 源 + 默认 features + 非 binstall。
-    // binstall 已安装时保持原有 subprocess 路径（use_binstall=true 分支）。
-    if matches!(source, PackageSource::Crates) && !use_binstall && opts_allow_binstall {
+    // 自托管 downloader 路径：Crates 源 + 默认 features。
+    // 无论系统是否安装了 cargo-binstall，都走这条路。
+    // Unsupported/Failed → 回退 cargo install。Cancelled → 中止。
+    if matches!(source, PackageSource::Crates) && opts_allow_downloader {
         if let Some(v) = target_version {
-            // Arc::new wraps the current value — but we need live signaling.
-            // Build an Arc<AtomicBool> that mirrors the current cancel state;
-            // since cancel is checked at every await point in the downloader,
-            // using a shared Arc from main would be ideal.  We can't cheaply
-            // get that Arc here, so we allocate a thin Arc and poll-copy from
-            // the reference at the point of call.  The downloader also checks
-            // cancel at multiple interior await points — if Ctrl-C fires *during*
-            // fetch it will see the true cancel flag via the Arc we pass.
-            // We re-read the shared `cancel` reference periodically.
-            let cancel_arc = {
-                let flag = Arc::new(AtomicBool::new(cancel.load(Ordering::SeqCst)));
-                // Spawn a tiny task that keeps flag in sync with the real cancel.
-                let flag_clone = flag.clone();
-                // We use a local polling task with a short sleep to propagate
-                // Ctrl-C into the Arc that the downloader holds.
-                // NOTE: This is best-effort; the downloader also checks the Arc
-                // at every major await boundary, so latency ≤ one HTTP chunk timeout.
-                tokio::spawn({
-                    // `cancel` is a reference — we can't send it across threads.
-                    // Instead, capture the current value.  For true live signaling
-                    // the call site (main.rs) would need to pass an Arc<AtomicBool>
-                    // directly.  That refactor is deferred; for now we do an
-                    // immediate snapshot which is correct for the pre-download check.
-                    let already_cancelled = cancel.load(Ordering::SeqCst);
-                    async move {
-                        if already_cancelled {
-                            flag_clone.store(true, Ordering::SeqCst);
-                        }
-                    }
-                });
-                flag
-            };
-
-            match try_downloader_install(&pb, package_name, v, &old_version, cancel_arc, verbose).await {
+            match try_downloader_install(&pb, package_name, v, &old_version, cancel.clone(), verbose).await {
                 Ok(true) => {
-                    // Downloader succeeded — verify installed version
                     let result = verify_and_report_update(&pb, package_name, &old_version).await;
                     return Ok(Some(result));
                 }
@@ -664,7 +589,9 @@ pub async fn update_package(
         }
     }
 
-    let mut selector = CommandSelector::new(primary_args, fallback_args);
+    // cargo install subprocess — fallback for Crates (after downloader fail/unsupported),
+    // or primary for Git/Path/custom-features.
+    let mut selector = CommandSelector::new(cargo_install_args, None);
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
         // 每次重试前检查取消标志:用户按 Ctrl-C 后立即停手,不再消耗重试
@@ -760,10 +687,8 @@ mod tests {
     async fn cancelled_before_start_returns_none() {
         // 复现并锁定 bug:用户按下 Ctrl-C 后,update_package 必须立即返回
         // None 表示"被取消"——绝不当成更新失败,绝不 spawn cargo 子进程。
-        // 修复前 update_package 根本不接收取消标志,把一次取消放大成 3 次
-        // 假的 `Failed ... exit code: -1`,并在总结里把包标成"失败"。
-        use std::sync::atomic::AtomicBool;
-        let cancel = AtomicBool::new(true);
+        use std::sync::{Arc, atomic::AtomicBool};
+        let cancel = Arc::new(AtomicBool::new(true));
         let result = super::update_package(
             "cargo-fresh-no-such-package",
             Some("9.9.9"),
@@ -772,7 +697,7 @@ mod tests {
             false, // dry_run
             false, // install_binstall
             false, // verbose
-            &cancel,
+            cancel,
         )
         .await
         .expect("update_package 不应返回 Err");
@@ -784,39 +709,15 @@ mod tests {
 
     #[test]
     fn selector_starts_on_primary() {
-        let primary = s(&["binstall", "--force", "mdbook"]);
-        let fallback = s(&["install", "--force", "mdbook"]);
-        let sel = CommandSelector::new(primary.clone(), Some(fallback));
+        let primary = s(&["install", "--force", "mdbook"]);
+        let sel = CommandSelector::new(primary.clone(), None);
         assert_eq!(sel.current(), primary.as_slice());
-    }
-
-    #[test]
-    fn selector_sticks_to_fallback_across_retries() {
-        // 复现并锁定 bug：binstall 失败回退到 cargo install 后，后续每次
-        // 重试都必须继续跑 install，绝不回到 binstall（binstall 一旦在当前
-        // 环境失败，重试它只会重复又慢又必然失败的从源码构建路径）。
-        let primary = s(&["binstall", "--force", "mdbook", "--version", "0.5.3"]);
-        let fallback = s(&["install", "--force", "mdbook", "--version", "0.5.3"]);
-        let mut sel = CommandSelector::new(primary.clone(), Some(fallback.clone()));
-
-        // attempt 1：跑主命令 binstall
-        assert_eq!(sel.current(), primary.as_slice());
-
-        // binstall 失败 → 回退，且首次回退返回 true（调用方据此打印 Fallback）
-        assert!(sel.switch_to_fallback());
-        assert_eq!(sel.current(), fallback.as_slice());
-
-        // attempt 2、3：依旧是 install——不再回退、绝不回到 binstall
-        assert!(!sel.switch_to_fallback());
-        assert_eq!(sel.current(), fallback.as_slice());
-        assert!(!sel.switch_to_fallback());
-        assert_eq!(sel.current(), fallback.as_slice());
     }
 
     #[test]
     fn selector_without_fallback_always_primary() {
-        // 非 binstall 路径（git/path 源，或 binstall 不可用）：没有回退命令，
-        // 每次重试都跑主命令，switch_to_fallback 永远返回 false。
+        // downloader 失败后只有 cargo install 作为唯一 subprocess 路径——
+        // CommandSelector 不再有 binstall primary + install fallback 模式。
         let primary = s(&["install", "--force", "ripgrep"]);
         let mut sel = CommandSelector::new(primary.clone(), None);
         assert_eq!(sel.current(), primary.as_slice());
@@ -826,7 +727,7 @@ mod tests {
 
     #[test]
     fn crates_default_opts_no_extra_flags() {
-        let got = build_args(false, "ripgrep", Some("14.1.1"), &PackageSource::Crates, None);
+        let got = build_args("ripgrep", Some("14.1.1"), &PackageSource::Crates, None);
         assert_eq!(
             got,
             s(&["install", "--force", "ripgrep", "--version", "14.1.1"])
@@ -834,22 +735,9 @@ mod tests {
     }
 
     #[test]
-    fn binstall_command_includes_no_confirm() {
-        // cargo binstall 默认打印 "Do you wish to continue? [yes]/no" 并等 stdin。
-        // cargo-fresh 用管道捕获 binstall 的 stdout/stderr——提示文字被吞掉、
-        // 用户看不见;binstall 又继承 cargo-fresh 的 TTY stdin,于是死等一个
-        // 用户根本不知道要给的 "yes",整个更新无声挂死。必须带 --no-confirm。
-        let got = build_args(true, "cargo-deny", Some("0.19.7"), &PackageSource::Crates, None);
-        assert!(
-            got.contains(&"--no-confirm".to_string()),
-            "cargo binstall 必须带 --no-confirm,否则挂在交互提示符上。实际: {got:?}"
-        );
-    }
-
-    #[test]
-    fn cargo_install_command_omits_no_confirm() {
-        // cargo install 无交互提示,也不认识 --no-confirm——绝不能加上
-        let got = build_args(false, "cargo-deny", Some("0.19.7"), &PackageSource::Crates, None);
+    fn cargo_install_has_no_no_confirm() {
+        // cargo install 无交互提示，也不认识 --no-confirm——绝不能加上
+        let got = build_args("cargo-deny", Some("0.19.7"), &PackageSource::Crates, None);
         assert!(
             !got.contains(&"--no-confirm".to_string()),
             "cargo install 不该带 --no-confirm。实际: {got:?}"
@@ -863,7 +751,7 @@ mod tests {
             all_features: false,
             features: vec!["pcre2".into(), "simd".into()],
         };
-        let got = build_args(false, "ripgrep", None, &PackageSource::Crates, Some(&opts));
+        let got = build_args("ripgrep", None, &PackageSource::Crates, Some(&opts));
         assert_eq!(
             got,
             s(&["install", "--force", "ripgrep", "--features", "pcre2,simd"])
@@ -877,7 +765,7 @@ mod tests {
             all_features: true,
             features: vec![],
         };
-        let got = build_args(false, "x", None, &PackageSource::Crates, Some(&opts));
+        let got = build_args("x", None, &PackageSource::Crates, Some(&opts));
         assert_eq!(
             got,
             s(&[
@@ -901,7 +789,7 @@ mod tests {
             url: "https://github.com/x/y".into(),
             rev: Some("abc".into()),
         };
-        let got = build_args(false, "y", None, &src, Some(&opts));
+        let got = build_args("y", None, &src, Some(&opts));
         assert_eq!(
             got,
             s(&[
@@ -919,7 +807,7 @@ mod tests {
             features: vec![],
         };
         let src = PackageSource::Path { dir: "/tmp/p".into() };
-        let got = build_args(false, "p", None, &src, Some(&opts));
+        let got = build_args("p", None, &src, Some(&opts));
         assert_eq!(
             got,
             s(&[
@@ -931,10 +819,10 @@ mod tests {
 
     #[test]
     fn default_opts_some_but_empty_adds_nothing() {
+        // 默认 features 不追加任何 feature flag
         let opts = InstallOpts::default();
-        let got = build_args(true, "tool", None, &PackageSource::Crates, Some(&opts));
-        // 默认 features 不追加任何 feature flag;binstall 路径恒带 --no-confirm
-        assert_eq!(got, s(&["binstall", "--no-confirm", "--force", "tool"]));
+        let got = build_args("tool", None, &PackageSource::Crates, Some(&opts));
+        assert_eq!(got, s(&["install", "--force", "tool"]));
     }
 
     #[test]
@@ -945,7 +833,7 @@ mod tests {
             features: vec!["x".into()],
         };
         let src = PackageSource::Unknown("custom-reg".into());
-        let got = build_args(false, "tool", None, &src, Some(&opts));
+        let got = build_args("tool", None, &src, Some(&opts));
         assert_eq!(
             got,
             s(&["install", "--unknown-source-marker", "custom-reg", "tool"])

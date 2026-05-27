@@ -93,9 +93,9 @@ pub fn get_english_text(key: &str) -> &'static str {
         "installing_binstall" => "cargo-binstall",
         "binstall_installed_successfully" => "cargo-binstall",
         "binstall_install_failed" => "to install cargo-binstall",
-        "using_binstall" => "cargo binstall",
+        "using_binstall" => "self-hosted downloader",
         "using_install_fallback" => "cargo install",
-        "binstall_failed_fallback" => "binstall failed, falling back to cargo install",
+        "binstall_failed_fallback" => "downloader failed, falling back to cargo install",
         "checking_binstall" => "binstall availability for {} update candidate(s)",
 
         // Timing
@@ -201,9 +201,9 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "installing_binstall" => "cargo-binstall",
         "binstall_installed_successfully" => "cargo-binstall",
         "binstall_install_failed" => "安装 cargo-binstall 失败",
-        "using_binstall" => "cargo binstall",
+        "using_binstall" => "使用下载器",
         "using_install_fallback" => "cargo install",
-        "binstall_failed_fallback" => "binstall 失败，回退到 cargo install",
+        "binstall_failed_fallback" => "下载器失败，回退到 cargo install",
         "checking_binstall" => "{} 个更新候选的 binstall 可用性",
 
         // 时间
