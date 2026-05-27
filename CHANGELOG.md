@@ -7,6 +7,53 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-27
+
+替换 `cargo binstall` 子进程依赖为自实现的进程内二进制下载器。Crates 来源包的更新路径不再 spawn `cargo binstall`——`cargo-fresh` 自己 HTTP 流式下载 GitHub Release tarball、校验可选的 sha256 sidecar、原子化安装到 `~/.cargo/bin`、同步更新 `.crates2.json`。多 arch 命名变体探测覆盖 Rust triple / Go-style / Apple-short 三种约定，单个包最多 24 个候选 URL（Linux x86_64：3 约定 × 2 归档 × 4 别名）。临时目录全程由 `tempfile::TempDir` RAII 持有，安装结束或失败都不留 `/tmp` 残渣。BEHAVIOR：JSON `results[].phase` 仍是 `"binstall"`/`"install"` 字符串（schema 不变），但 `"binstall"` 现在意味着"downloader 路径成功"而非"`cargo binstall` 子进程成功"。
+
+### Added
+
+- **`src/downloader/` 模块**: 5 个子模块组成的完整下载流水线
+  - `events.rs`: `ProgressEvent` (Resolving/UrlCandidate/Downloading/Verifying/Extracting/Installing/Done/Failed) + `DownloaderError` (Unsupported/Failed/Cancelled 三分法，决定调用方 fallback 路由) + `UnsupportedReason` / `FailureKind` 枚举
+  - `resolve.rs`: 纯函数 `candidate_urls(name, version, repo, &[targets])` 生成 3 GitHub 约定 × 2 归档 × N 别名候选；`current_targets()` 返回当前平台的别名数组 (macOS aarch64 给 3 个，Linux x86_64 给 4 个)
+  - `fetch.rs`: HEAD 探测每个候选，第一个 2xx 胜出；reqwest `bytes_stream()` 流式 GET，每 chunk 后发 `Downloading` 事件并检查 cancel；并发尝试 `{url}.sha256` (404 容忍, 匹配则强制校验, mismatch 立即失败)
+  - `archive.rs`: tar.gz / zip / 裸二进制三路解压；`find_binary` BFS 深度 3 兼容"binary at root" (mdbook) 和"binary in subdir" (ripgrep) 两种 layout；`ExtractResult` 持 `TempDir`，Drop 时清理
+  - `install.rs`: 拷贝到 `.cargo-fresh-{name}-{uuid}.tmp` + chmod 0o755 + fsync + atomic rename；rename 失败显式 `remove_file` 清 tmp
+- **`src/package/crates_api.rs`**: 极小的 crates.io API client，只取 `crate.repository` 字段；任何错误返回 `None` 走 fallback
+- **`src/ui/download_view.rs`**: crossterm 控制的多行 region 渲染器（10Hz tick、非 TTY 降级、Done/Failed 通过 println_above 滚入历史）。**0.11.0 暂未启用**——保留给 0.12.0 的并发调度器
+- **多 arch 别名表 (`current_targets()`)**:
+  - macOS aarch64: `aarch64-apple-darwin`, `arm64-apple-darwin`, `darwin-arm64`
+  - macOS x86_64: `x86_64-apple-darwin`, `x64-apple-darwin`, `darwin-amd64`, `darwin-x64`
+  - Linux aarch64: `aarch64-unknown-linux-gnu`, `aarch64-unknown-linux-musl`, `arm64-unknown-linux-gnu`, `linux-arm64`
+  - Linux x86_64: `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`, `linux-amd64`, `linux-x64`
+- **`tests/downloader_fetch.rs`** (wiremock): 5 个集成测试覆盖 HEAD 404→200 切换 / 全部 HEAD 404 / sha256 mismatch / cancel-before-start / Downloading 事件顺序
+- **`tests/downloader_install.rs`**: 隔离 `tempfile::TempDir` 作 `CARGO_HOME`，验证 atomic install + `.crates2.json` 写入
+- **`tests/fixtures/mkfixtures.sh`** + 3 个 fixture 归档（ripgrep-like.tar.gz / mdbook-like.tar.gz / cargo-deny-like.zip）
+
+### Changed
+
+- **`update_package` 签名**: `cancel: &AtomicBool` → `cancel: Arc<AtomicBool>`。原 `&AtomicBool` 拷贝出去给 spawn 内的 downloader 时只能取快照，Ctrl-C 信号无法实时传入下载流——改 Arc 后修复
+- **`build_args` 不再带 `use_binstall: bool` 参数**: 现在永远生成 `cargo install` 系列参数，binstall 分支彻底移除
+- **`CommandSelector` 简化**: primary+fallback 仍保留（给将来其它 fallback 用），但 0.11.0 的 fallback 槽永远是 `None`——binstall→install 的粘性 fallback 不再需要
+- **locale 字符串**: `using_binstall` 改为 "self-hosted downloader" / "使用下载器"；`binstall_failed_fallback` 文案改提"downloader"
+- **`Cargo.toml` 新增 7 个直接依赖**: `flate2`, `tar`, `zip`, `sha2`, `crossterm`, `futures-util`, `tempfile`；`reqwest` 加 `stream` feature
+- **依赖审计**: `cargo deny check licenses` 无新增 license（全部 MIT/Apache-2.0）
+
+### Removed
+
+- **`cargo binstall` 子进程路径**: `update_package` 的 binstall 分支整体删除。`is_binstall_available()` / `ensure_binstall_available()` / `install_binstall()` 仍存在但仅 `--check-binstall` 预检 flag 使用
+- **测试 `binstall_command_includes_no_confirm` / `selector_sticks_to_fallback_across_retries`**: 被测代码路径已移除
+
+### Deprecated
+
+- **`--install-binstall` flag**: 保留接受但变为 no-op，首次使用时通过 `OnceLock` 打印一次弃用警告。计划 0.12.0 移除
+
+### Notes for downstream
+
+- JSON `schema_version=1` 不变。`results[].phase = "binstall"` 在 0.11.0 之后语义为"下载器路径"，而非"`cargo binstall` 子进程"
+- 0.11.0 仍是串行更新——并发调度器作为单独的 0.12.0 规划，那时 `ui::download_view` 才会接入
+- 下载器只支持 GitHub Release。非 github.com 域 / Windows / `package.metadata.binstall` 自定义模板都走 `Unsupported` 直接 fallback 到 `cargo install`，这是 MVP 边界——覆盖主流包 ~80%
+
 ## [0.10.7] - 2026-05-25
 
 测试与文档加固型小版本——把 1.0 对外契约（JSON schema + cargo-style 输出行格式）钉进 CI，让"改了实现忘了改文档"和"顺手把 verb 改了一下"这类静默漂移在 PR diff 上无所遁形。无代码行为变化、无 BREAKING、无 BEHAVIOR。

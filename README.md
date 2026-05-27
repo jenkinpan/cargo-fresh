@@ -38,7 +38,7 @@ A Rust tool for checking and updating globally installed Cargo packages with int
 - 📦 **Source-aware updates** - handles crates.io, `git` (`--git URL [--rev]`), and local `path` installs, with `[git]` / `[path]` markers
 - 🛡️ **Enhanced error handling** - intelligent retry mechanisms and user-friendly error messages
 - 📊 **Fast version checks** - crates.io sparse index with connection pooling and a concurrency-limited request pool (`cargo search` fallback)
-- ⚡ **Fast installation** - uses `cargo binstall` for faster package updates with automatic fallback
+- ⚡ **Fast installation** - in-process binary downloader (since 0.11.0) streams GitHub Release tarballs directly, verifies sha256 when available, and atomically installs — no `cargo binstall` subprocess required. Falls back to `cargo install` for non-GitHub or unsupported packages
 
 ## Installation
 
@@ -53,7 +53,7 @@ or
 cargo binstall cargo-fresh
 ```
 
-**Note**: `cargo binstall` provides faster installation by downloading pre-compiled binaries instead of compiling from source. If `cargo binstall` is not installed, cargo-fresh prints a hint and falls back to `cargo install` — it does **not** modify your toolchain by default. Pass `--install-binstall` to have it auto-install `cargo binstall` when needed.
+**Note**: Since 0.11.0, cargo-fresh no longer depends on `cargo binstall` for the fast install path — it streams GitHub Release binaries in-process. The `--install-binstall` flag is deprecated (no-op + warning), and will be removed in 0.12.0. `--check-binstall` is still useful as a pre-flight probe to see which packages cargo-binstall would handle as prebuilt binaries.
 
 ### Install from source
 
