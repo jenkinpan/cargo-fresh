@@ -23,7 +23,7 @@ pub mod registry;
 pub mod sparse_index;
 
 /// 单进程共享的 HTTP 客户端，启用 connection pool。
-fn http_client() -> &'static reqwest::Client {
+pub(crate) fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
         reqwest::Client::builder()
