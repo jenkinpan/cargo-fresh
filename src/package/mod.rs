@@ -17,6 +17,7 @@ use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
 
 pub mod binstall_probe;
+pub mod crates_api;
 pub mod crates2;
 pub mod registry;
 pub mod sparse_index;
