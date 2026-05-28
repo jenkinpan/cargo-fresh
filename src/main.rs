@@ -515,7 +515,7 @@ fn build_report<'a>(
                 latest,
                 source: p.source.kind_str(),
                 prerelease: p.is_prerelease(),
-                binstall: p.binstall_kind.map(|k| k.kind_str()),
+                prebuilt: p.prebuilt.map(|k| k.kind_str()),
             })
         })
         .collect();
@@ -574,7 +574,7 @@ fn build_report<'a>(
     };
 
     JsonReport {
-        schema_version: 1,
+        schema_version: 2,
         format: "cargo-fresh-v1",
         include_prerelease: cli.include_prerelease,
         dry_run: cli.dry_run,
@@ -615,7 +615,7 @@ fn print_json(report: &JsonReport) {
         Ok(s) => anstream::println!("{}", s),
         Err(e) => {
             anstream::eprintln!(
-                "{{\"schema_version\":1,\"error\":\"failed to serialize report: {}\"}}", e
+                "{{\"schema_version\":2,\"error\":\"failed to serialize report: {}\"}}", e
             );
         }
     }
@@ -638,7 +638,7 @@ mod tests {
             PackageInfo::with_source("ripgrep".into(), Some("14.1.1".into()), PackageSource::Crates),
         ];
         let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
-        assert_eq!(report.schema_version, 1);
+        assert_eq!(report.schema_version, 2);
         assert_eq!(report.format, "cargo-fresh-v1");
         assert_eq!(report.summary.checked, 1);
         assert_eq!(report.fresh, vec!["ripgrep"]);
@@ -688,9 +688,9 @@ mod tests {
     }
 
     #[test]
-    fn build_report_maps_binstall_kind_to_json() {
-        // --check-binstall 探测出的 BinstallKind 必须落到 updates_available[].binstall
-        use cargo_fresh::models::BinstallKind;
+    fn build_report_maps_prebuilt_to_json() {
+        // --check-prebuilt 探测出的 PrebuiltAvailability 必须落到 updates_available[].prebuilt
+        use cargo_fresh::models::PrebuiltAvailability;
         let cli = empty_cli();
         let mut pkg = PackageInfo::with_source(
             "cargo-deny".into(),
@@ -698,7 +698,7 @@ mod tests {
             PackageSource::Crates,
         );
         pkg.latest_version = Some("0.19.7".into());
-        pkg.binstall_kind = Some(BinstallKind::SourceBuild);
+        pkg.prebuilt = Some(PrebuiltAvailability::Source);
         let packages = vec![pkg];
         let all_updates: Vec<&PackageInfo> = packages.iter().collect();
         let report = build_report(
@@ -711,12 +711,12 @@ mod tests {
             0,
         );
         assert_eq!(report.updates_available.len(), 1);
-        assert_eq!(report.updates_available[0].binstall, Some("source_build"));
+        assert_eq!(report.updates_available[0].prebuilt, Some("source"));
     }
 
     #[test]
-    fn build_report_binstall_is_null_when_not_probed() {
-        // 没跑 --check-binstall 时 binstall_kind 为 None,JSON 里应是 null
+    fn build_report_prebuilt_is_null_when_not_probed() {
+        // 没跑 --check-prebuilt 时 pkg.prebuilt 为 None,JSON 里应是 null
         let cli = empty_cli();
         let mut pkg = PackageInfo::with_source(
             "ripgrep".into(),
@@ -735,7 +735,7 @@ mod tests {
             std::time::Instant::now(),
             0,
         );
-        assert_eq!(report.updates_available[0].binstall, None);
+        assert_eq!(report.updates_available[0].prebuilt, None);
     }
 
     #[test]

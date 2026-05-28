@@ -9,8 +9,8 @@
 //! 定生成所有边界场景，CI runner 上不需要任何预装包。
 
 use cargo_fresh::models::{
-    BinstallKind, JsonCheckError, JsonReport, JsonResult, JsonSkipped, JsonSummary,
-    JsonUpdateCandidate,
+    JsonCheckError, JsonReport, JsonResult, JsonSkipped, JsonSummary, JsonUpdateCandidate,
+    PrebuiltAvailability,
 };
 use jsonschema::Validator;
 
@@ -39,7 +39,7 @@ fn assert_valid(report: &JsonReport, label: &str) {
 #[test]
 fn empty_run_matches_schema() {
     let report = JsonReport {
-        schema_version: 1,
+        schema_version: 2,
         format: "cargo-fresh-v1",
         include_prerelease: false,
         dry_run: false,
@@ -71,7 +71,7 @@ fn empty_run_matches_schema() {
 #[test]
 fn invalid_payload_is_rejected() {
     let mut value = serde_json::to_value(JsonReport {
-        schema_version: 1,
+        schema_version: 2,
         format: "cargo-fresh-v1",
         include_prerelease: false,
         dry_run: false,
@@ -105,8 +105,8 @@ fn invalid_payload_is_rejected() {
 }
 
 /// 覆盖每一种 `$defs` 形状的"满"快照：
-/// - `updates_available` 含一个 prerelease=false + binstall=prebuilt 与
-///   一个 prerelease=true + binstall=null
+/// - `updates_available` 含一个 prerelease=false + prebuilt=prebuilt 与
+///   一个 prerelease=true + prebuilt=null
 /// - `fresh` 含一个名字
 /// - `skipped` 覆盖 git/path/unknown 三种 reason_code
 /// - `version_check_errors` 含一个 not_found 一个 unavailable
@@ -116,7 +116,7 @@ fn invalid_payload_is_rejected() {
 #[test]
 fn full_run_matches_schema() {
     let report = JsonReport {
-        schema_version: 1,
+        schema_version: 2,
         format: "cargo-fresh-v1",
         include_prerelease: true,
         dry_run: true,
@@ -128,7 +128,7 @@ fn full_run_matches_schema() {
                 latest: "14.1.1",
                 source: "crates",
                 prerelease: false,
-                binstall: Some(BinstallKind::Prebuilt.kind_str()),
+                prebuilt: Some(PrebuiltAvailability::Prebuilt.kind_str()),
             },
             JsonUpdateCandidate {
                 name: "cargo-fresh",
@@ -136,7 +136,7 @@ fn full_run_matches_schema() {
                 latest: "1.0.0-rc.1",
                 source: "crates",
                 prerelease: true,
-                binstall: None,
+                prebuilt: None,
             },
         ],
         fresh: vec!["bat"],
@@ -202,14 +202,14 @@ fn full_run_matches_schema() {
     assert_valid(&report, "full_run");
 }
 
-/// 覆盖 `binstall` 字段剩下两个枚举值——`source_build` 与 `unknown`。
+/// 覆盖 `prebuilt` 字段剩下两个枚举值——`source` 与 `unknown`。
 /// 与 `full_run` 拆开是为了让"哪条 fixture 命中了 schema 哪条规则"在失败
 /// 时一目了然。
 #[test]
-fn binstall_variants_match_schema() {
-    for kind in [BinstallKind::SourceBuild, BinstallKind::Unknown] {
+fn prebuilt_variants_match_schema() {
+    for kind in [PrebuiltAvailability::Source, PrebuiltAvailability::Unknown] {
         let report = JsonReport {
-            schema_version: 1,
+            schema_version: 2,
             format: "cargo-fresh-v1",
             include_prerelease: false,
             dry_run: false,
@@ -220,7 +220,7 @@ fn binstall_variants_match_schema() {
                 latest: "1.0.1",
                 source: "crates",
                 prerelease: false,
-                binstall: Some(kind.kind_str()),
+                prebuilt: Some(kind.kind_str()),
             }],
             fresh: vec![],
             skipped: vec![],
@@ -239,6 +239,6 @@ fn binstall_variants_match_schema() {
             },
             aborted: false,
         };
-        assert_valid(&report, &format!("binstall_{}", kind.kind_str()));
+        assert_valid(&report, &format!("prebuilt_{}", kind.kind_str()));
     }
 }

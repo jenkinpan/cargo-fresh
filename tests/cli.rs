@@ -99,8 +99,8 @@ fn json_mode_keeps_stdout_clean() {
         trimmed.lines().count()
     );
     assert!(
-        trimmed.contains("\"schema_version\":1"),
-        "JSON missing schema_version=1:\n{out}"
+        trimmed.contains("\"schema_version\":2"),
+        "JSON missing schema_version=2:\n{out}"
     );
 }
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/jenkinpan/cargo-fresh/blob/master/docs/json-schema.json",
   "title": "cargo-fresh JSON report",
-  "description": "Schema for the single JSON object emitted to stdout when cargo-fresh runs with --format=json. Stability: schema_version=1 is the 1.0 contract — within 1.x, fields are only added (never removed or renamed). Status lines, prompts, and progress all go to stderr; stdout contains exactly one JSON object per invocation.",
+  "description": "Schema for the single JSON object emitted to stdout when cargo-fresh runs with --format=json. Stability: schema_version=2 is the current contract. schema_version bumps on rename/remove (1→2 in 0.12.0 renamed updates_available[].binstall → prebuilt); additive within a major. Status lines, prompts, and progress all go to stderr; stdout contains exactly one JSON object per invocation.",
   "type": "object",
   "required": [
     "schema_version",
@@ -21,8 +21,8 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 1,
-      "description": "Schema major version. Bumps only on a breaking change; 1.x is additive-only."
+      "const": 2,
+      "description": "Schema major version. Bumps on rename/remove; additive within a major."
     },
     "format": {
       "type": "string",
@@ -75,7 +75,7 @@
   "$defs": {
     "updateCandidate": {
       "type": "object",
-      "required": ["name", "current", "latest", "source", "prerelease", "binstall"],
+      "required": ["name", "current", "latest", "source", "prerelease", "prebuilt"],
       "properties": {
         "name": { "type": "string" },
         "current": {
@@ -91,10 +91,10 @@
           "type": "boolean",
           "description": "True when `latest` is a SemVer prerelease (only possible with --include-prerelease)."
         },
-        "binstall": {
+        "prebuilt": {
           "type": ["string", "null"],
-          "enum": ["prebuilt", "source_build", "unknown", null],
-          "description": "cargo-binstall pre-check result, populated only when --check-binstall was used: 'prebuilt' = binstall would fetch a prebuilt binary (fast), 'source_build' = binstall would compile from source (slow), 'unknown' = could not be determined. null when --check-binstall was not passed."
+          "enum": ["prebuilt", "source", "unknown", null],
+          "description": "Downloader prebuilt-binary availability, populated only when --check-prebuilt was used: 'prebuilt' = downloader would fetch a prebuilt binary (fast), 'source' = downloader would fall back to compiling from source (slow), 'unknown' = probe could not reach a verdict (network errors / 5xx / timeout). null when --check-prebuilt was not passed."
         }
       }
     },

@@ -301,9 +301,9 @@ pub struct JsonUpdateCandidate<'a> {
     pub latest: &'a str,
     pub source: &'static str,
     pub prerelease: bool,
-    /// binstall 预检结论:`"prebuilt"` / `"source_build"` / `"unknown"`,
-    /// 未跑 `--check-binstall` 时为 `null`。
-    pub binstall: Option<&'static str>,
+    /// Downloader 预编译可用性:`"prebuilt"` / `"source"` / `"unknown"`,
+    /// 未跑 `--check-prebuilt` 时为 `null`。0.12 起取代旧字段 `binstall`。
+    pub prebuilt: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
