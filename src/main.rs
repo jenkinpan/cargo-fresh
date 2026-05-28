@@ -152,8 +152,21 @@ async fn run() -> Result<i32> {
     {
         let cancel = cancel.clone();
         tokio::spawn(async move {
-            if tokio::signal::ctrl_c().await.is_ok() {
-                cancel.store(true, Ordering::SeqCst);
+            // First Ctrl-C: set flag, in-flight tasks drain naturally.
+            // Second Ctrl-C: force-exit. TempDir Drop handles tempfile cleanup;
+            // atomic-rename guarantees no half-installed binaries in ~/.cargo/bin.
+            let mut presses: u8 = 0;
+            loop {
+                if tokio::signal::ctrl_c().await.is_err() {
+                    return;
+                }
+                presses += 1;
+                if presses == 1 {
+                    cancel.store(true, Ordering::SeqCst);
+                    status_warn("Aborting", "Ctrl-C again to force exit");
+                } else {
+                    std::process::exit(130);
+                }
             }
         });
     }
