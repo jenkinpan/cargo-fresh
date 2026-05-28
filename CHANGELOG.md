@@ -5,6 +5,14 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.12.2] - 2026-05-28
+
+MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 rustc ≥ 1.88,导致 CI 的 MSRV (1.86) job 红了。无功能改动,无 BREAKING。
+
+### Changed
+
+- **MSRV 1.86 → 1.88**: `zip 8.x` 整系列要求 1.88。同步更新 `Cargo.toml::rust-version`、`.github/workflows/ci.yml` MSRV job、`CONTRIBUTING.md`、`CLAUDE.md`
+
 ## [0.12.1] - 2026-05-28
 
 依赖跨大版本升级。无功能改动,无 BREAKING(对外 CLI / JSON schema 不变)。
