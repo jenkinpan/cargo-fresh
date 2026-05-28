@@ -21,6 +21,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::downloader::events::{DownloaderError, ProgressEvent, UnsupportedReason};
+use crate::downloader::resolve::CandidateUrl;
 
 /// 调度器传给 downloader 的输入。
 pub struct InstallSpec {
@@ -37,6 +38,66 @@ pub struct InstallOutcome {
     pub name: String,
     pub old_version: Option<String>,
     pub new_version: String,
+}
+
+/// 在 download_and_install 之前先调一次 GitHub Releases API,如果命中
+/// 直接返回单元素的候选列表;fetch::fetch 拿到只跑 1 个 HEAD 就胜出,
+/// 跳过 360 候选盲探。
+///
+/// 返回 None 的两种情况调用方都走 fallback:
+/// - repo_url 不在 github.com 上 (e.g. gitlab.com 自托管)
+/// - API 任一形态失败 (RateLimited / Network / Parse)
+async fn try_api_winning_url(
+    client: &reqwest::Client,
+    spec: &InstallSpec,
+    repo_url: &str,
+    targets: &[String],
+    name_candidates: &[String],
+) -> Option<CandidateUrl> {
+    let (owner, repo) = github_api::parse_owner_repo(repo_url)?;
+    let token = token::discover_token();
+    let expected = resolve::expected_filenames(name_candidates, &spec.version, targets);
+    let pkg = name_candidates.first()?;
+    let tags = [
+        format!("v{}", spec.version),
+        spec.version.clone(),
+        format!("{pkg}-v{}", spec.version),
+        format!("{pkg}-{}", spec.version),
+        format!("{pkg}/v{}", spec.version),
+        format!("{pkg}/{}", spec.version),
+    ];
+    for tag in &tags {
+        match github_api::fetch_release_assets(
+            client,
+            "https://api.github.com",
+            &owner,
+            &repo,
+            tag,
+            token,
+        )
+        .await
+        {
+            Ok(assets) => {
+                if let Some(asset) = github_api::match_winning_asset(&assets, &expected) {
+                    let archive_fmt = if asset.name.ends_with(".zip") {
+                        resolve::ArchiveFmt::Zip
+                    } else if asset.name.ends_with(".tar.gz") || asset.name.ends_with(".tgz") {
+                        resolve::ArchiveFmt::TarGz
+                    } else {
+                        resolve::ArchiveFmt::Bin
+                    };
+                    return Some(CandidateUrl {
+                        url: asset.browser_download_url.clone(),
+                        archive_fmt,
+                    });
+                }
+                // 200 but no asset matched — try next tag
+            }
+            Err(github_api::GithubApiError::NotFound) => continue,
+            Err(_) => return None, // rate limited / network / parse — let caller fallback
+        }
+    }
+    None
 }
 
 /// 主入口——把 (spec, events_tx, cancel) 串成完整流水线。
@@ -73,7 +134,14 @@ pub async fn download_and_install(
             name_candidates.push(b.clone());
         }
     }
-    let candidates = resolve::candidate_urls(&name_candidates, &spec.version, repo_url, &targets)?;
+    // API-first: 1 GitHub API request -> single-URL candidate list -> fetch
+    // does 1 HEAD + stream GET. Fallback to full 360-URL candidate enumeration
+    // when API is unreachable / rate-limited / repo isn't on github.com.
+    let candidates =
+        match try_api_winning_url(client, &spec, repo_url, &targets, &name_candidates).await {
+            Some(winner) => vec![winner],
+            None => resolve::candidate_urls(&name_candidates, &spec.version, repo_url, &targets)?,
+        };
 
     let fetched = fetch::fetch(client, &spec.name, &candidates, &events, cancel.clone()).await?;
 
