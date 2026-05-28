@@ -94,11 +94,10 @@ enum ProbeOutcome {
 /// 对单个 crates.io 包跑预编译可用性探测。
 ///
 /// 走和真正 update 路径相同的 resolve 输入 —— crates.io API 的 `repository`
-/// 字段 + `.crates2.json` 的 `bins[]`。早期版本用 `{name}/{name}` 启发式猜
-/// repo,但 ripgrep/cargo-deny/mdbook/tauri-cli 这些热门包没一个是这个形状
-/// (BurntSushi/ripgrep、EmbarkStudios/cargo-deny ...),实测全军覆没只能拿
-/// 真实 repo。API 拿不到时 (网络/限流/无 repository 字段) 仍回退到启发式
-/// 猜测,best-effort。
+/// 字段 + `.crates2.json` 的 `bins[]`。早期版本试过 `{name}/{name}` 启发式
+/// 兜底,但 ripgrep/cargo-deny/mdbook/tauri-cli 这些热门包没一个是这个形状
+/// (BurntSushi/ripgrep、EmbarkStudios/cargo-deny ...),启发式探出的 `Source`
+/// 比 `Unknown` 更具误导性,所以 API 失败直接报 `Unknown`,让用户知道这次没探明。
 pub async fn probe_prebuilt(
     client: &reqwest::Client,
     name: &str,
@@ -108,9 +107,10 @@ pub async fn probe_prebuilt(
     if targets.is_empty() {
         return PrebuiltAvailability::Unknown;
     }
-    let repo = crate::package::crates_api::fetch_repo_url(client, name)
-        .await
-        .unwrap_or_else(|| format!("https://github.com/{name}/{name}"));
+    let repo = match crate::package::crates_api::fetch_repo_url(client, name).await {
+        Some(r) => r,
+        None => return PrebuiltAvailability::Unknown,
+    };
 
     // bins 让 monorepo + binary 名 ≠ package 名的情况能命中
     // (tauri-cli 的 `cargo-tauri-aarch64-apple-darwin.zip`)
@@ -130,8 +130,13 @@ pub async fn probe_prebuilt(
     probe_with_candidates(client, &urls).await
 }
 
-/// 并发对一组 `PackageInfo` 跑预检,只覆盖"有更新且来自 crates.io"的那些,
+/// 顺序对一组 `PackageInfo` 跑预检,只覆盖"有更新且来自 crates.io"的那些,
 /// 把结果写回 `pkg.prebuilt`。
+///
+/// 故意串行而非并发。每个 probe_prebuilt 内部已经把 GitHub HEAD 探测吃到
+/// `Semaphore(16)` 上限了;若再让 N 个 probe 并发,等于同时压 16×N 条到
+/// github.com,触发匿名限流后报 `[probe failed]`,接着 update 阶段的
+/// HEAD 也连带 throttle 失败。串行后单包 ~1-2s,4 个候选最多 ~10s,值得。
 pub async fn annotate_updates(packages: &mut [PackageInfo]) {
     let client = crate::package::http_client();
     let targets: Vec<(usize, String, String)> = packages
@@ -145,14 +150,8 @@ pub async fn annotate_updates(packages: &mut [PackageInfo]) {
         return;
     }
 
-    let mut tasks: FuturesUnordered<_> = targets
-        .into_iter()
-        .map(|(i, name, ver)| async move {
-            (i, probe_prebuilt(client, &name, &ver).await)
-        })
-        .collect();
-
-    while let Some((i, kind)) = tasks.next().await {
+    for (i, name, ver) in targets {
+        let kind = probe_prebuilt(client, &name, &ver).await;
         packages[i].prebuilt = Some(kind);
     }
 }
