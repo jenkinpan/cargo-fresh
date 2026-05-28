@@ -75,6 +75,15 @@ pub struct Cli {
     #[arg(long)]
     pub check_binstall: bool,
 
+    /// Maximum number of packages to update concurrently. `0` means unlimited
+    /// (one task per selected package). Default 4 — downloads are network-bound
+    /// and the inner HEAD-probe pool already caps connection fan-out, so 4
+    /// balances throughput against GitHub-CDN friendliness. `cargo install`
+    /// fallbacks naturally serialize on cargo's $CARGO_HOME lock regardless of
+    /// this value.
+    #[arg(short = 'j', long, default_value_t = 4, value_name = "N")]
+    pub jobs: u32,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -250,5 +259,29 @@ mod tests {
             Some(Commands::Completion { cargo_fresh, .. }) => assert!(cargo_fresh),
             _ => panic!("expected completion subcommand"),
         }
+    }
+
+    #[test]
+    fn parses_jobs_long() {
+        let cli = Cli::try_parse_from(["cargo-fresh", "--jobs", "8"]).unwrap();
+        assert_eq!(cli.jobs, 8);
+    }
+
+    #[test]
+    fn parses_jobs_short() {
+        let cli = Cli::try_parse_from(["cargo-fresh", "-j", "2"]).unwrap();
+        assert_eq!(cli.jobs, 2);
+    }
+
+    #[test]
+    fn jobs_default_is_four() {
+        let cli = Cli::try_parse_from(["cargo-fresh"]).unwrap();
+        assert_eq!(cli.jobs, 4);
+    }
+
+    #[test]
+    fn jobs_zero_is_accepted() {
+        let cli = Cli::try_parse_from(["cargo-fresh", "-j", "0"]).unwrap();
+        assert_eq!(cli.jobs, 0);
     }
 }
