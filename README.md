@@ -38,7 +38,9 @@ A Rust tool for checking and updating globally installed Cargo packages with int
 - 📦 **Source-aware updates** - handles crates.io, `git` (`--git URL [--rev]`), and local `path` installs, with `[git]` / `[path]` markers
 - 🛡️ **Enhanced error handling** - intelligent retry mechanisms and user-friendly error messages
 - 📊 **Fast version checks** - crates.io sparse index with connection pooling and a concurrency-limited request pool (`cargo search` fallback)
-- ⚡ **Fast installation** - in-process binary downloader (since 0.11.0) streams GitHub Release tarballs directly, verifies sha256 when available, and atomically installs — no `cargo binstall` subprocess required. Falls back to `cargo install` for non-GitHub or unsupported packages
+- ⚡ **Fast installation** - in-process binary downloader streams GitHub Release tarballs directly, verifies sha256 when available, and atomically installs — no `cargo binstall` subprocess required. Falls back to plain `cargo install` for non-GitHub or unsupported packages
+- 🚀 **Concurrent updates** - `-j N` / `--jobs N` runs up to N package updates in parallel (default 4, `0` = unlimited, `1` = serial). rustup-style stacked progress rows
+- 🐙 **GitHub Releases API** - probe + fetch use `GET /repos/{owner}/{repo}/releases/tags/{tag}` to resolve the winning asset in one request (with HEAD-probe fallback). Set `GITHUB_TOKEN` / `GH_TOKEN` or have `gh auth login` configured to lift the quota from 60/hr to 5000/hr
 
 ## Installation
 
@@ -53,7 +55,7 @@ or
 cargo binstall cargo-fresh
 ```
 
-**Note**: Since 0.11.0, cargo-fresh no longer depends on `cargo binstall` for the fast install path — it streams GitHub Release binaries in-process. The `--install-binstall` flag is deprecated (no-op + warning), and will be removed in 0.12.0. `--check-binstall` is still useful as a pre-flight probe to see which packages cargo-binstall would handle as prebuilt binaries.
+**Note**: cargo-fresh fetches GitHub Release binaries directly via the GitHub Releases API (with a HEAD-probe fallback when the API is unreachable) and streams them in-process — `cargo binstall` is not invoked, required, or installed by cargo-fresh. The unauthenticated GitHub API quota is 60 requests/hour; set `GITHUB_TOKEN` (or `GH_TOKEN`, or have `gh auth login` configured) to raise it to 5000/hour, which matters mainly for `--check-prebuilt` runs across many packages.
 
 ### Install from source
 
@@ -116,7 +118,8 @@ cargo-fresh
 - `--dry-run`: Print the cargo commands that would run without executing them
 - `--registry-url <URL>`: Override sparse index base URL (mirror support)
 - `--format <FORMAT>`: `human` (default) or `json` for CI consumption
-- `--check-binstall`: Probe each update candidate with `cargo binstall --dry-run` during the check phase and mark whether binstall would fetch a prebuilt binary (`[binstall: prebuilt]`) or compile from source (`[binstall: source build]`). Off by default — each probe spawns cargo and hits the network (~10s/package, run concurrently); requires `cargo-binstall` to be installed
+- `--check-prebuilt`: Probe each update candidate with cargo-fresh's own downloader (GitHub Releases API + HEAD-probe fallback) during the check phase and mark whether a prebuilt binary is available (`[prebuilt]`), it'd fall back to compiling from source (`[source]`), or the verdict is uncertain (`[unknown]`). Off by default — each probe issues a few HTTP requests; typically sub-second per package when the API quota is healthy. No `cargo` subprocess is spawned, and `cargo-binstall` is not required
+- `-j, --jobs <N>`: Maximum number of packages to update concurrently. Default `4`; `0` means unlimited (one task per selected package); `1` restores serial 0.11.x behavior. `cargo install` fallbacks naturally serialize on cargo's `$CARGO_HOME` lock regardless of this value
 - `-h, --help`: Show help information
 - `-V, --version`: Show version information
 
@@ -131,7 +134,7 @@ cargo-fresh
 | 2    | At least one update failed                                           |
 | 130  | User pressed Ctrl-C; remaining packages skipped                      |
 
-Use `--format=json` for scripts: it disables colors, spinners, and prompts, and emits a single JSON object on stdout (schema version 1).
+Use `--format=json` for scripts: it disables colors, spinners, and prompts, and emits a single JSON object on stdout (schema version 2).
 
 ```bash
 # CI gating: fail the job if any global package has an update
@@ -154,9 +157,9 @@ This means `cargo fresh --format=json | jq '.'` works without filtering, and `ca
 
 ### JSON schema
 
-The full schema is at [`docs/json-schema.json`](docs/json-schema.json) (JSON Schema Draft 2020-12). The `schema_version=1` field shape is the 1.0 contract — within 1.x, fields are only added (never removed or renamed).
+The full schema is at [`docs/json-schema.json`](docs/json-schema.json) (JSON Schema Draft 2020-12). 0.12.0 bumped `schema_version` from `1` to `2` (BREAKING — `updates_available[].binstall` renamed to `prebuilt`; enum value `source_build` renamed to `source`). Within `schema_version=2`, fields are only added (never removed or renamed) — this is the final pre-1.0 schema break, and `schema_version=2` becomes the 1.0 contract.
 
-Three fields were added in 0.10.3 under `schema_version=1` (additive only — no `schema_version` bump):
+Fields available under `schema_version=2` beyond the original `1` shape (additive across the 0.10.x / 0.11.x line, no further `schema_version` bump within 2.x):
 
 - **`skipped[].reason_code`** — a stable enum (`path_source` / `git_source` / `unknown_source`). Branch on this in scripts rather than the prose `reason` string.
 - **`version_check_errors[]`** — crates.io packages whose latest-version lookup failed, each with a `name`, `kind` (`not_found` / `unavailable`), and a human-readable `error` message. `fresh[]` excludes these packages, so an empty `updates_available` list can be trusted even when checks failed.
@@ -321,21 +324,27 @@ Select packages (space to toggle, enter to confirm)
 > [x] devtool
 
     Updating selected packages
-   Running cargo binstall --force cargo-outdated --version 0.17.0
-    Updated cargo-outdated 0.16.0 -> 0.17.0
-   Running cargo binstall --force devtool --version 0.2.5
-    Updated devtool 0.2.4 -> 0.2.5
+    cargo-outdated  resolving
+    cargo-outdated  [#####################>                ] 1.2 MiB/2.1 MiB
+    cargo-outdated  installed 2.10 MiB
+          devtool  resolving
+          devtool  installed 1.42 MiB
 
 Update Summary
-    Updated cargo-outdated 0.16.0 -> 0.17.0
-    Updated devtool 0.2.4 -> 0.2.5
+    Prebuilt cargo-outdated, devtool
     Finished 2 succeeded, in 4.2s
 ```
 
+Each row is a live progress line owned by `MultiProgress`: it cycles
+`pending` → `resolving` → `downloading X.X MiB` (or a byte-count bar when
+`Content-Length` is known) → `installed X.XX MiB`, then locks in as a static
+line so the screen accumulates the full history. With `-j N` (default 4) the
+rows update concurrently; the final summary lists each package in the
+selection order regardless of completion order.
+
 ### Dry-run Mode
 
-`--dry-run` prints the exact cargo commands (including the binstall→install
-fallback) without modifying anything:
+`--dry-run` prints the exact cargo commands without modifying anything:
 
 ```text
     Checking for updates to globally installed packages
@@ -343,8 +352,7 @@ fallback) without modifying anything:
     Updating cargo-outdated 0.16.0 -> 0.17.0
 
     Dry run no packages will be modified
-   Would run cargo-outdated: cargo binstall --force cargo-outdated --version 0.17.0
-    Fallback cargo install --force cargo-outdated --version 0.17.0
+   Would run cargo-outdated: cargo install --force cargo-outdated --version 0.17.0
 ```
 
 ### Non-Interactive Mode
@@ -530,7 +538,7 @@ Prior to 1.0.0 the project still ships breaking changes; once 1.0.0 lands the su
 | Surface | Stability |
 |---|---|
 | Exit codes (`0` / `1` / `2` / `130`) | Stable — never reused or removed within a major version |
-| `--format=json` output, `schema_version=1` | Additive only — new fields may appear; existing fields will not be renamed or change types |
+| `--format=json` output, `schema_version=2` | Additive only — new fields may appear; existing fields will not be renamed or change types |
 | CLI flags listed in `--help` | Stable — flags are not silently renamed; deprecations get one minor cycle of warning before removal |
 | Source-aware install behavior (crates / git / path) | Stable |
 | Human-readable status verbs (`Checking`, `Updating`, etc.) | **Not** stable — wording, color, alignment may change for UX improvements |
@@ -550,10 +558,11 @@ If you're scripting against cargo-fresh, anchor on exit codes and `--format=json
 | **Package selection** | `--filter "tokio*"` + `--exclude "*-test"` (globset glob) | Exact package names or `--all` (no glob/substring) |
 | **Prerelease handling** | Explicit `--include-prerelease`; semver `.pre` check, not string `"rc"` | Per-package opt-in via `cargo-install-update-config` |
 | **Output style** | Cargo-aesthetic 12-char verb prefixes; no emoji | Plain text |
-| **JSON mode** | `--format=json` with versioned `schema_version=1` schema | None |
+| **JSON mode** | `--format=json` with versioned `schema_version=2` schema | None |
 | **i18n** | English + Chinese auto-detected via `LANG` | English only |
 | **Dry-run preview** | `--dry-run` prints the exact `cargo install` command per package | `-n`/`--dry-run` lists what would update |
-| **binstall usage** | Opt-in via `--install-binstall`; otherwise hint only | Auto-used when available and config is default |
+| **Binary install** | In-process: GitHub Releases API + sha256 verify + atomic install; no extra tool required | Spawns `cargo binstall` subprocess when available |
+| **Concurrency** | `-j N` for updates (default 4) + 16-way concurrent index/HEAD probes | Sequential updates |
 | **Install options preserved** | Yes — features (`--features` / `--no-default-features` / `--all-features`) restored from `.crates2.json` | Yes — `.crates2.json` features/profile, plus per-package `cargo-install-update-config` |
 | **CI ergonomics** | Exit codes 0/1/2/130 + JSON + non-TTY auto-downgrade | Standard exit codes |
 
