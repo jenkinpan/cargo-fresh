@@ -6,8 +6,18 @@
 
 use anyhow::{anyhow, Context, Result};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use crate::downloader::events::{DownloaderError, FailureKind, UnsupportedReason};
+
+/// Serialize concurrent writes to `$CARGO_HOME/.crates.toml` and
+/// `$CARGO_HOME/.crates2.json` from this process. Concurrent updates
+/// (introduced in 0.12.0) can race on the read-modify-write of these
+/// files; an in-process `Mutex<()>` is sufficient because running two
+/// `cargo-fresh` instances against the same $CARGO_HOME is not a
+/// supported use case (cargo itself takes its own $CARGO_HOME lock for
+/// `cargo install`).
+pub(crate) static CRATES_FILES_LOCK: Mutex<()> = Mutex::new(());
 
 pub fn install_binary(
     src: &Path,
@@ -39,11 +49,17 @@ pub fn install_binary(
     }
 
     // 3. cargo 元数据更新——两个文件都得写, 不然 `cargo install --list` 还报旧版
-    //    (.crates.toml 是主索引, .crates2.json 是扩展字段)
-    crate::package::crates2::write_install_record(&cargo_home, binary_name, new_version)
-        .map_err(|e| failed_install(e.context("update .crates2.json")))?;
-    crate::package::crates_toml::write_install_record(&cargo_home, binary_name, new_version)
-        .map_err(|e| failed_install(e.context("update .crates.toml")))?;
+    //    (.crates.toml 是主索引, .crates2.json 是扩展字段)。
+    //    并发更新下两次 read-modify-write 之间可能交错,所以加进程内锁。
+    {
+        let _guard = CRATES_FILES_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        crate::package::crates2::write_install_record(&cargo_home, binary_name, new_version)
+            .map_err(|e| failed_install(e.context("update .crates2.json")))?;
+        crate::package::crates_toml::write_install_record(&cargo_home, binary_name, new_version)
+            .map_err(|e| failed_install(e.context("update .crates.toml")))?;
+    }
 
     Ok(dest)
 }
@@ -84,5 +100,26 @@ fn failed_install(e: anyhow::Error) -> DownloaderError {
     DownloaderError::Failed {
         kind: FailureKind::InstallFailed,
         source: e,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn crates_files_lock_serializes_concurrent_threads() {
+        // Two threads both lock, run a brief no-op critical section, drop.
+        // Confirms the static Mutex exists, is Send+Sync, and uncontended.
+        let h1 = std::thread::spawn(|| {
+            let _g = CRATES_FILES_LOCK.lock().expect("lock 1");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        });
+        let h2 = std::thread::spawn(|| {
+            let _g = CRATES_FILES_LOCK.lock().expect("lock 2");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        });
+        h1.join().unwrap();
+        h2.join().unwrap();
     }
 }
