@@ -171,7 +171,32 @@ async fn run() -> Result<i32> {
 
     if let Some(command) = cli.command {
         match command {
-            Commands::Completion { shell, cargo_fresh } => {
+            Commands::Completion { shell, cargo_fresh, install } => {
+                if install {
+                    match Cli::install_completion(&shell, cargo_fresh, language) {
+                        Ok(cargo_fresh::cli::InstallOutcome::Written(path)) => {
+                            status(
+                                "Installed",
+                                &language
+                                    .get_text("completion_installed_path")
+                                    .replace("{}", &path.display().to_string()),
+                            );
+                        }
+                        Ok(cargo_fresh::cli::InstallOutcome::Skipped(path)) => {
+                            status_warn(
+                                "Skipped",
+                                &language
+                                    .get_text("completion_path_exists")
+                                    .replace("{}", &path.display().to_string()),
+                            );
+                            return Ok(EXIT_UPDATES_AVAILABLE);
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                    return Ok(EXIT_OK);
+                }
                 if cargo_fresh {
                     Cli::generate_cargo_fresh_completion(shell.clone());
                 } else {

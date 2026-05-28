@@ -91,6 +91,10 @@ pub enum Commands {
         /// Generate completion for cargo fresh subcommand
         #[arg(long)]
         cargo_fresh: bool,
+        /// Write the completion to the standard config location instead of stdout
+        /// (currently fish-only; prompts before overwriting existing files)
+        #[arg(long)]
+        install: bool,
     },
     /// Show the man page
     ///
@@ -110,6 +114,12 @@ pub enum OutputFormat {
     Json,
 }
 
+/// `--install` 的结果——调用者据此决定打 `Installed` 还是 `Skip` 状态行。
+pub enum InstallOutcome {
+    Written(std::path::PathBuf),
+    Skipped(std::path::PathBuf),
+}
+
 #[derive(Clone, ValueEnum)]
 pub enum ShellType {
     /// Bash shell
@@ -127,36 +137,107 @@ pub enum ShellType {
 }
 
 impl Cli {
-    /// 生成补全脚本的通用方法
-    fn generate_completion_for_shell(shell: ShellType, cmd: &mut clap::Command, name: &str) {
+    /// 生成补全脚本的通用方法。`out` 让调用者决定写到 stdout 还是缓冲区。
+    fn render_completion_into(shell: &ShellType, cmd: &mut clap::Command, name: &str, out: &mut dyn Write) {
         let shell_type = match shell {
             ShellType::Bash => Shell::Bash,
             ShellType::Zsh => Shell::Zsh,
             ShellType::Fish => Shell::Fish,
             ShellType::Powershell => Shell::PowerShell,
             ShellType::Elvish => Shell::Elvish,
-            ShellType::Nushell => return generate(Nushell, cmd, name, &mut std::io::stdout()),
+            ShellType::Nushell => return generate(Nushell, cmd, name, out),
         };
-        generate(shell_type, cmd, name, &mut std::io::stdout());
+        generate(shell_type, cmd, name, out);
+    }
+
+    fn build_cargo_fresh_command() -> clap::Command {
+        let fresh = Self::command()
+            .name("fresh")
+            .about("Check and update globally installed Cargo packages");
+        clap::Command::new("cargo")
+            .about("Rust's package manager")
+            .subcommand(fresh)
     }
 
     /// 生成顶层 `cargo-fresh` 的补全脚本，直接复用 derive 出来的 Command。
     pub fn generate_completion(shell: ShellType) {
         let mut cmd = Self::command();
-        Self::generate_completion_for_shell(shell, &mut cmd, "cargo-fresh");
+        Self::render_completion_into(&shell, &mut cmd, "cargo-fresh", &mut std::io::stdout());
     }
 
     /// 生成 `cargo fresh` 子命令的补全脚本——把同一个 derive 出来的 Command
     /// 重命名为 "fresh" 后挂到 `cargo` 下，避免和顶层补全双重维护。
     pub fn generate_cargo_fresh_completion(shell: ShellType) {
-        let fresh = Self::command()
-            .name("fresh")
-            .about("Check and update globally installed Cargo packages");
-        let mut cargo_cmd = clap::Command::new("cargo")
-            .about("Rust's package manager")
-            .subcommand(fresh);
+        let mut cargo_cmd = Self::build_cargo_fresh_command();
+        Self::render_completion_into(&shell, &mut cargo_cmd, "cargo", &mut std::io::stdout());
+    }
 
-        Self::generate_completion_for_shell(shell, &mut cargo_cmd, "cargo");
+    /// 把补全脚本渲染到内存，供 `--install` 路径写文件。
+    fn render_completion_to_bytes(shell: &ShellType, cargo_fresh: bool) -> Vec<u8> {
+        let mut buf = Vec::new();
+        if cargo_fresh {
+            let mut cargo_cmd = Self::build_cargo_fresh_command();
+            Self::render_completion_into(shell, &mut cargo_cmd, "cargo", &mut buf);
+        } else {
+            let mut cmd = Self::command();
+            Self::render_completion_into(shell, &mut cmd, "cargo-fresh", &mut buf);
+        }
+        buf
+    }
+
+    /// 计算 `--install` 写入路径。目前只支持 fish——其它 shell 的标准路径差异太大
+    /// （zsh 走 $fpath、bash 走 XDG_DATA 或 /etc/bash_completion.d），自动选址容易写错地方。
+    pub fn install_target_path(shell: &ShellType, cargo_fresh: bool) -> Option<std::path::PathBuf> {
+        match shell {
+            ShellType::Fish => {
+                let base = std::env::var_os("XDG_CONFIG_HOME")
+                    .map(std::path::PathBuf::from)
+                    .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
+                let file = if cargo_fresh { "cargo.fish" } else { "cargo-fresh.fish" };
+                Some(base.join("fish").join("completions").join(file))
+            }
+            _ => None,
+        }
+    }
+
+    /// 把补全脚本写到 [`install_target_path`] 给出的位置。已存在文件时通过 dialoguer
+    /// 询问是否覆盖；非 TTY / 用户拒绝时返回 `Ok(InstallOutcome::Skipped)` 让调用者打 skip 状态。
+    /// 不支持的 shell 直接返回错误，调用者照常打 Failed。
+    /// `language` 用于把覆盖提示和错误信息按用户语言输出。
+    pub fn install_completion(
+        shell: &ShellType,
+        cargo_fresh: bool,
+        language: crate::locale::Language,
+    ) -> anyhow::Result<InstallOutcome> {
+        let target = Self::install_target_path(shell, cargo_fresh).ok_or_else(|| {
+            anyhow::anyhow!("{}", language.get_text("completion_install_unsupported"))
+        })?;
+
+        let bytes = Self::render_completion_to_bytes(shell, cargo_fresh);
+
+        if target.exists() {
+            if !std::io::stderr().is_terminal() {
+                return Ok(InstallOutcome::Skipped(target));
+            }
+            let prompt = language
+                .get_text("completion_overwrite_prompt")
+                .replace("{}", &target.display().to_string());
+            let proceed = dialoguer::Confirm::new()
+                .with_prompt(prompt)
+                .default(false)
+                .show_default(true)
+                .interact()
+                .unwrap_or(false);
+            if !proceed {
+                return Ok(InstallOutcome::Skipped(target));
+            }
+        }
+
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&target, bytes)?;
+        Ok(InstallOutcome::Written(target))
     }
 
     /// 把同一个 derive 出来的 Command 渲染成 roff。
@@ -249,9 +330,42 @@ mod tests {
         let cli =
             Cli::try_parse_from(["cargo-fresh", "completion", "bash", "--cargo-fresh"]).expect("parse");
         match cli.command {
-            Some(Commands::Completion { cargo_fresh, .. }) => assert!(cargo_fresh),
+            Some(Commands::Completion { cargo_fresh, install, .. }) => {
+                assert!(cargo_fresh);
+                assert!(!install);
+            }
             _ => panic!("expected completion subcommand"),
         }
+    }
+
+    #[test]
+    fn cli_completion_install_flag() {
+        let cli = Cli::try_parse_from(["cargo-fresh", "completion", "fish", "--install"]).expect("parse");
+        match cli.command {
+            Some(Commands::Completion { install, cargo_fresh, .. }) => {
+                assert!(install);
+                assert!(!cargo_fresh);
+            }
+            _ => panic!("expected completion subcommand"),
+        }
+    }
+
+    #[test]
+    fn install_target_path_fish_top_level() {
+        let path = Cli::install_target_path(&ShellType::Fish, false).expect("fish supported");
+        assert!(path.ends_with("fish/completions/cargo-fresh.fish"));
+    }
+
+    #[test]
+    fn install_target_path_fish_cargo_subcommand() {
+        let path = Cli::install_target_path(&ShellType::Fish, true).expect("fish supported");
+        assert!(path.ends_with("fish/completions/cargo.fish"));
+    }
+
+    #[test]
+    fn install_target_path_unsupported_shell_returns_none() {
+        assert!(Cli::install_target_path(&ShellType::Bash, false).is_none());
+        assert!(Cli::install_target_path(&ShellType::Zsh, true).is_none());
     }
 
     #[test]

@@ -5,6 +5,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+
+- **`cargo fresh completion <shell> --install`**: 新增 `--install` 子标志，把生成的补全脚本直接写到标准配置路径，而不是 stdout。目前只支持 fish（`~/.config/fish/completions/cargo-fresh.fish`；带 `--cargo-fresh` 时写到 `cargo.fish`，覆盖前在 TTY 里询问 y/N）。其它 shell 的标准路径差异大（zsh 走 `$fpath`、bash 走 XDG_DATA 或 `/etc/bash_completion.d`），保留原本 `> file` 的手动重定向方式。无 BREAKING
+
 ## [0.12.2] - 2026-05-28
 
 MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 rustc ≥ 1.88,导致 CI 的 MSRV (1.86) job 红了。无功能改动,无 BREAKING。

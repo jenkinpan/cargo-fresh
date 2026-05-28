@@ -102,6 +102,12 @@ pub fn get_english_text(key: &str) -> &'static str {
         "dry_run_fallback_label" => "(fallback)",
         "dry_run_summary" => "no packages will be modified",
 
+        // Completion install
+        "completion_installed_path" => "completion to {}",
+        "completion_path_exists" => "{} already exists",
+        "completion_overwrite_prompt" => "Overwrite {}?",
+        "completion_install_unsupported" => "--install currently only supports fish; redirect stdout for other shells",
+
         _ => "",
     }
 }
@@ -205,6 +211,12 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "dry_run_fallback_label" => "（回退）",
         "dry_run_summary" => "不会实际修改任何包",
 
+        // 补全安装
+        "completion_installed_path" => "补全脚本已写入 {}",
+        "completion_path_exists" => "{} 已存在",
+        "completion_overwrite_prompt" => "覆盖 {}？",
+        "completion_install_unsupported" => "--install 目前仅支持 fish，其它 shell 请通过重定向 stdout 安装",
+
         _ => "",
     }
 }
@@ -294,6 +306,10 @@ mod tests {
             "checking_package",
             "unable_to_get_latest_version",
             "check_failed",
+            "completion_installed_path",
+            "completion_path_exists",
+            "completion_overwrite_prompt",
+            "completion_install_unsupported",
         ];
 
         for key in &english_keys {
