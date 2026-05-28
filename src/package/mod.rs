@@ -5,9 +5,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Semaphore;
 
-/// 默认所有 cargo 子调用走 `tokio::process::Command`，避免阻塞 runtime。
-/// 仅 `is_binstall_available` 这种 sync 探测路径用 std 版本——它通过 `OnceLock`
-/// 缓存，首次调用至多一次，作为同步函数对调用方更自然。
+/// 所有 cargo 子调用走 `tokio::process::Command`，避免阻塞 runtime。
 use tokio::process::Command as AsyncCommand;
 
 use semver::Version;
@@ -36,65 +34,6 @@ pub(crate) fn http_client() -> &'static reqwest::Client {
 
 /// 同时拿稳定版与最新预发布版的并发上限，避免 crates.io 限流 / 本地 fd 耗尽
 const MAX_CONCURRENT_INDEX_REQUESTS: usize = 16;
-
-// 缓存 cargo binstall 的可用性状态
-static BINSTALL_AVAILABLE: OnceLock<bool> = OnceLock::new();
-
-/// 检查 cargo binstall 是否可用（使用缓存）。
-///
-/// 故意保持 sync——调用方既有 sync（dry-run 探测）也有 async，OnceLock
-/// 缓存保证最多一次 `cargo binstall --help` 子进程。这一次同步调用 ≤ 100ms，
-/// 比把整条 API 改 async + tokio::sync::OnceCell 简单得多。
-pub fn is_binstall_available() -> bool {
-    *BINSTALL_AVAILABLE.get_or_init(|| {
-        std::process::Command::new("cargo")
-            .args(["binstall", "--help"])
-            .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
-    })
-}
-
-/// 安装 cargo binstall
-pub async fn install_binstall() -> Result<bool> {
-    use crate::display::{status, status_err};
-    let language = detect_language();
-    status("Installing", language.get_text("installing_binstall"));
-
-    let output = AsyncCommand::new("cargo")
-        .args(["install", "cargo-binstall"])
-        .output()
-        .await?;
-
-    if output.status.success() {
-        status("Installed", language.get_text("binstall_installed_successfully"));
-        Ok(true)
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        status_err(
-            "Failed",
-            &format!("{}: {}", language.get_text("binstall_install_failed"), stderr.trim()),
-        );
-        Ok(false)
-    }
-}
-
-/// 确保 cargo binstall 可用，如果不可用则尝试安装
-pub async fn ensure_binstall_available() -> Result<bool> {
-    use crate::display::status_dim;
-    if is_binstall_available() {
-        return Ok(true);
-    }
-    let language = detect_language();
-    status_dim("Note", language.get_text("binstall_not_found"));
-    status_dim("Installing", language.get_text("attempting_to_install_binstall"));
-
-    let result = install_binstall().await?;
-    if result {
-        let _ = BINSTALL_AVAILABLE.set(true);
-    }
-    Ok(result)
-}
 
 /// 把模式编译成 case-insensitive 的 GlobSet。
 ///

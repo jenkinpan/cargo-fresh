@@ -43,7 +43,6 @@ pub fn get_english_text(key: &str) -> &'static str {
         "fail_count" => "{} failed",
         "no_packages_selected" => "no packages selected",
         "aborted_by_user" => "cancelled by user, {done}/{total} completed",
-        "binstall_hint" => "cargo-binstall not found — --check-binstall will not annotate updates. Install via 'cargo install cargo-binstall' if you want this annotation.",
 
         // Hint text
         "update_instructions" => "To update manually: cargo install --force <name>",
@@ -88,15 +87,9 @@ pub fn get_english_text(key: &str) -> &'static str {
         "check_failed" => "check failed",
 
         // Binstall
-        "binstall_not_found" => "cargo binstall not installed",
-        "attempting_to_install_binstall" => "cargo-binstall (will speed up future updates)",
-        "installing_binstall" => "cargo-binstall",
-        "binstall_installed_successfully" => "cargo-binstall",
-        "binstall_install_failed" => "to install cargo-binstall",
         "using_binstall" => "self-hosted downloader",
         "using_install_fallback" => "cargo install",
         "binstall_failed_fallback" => "downloader failed, falling back to cargo install",
-        "checking_binstall" => "binstall availability for {} update candidate(s)",
         "summary_prebuilt" => "Prebuilt",
         "summary_compiled" => "Compiled",
 
@@ -153,7 +146,6 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "fail_count" => "{} 个失败",
         "no_packages_selected" => "未选择任何包",
         "aborted_by_user" => "用户取消，已完成 {done}/{total}",
-        "binstall_hint" => "未检测到 cargo-binstall——--check-binstall 不会标注更新。要标注请先 'cargo install cargo-binstall'。",
 
         // 提示
         "update_instructions" => "手动更新：cargo install --force <name>",
@@ -198,15 +190,9 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "check_failed" => "检查失败",
 
         // Binstall
-        "binstall_not_found" => "未安装 cargo-binstall",
-        "attempting_to_install_binstall" => "cargo-binstall（加速后续更新）",
-        "installing_binstall" => "cargo-binstall",
-        "binstall_installed_successfully" => "cargo-binstall",
-        "binstall_install_failed" => "安装 cargo-binstall 失败",
         "using_binstall" => "使用下载器",
         "using_install_fallback" => "cargo install",
         "binstall_failed_fallback" => "下载器失败，回退到 cargo install",
-        "checking_binstall" => "{} 个更新候选的 binstall 可用性",
         "summary_prebuilt" => "预编译",
         "summary_compiled" => "源码编译",
 
@@ -273,7 +259,6 @@ mod tests {
             "fail_count",
             "no_packages_selected",
             "aborted_by_user",
-            "binstall_hint",
             "update_instructions",
             "interactive_instructions",
             "version_unchanged",
@@ -309,7 +294,6 @@ mod tests {
             "checking_package",
             "unable_to_get_latest_version",
             "check_failed",
-            "checking_binstall",
         ];
 
         for key in &english_keys {
