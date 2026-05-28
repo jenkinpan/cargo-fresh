@@ -5,6 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.12.1] - 2026-05-28
+
+依赖跨大版本升级。无功能改动,无 BREAKING(对外 CLI / JSON schema 不变)。
+
+### Changed
+
+- **deps**: `anstream` 0.6 → 1.0;`clap_mangen` 0.2 → 0.3;`zip` 2 → 8(均为 drop-in)
+- **deps**: `reqwest` 0.12 → 0.13。`features` 里的 `rustls-tls` 改为 `rustls`(0.13 重命名)。**行为变化**:TLS 信任根从捆绑的 `webpki-roots` 切换到平台验证器(macOS Keychain / Windows cert store / Linux 系统 CA),crypto backend 从 `ring` 变成 `aws-lc-rs`。企业 MITM 代理的自定义 CA 现在会被自动信任
+- **deps**: `toml` 0.8 → 1.1。`features` 增加 `serde`(1.x 把 `Value` / `from_str` 拆到 `serde` feature 后面了)
+- **deps**: `sha2` 0.10 → 0.11。`Digest::finalize()` 返回类型从 `GenericArray` 变成 `Array<u8, _>`,不再实现 `LowerHex`。`src/downloader/fetch.rs::compute_sha256` 改成手动逐字节 hex 编码
+- **deps (transitive)**: `cargo update` 同时刷新了 17 个间接依赖(`hyper` 1.10、`serde_json` 1.0.150、`wasm-bindgen` 0.2.122 等)
+
 ## [0.12.0] - 2026-05-28
 
 并发更新调度器——`--jobs N` 默认 4,`-j 0` 表示无限制。N 个包同时跑下载/解压/安装,`cargo install` fallback 自然在 cargo 的 `$CARGO_HOME` 锁上排队,无需额外构建池。MultiProgress 行按输入顺序预注册,完成顺序无关地保留屏幕顺序;summary 也按输入顺序重排。

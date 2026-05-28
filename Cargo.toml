@@ -1,6 +1,6 @@
 [package]
 name = "cargo-fresh"
-version = "0.12.0"
+version = "0.12.1"
 edition = "2021"
 rust-version = "1.86"
 description = "A Rust tool for checking and updating globally installed Cargo packages with interactive mode and smart prerelease detection"
@@ -17,28 +17,42 @@ name = "cargo-fresh"
 path = "src/main.rs"
 
 [dependencies]
-anstream = "0.6"
+anstream = "1.0"
 anyhow = "1.0.100"
 clap = { version = "4.5.48", features = ["cargo", "derive"] }
 clap_complete = "4.5.58"
 clap_complete_nushell = "4.5"
-clap_mangen = "0.2"
+clap_mangen = "0.3"
 colored = "3.0.0"
 dialoguer = "0.12.0"
 globset = "0.4"
 indicatif = "0.18"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+reqwest = { version = "0.13", default-features = false, features = [
+  "rustls",
+  "stream",
+  "json",
+] }
 flate2 = "1"
 tar = "0.4"
-zip = { version = "2", default-features = false, features = ["deflate"] }
-sha2 = "0.10"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+sha2 = "0.11"
 futures-util = "0.3"
 tempfile = "3"
 semver = "1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt-multi-thread", "signal", "process", "time", "sync"] }
-toml = { version = "0.8", default-features = false, features = ["parse"] }
+tokio = { version = "1.47.1", default-features = false, features = [
+  "macros",
+  "rt-multi-thread",
+  "signal",
+  "process",
+  "time",
+  "sync",
+] }
+toml = { version = "1.1", default-features = false, features = [
+  "parse",
+  "serde",
+] }
 thiserror = "2"
 
 [dev-dependencies]
@@ -47,5 +61,8 @@ insta = { version = "1", features = ["filters"] }
 jsonschema = { version = "0.46.5", default-features = false }
 predicates = "3"
 serial_test = "3"
-tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.47.1", default-features = false, features = [
+  "macros",
+  "rt-multi-thread",
+] }
 wiremock = "0.6"
