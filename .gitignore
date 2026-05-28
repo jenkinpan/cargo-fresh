@@ -27,6 +27,7 @@ openspec/
 
 # Claude Code
 .claude/
+/.mcp.json
 /plan.html
 /plan.md
 docs/superpowers/
