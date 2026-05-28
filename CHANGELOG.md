@@ -14,6 +14,7 @@
 - **`--jobs N` / `-j N`** (`src/cli/mod.rs`): 并发上限,默认 4,`0`=无限制。`-j 1` 退回 0.11 串行行为
 - **`src/main.rs::run_one_update`**: per-package 更新被抽成自有所有权的 async 函数,适配 `JoinSet::spawn`
 - **`tests/concurrent_smoke.rs`**: shape-level 测试覆盖串行/并行/乱序完成三种情况,锁住"`sort_by_key` 把结果还原成输入顺序"这一不变量
+- **`src/downloader/github_api.rs`** + **`src/downloader/token.rs`**: GitHub Releases API client + token discovery。`--check-prebuilt` 和真正的下载都改成"先调 `GET /repos/{owner}/{repo}/releases/tags/{tag}` 拿 asset 清单,本地按文件名匹配命中后直接 stream GET"。匿名 60/hr,带 token (`$GITHUB_TOKEN` / `$GH_TOKEN` / `gh auth token`) 5000/hr
 
 ### Changed
 
@@ -23,6 +24,7 @@
 - **CLI**: `--check-binstall` → `--check-prebuilt`。语义一致(标记每个候选包是预编译还是要从源码构建)
 - **BEHAVIOR**: 预编译探测改用 downloader 自己的 HEAD probe,不再 spawn `cargo binstall --dry-run`。~10s/包 → 1-2s/包。也不再需要 cargo-binstall 装着
 - **BREAKING (JSON)**: `schema_version` 1 → 2;`updates_available[].binstall` → `updates_available[].prebuilt`;enum 值 `source_build` → `source`。这是 1.0 前最后一次破约
+- **BEHAVIOR**: probe + fetch 的 happy path 不再对 github.com 发 16-360 个 HEAD,改成 1-6 个 API 请求。API 失败 (401/403/429/网络) 时仍自动 fallback 到旧 HEAD 路径。给手动跑 100+ 包的用户彻底消灭 "突然 throttle" 那一类 flake
 
 ### Removed
 
@@ -36,6 +38,7 @@
 - JSON `schema_version` 1 → 2 (BREAKING):脚本消费者需要把字段名 `binstall` 改成 `prebuilt`,枚举值 `source_build` 改成 `source`。`results[]` 顺序仍跟选择顺序一致(由 `sort_by_key` 保证),工具链可以继续按位置读
 - 退出码契约 0/1/2/130 不变
 - `MultiProgress` 在非 TTY 自动降级(0.10.1 起),并发也不例外
+- 想跑 `--check-prebuilt` 频繁(CI / 几十个包) 强烈建议 export `GITHUB_TOKEN`,或装 `gh` CLI 并 `gh auth login`。匿名 60/hr 对正常使用还是够,但对批量探测不够
 
 ## [0.11.0] - 2026-05-28
 
