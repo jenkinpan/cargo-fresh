@@ -151,6 +151,40 @@ pub fn current_targets() -> Vec<String> {
     }
 }
 
+/// 纯函数:本地枚举一个包在给定版本下"如果有预编译,文件名最可能长什么样"。
+///
+/// 不带 tag 路径段 —— 这是 asset 文件名,不是 URL。给 github_api::match_winning_asset
+/// 用,做集合交。和 `candidate_urls` 的 URL 拼装是同一份模板,通过分离这块逻辑
+/// 实现「同一份候选,两个消费方:本地匹配 vs 盲探 URL 拼装」。
+#[allow(dead_code)]
+pub(crate) fn expected_filenames(
+    name_candidates: &[String],
+    version: &str,
+    targets: &[String],
+) -> Vec<String> {
+    let mut out = Vec::with_capacity(
+        FILENAME_TEMPLATES.len() * ARCHIVE_EXTS.len() * name_candidates.len() * targets.len(),
+    );
+    let mut seen = std::collections::HashSet::new();
+    for name in name_candidates {
+        for target in targets {
+            for tmpl in FILENAME_TEMPLATES {
+                for (_fmt, ext) in ARCHIVE_EXTS {
+                    let filename = tmpl
+                        .replace("{name}", name)
+                        .replace("{version}", version)
+                        .replace("{target}", target)
+                        .replace("{ext}", ext);
+                    if seen.insert(filename.clone()) {
+                        out.push(filename);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,5 +347,13 @@ mod tests {
             assert!(!ts.is_empty());
             assert!(ts[0].contains('-'));
         }
+    }
+
+    #[test]
+    fn expected_filenames_includes_canonical_ripgrep() {
+        let names = vec!["ripgrep".to_string()];
+        let targets = vec!["aarch64-apple-darwin".to_string()];
+        let filenames = expected_filenames(&names, "15.1.0", &targets);
+        assert!(filenames.iter().any(|f| f == "ripgrep-15.1.0-aarch64-apple-darwin.tar.gz"));
     }
 }

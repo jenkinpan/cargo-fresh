@@ -10,6 +10,7 @@
 pub mod archive;
 pub mod events;
 pub mod fetch;
+pub mod github_api;
 pub mod install;
 pub mod probe;
 pub mod resolve;
