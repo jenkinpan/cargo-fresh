@@ -573,24 +573,10 @@ pub async fn update_package(
     source: &PackageSource,
     install_opts: Option<&InstallOpts>,
     dry_run: bool,
-    install_binstall: bool,
     verbose: bool,
     cancel: Arc<AtomicBool>,
     row: Option<(ProgressBar, usize)>,
 ) -> Result<Option<UpdateResult>> {
-    // NOTE: `install_binstall` is a deprecated no-op in 0.11. The self-hosted
-    // downloader replaces the cargo-binstall subprocess path. The flag is kept
-    // accepted for one release to avoid breaking existing scripts.
-    if install_binstall {
-        static DEPRECATION_WARNED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-        DEPRECATION_WARNED.get_or_init(|| {
-            status_dim(
-                "Hint",
-                "--install-binstall is deprecated in 0.11 and will be removed in 0.12. \
-                 cargo-fresh now uses a self-hosted downloader; cargo-binstall is no longer needed.",
-            );
-        });
-    }
     // 在做任何事(连 cargo install --list 都还没查)之前先看取消标志。
     if cancel.load(Ordering::SeqCst) {
         return Ok(None);
@@ -829,7 +815,6 @@ mod tests {
             &PackageSource::Crates,
             None,
             false, // dry_run
-            false, // install_binstall
             false, // verbose
             cancel,
             None,  // row

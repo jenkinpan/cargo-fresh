@@ -5,6 +5,32 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+并发更新调度器——`--jobs N` 默认 4,`-j 0` 表示无限制。N 个包同时跑下载/解压/安装,`cargo install` fallback 自然在 cargo 的 `$CARGO_HOME` 锁上排队,无需额外构建池。MultiProgress 行按输入顺序预注册,完成顺序无关地保留屏幕顺序;summary 也按输入顺序重排。
+
+### Added
+
+- **`--jobs N` / `-j N`** (`src/cli/mod.rs`): 并发上限,默认 4,`0`=无限制。`-j 1` 退回 0.11 串行行为
+- **`src/main.rs::run_one_update`**: per-package 更新被抽成自有所有权的 async 函数,适配 `JoinSet::spawn`
+- **`tests/concurrent_smoke.rs`**: shape-level 测试覆盖串行/并行/乱序完成三种情况,锁住"`sort_by_key` 把结果还原成输入顺序"这一不变量
+
+### Changed
+
+- **BEHAVIOR**: 默认行为从串行更新切换为最多 4 包并发。`--jobs 1` 恢复旧行为
+- **`.crates.toml` / `.crates2.json` 写入序列化** (`src/downloader/install.rs::CRATES_FILES_LOCK`): 进程内 `Mutex<()>` 兜住两个文件的 read-modify-write 竞态;两个并发包写不同 binary 行不会再丢失记录
+- **Ctrl-C 双击语义**: 首次 Ctrl-C 软取消(显示 `Aborting Ctrl-C again to force exit`,在飞任务自然收尾);二次 Ctrl-C 立即 `exit(130)`。TempDir Drop + atomic rename 保证不留半安装态
+
+### Removed
+
+- **`--install-binstall` flag**: 已弃用一个版本周期 (0.11),按计划在 0.12.0 移除。如果脚本里还带这个 flag 会被 clap 拒绝。换用 `cargo install cargo-binstall` 在 shell 里显式装
+
+### Notes for downstream
+
+- JSON `schema_version=1` 不变。`results[]` 顺序仍跟选择顺序一致(由 `sort_by_key` 保证),工具链可以继续按位置读
+- 退出码契约 0/1/2/130 不变
+- `MultiProgress` 在非 TTY 自动降级(0.10.1 起),并发也不例外
+
 ## [0.11.0] - 2026-05-28
 
 两段式 release：底层是用进程内下载器替换 `cargo binstall` 子进程；后半轮是验证后的覆盖率与 UX 收尾——把下载器从"能跑"推到"能跑得过 binstall"，UI 翻成 rustup 风格。没动 JSON schema、没改 CLI flag 表面。

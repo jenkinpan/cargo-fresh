@@ -39,7 +39,6 @@ async fn run_one_update(
     source: PackageSource,
     install_opts: Option<cargo_fresh::models::InstallOpts>,
     dry_run: bool,
-    install_binstall: bool,
     verbose: bool,
     cancel: Arc<AtomicBool>,
     row: Option<(indicatif::ProgressBar, usize)>,
@@ -54,7 +53,6 @@ async fn run_one_update(
         &source,
         opts_ref,
         dry_run,
-        install_binstall,
         verbose,
         cancel,
         row,
@@ -356,7 +354,6 @@ async fn run() -> Result<i32> {
             };
             let cancel_task = cancel.clone();
             let dry_run = cli.dry_run;
-            let install_binstall = cli.install_binstall;
             let verbose = cli.verbose;
 
             set.spawn(async move {
@@ -367,7 +364,6 @@ async fn run() -> Result<i32> {
                     source,
                     install_opts,
                     dry_run,
-                    install_binstall,
                     verbose,
                     cancel_task,
                     row,

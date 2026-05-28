@@ -43,7 +43,7 @@ pub fn get_english_text(key: &str) -> &'static str {
         "fail_count" => "{} failed",
         "no_packages_selected" => "no packages selected",
         "aborted_by_user" => "cancelled by user, {done}/{total} completed",
-        "binstall_hint" => "cargo-binstall not found — using cargo install (slower). Pass --install-binstall to auto-install for faster updates",
+        "binstall_hint" => "cargo-binstall not found — --check-binstall will not annotate updates. Install via 'cargo install cargo-binstall' if you want this annotation.",
 
         // Hint text
         "update_instructions" => "To update manually: cargo install --force <name>",
@@ -153,7 +153,7 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "fail_count" => "{} 个失败",
         "no_packages_selected" => "未选择任何包",
         "aborted_by_user" => "用户取消，已完成 {done}/{total}",
-        "binstall_hint" => "未检测到 cargo-binstall——改用 cargo install（较慢）。加 --install-binstall 可自动安装以加速",
+        "binstall_hint" => "未检测到 cargo-binstall——--check-binstall 不会标注更新。要标注请先 'cargo install cargo-binstall'。",
 
         // 提示
         "update_instructions" => "手动更新：cargo install --force <name>",

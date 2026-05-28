@@ -59,13 +59,6 @@ pub struct Cli {
     #[arg(long)]
     pub no_cargo_search_fallback: bool,
 
-    /// Automatically install cargo-binstall if it is missing. Disabled by default
-    /// since 0.11 — `cargo fresh` no longer mutates your toolchain silently; it
-    /// will only print a hint and fall back to `cargo install`. Pass this flag in
-    /// trusted environments (your dev box, opt-in CI) to restore the old behavior.
-    #[arg(long)]
-    pub install_binstall: bool,
-
     /// Probe each update candidate with `cargo binstall --dry-run` during the
     /// check phase, and mark whether binstall would fetch a prebuilt binary
     /// (fast) or fall back to compiling from source (slow). Off by default —
