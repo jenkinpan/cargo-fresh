@@ -44,7 +44,8 @@ thiserror = "2"
 [dev-dependencies]
 assert_cmd = "2"
 insta = { version = "1", features = ["filters"] }
-predicates = "3"
-wiremock = "0.6"
-tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt-multi-thread"] }
 jsonschema = { version = "0.46.5", default-features = false }
+predicates = "3"
+serial_test = "3"
+tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"

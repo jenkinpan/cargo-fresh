@@ -13,6 +13,7 @@ pub mod fetch;
 pub mod install;
 pub mod probe;
 pub mod resolve;
+pub mod token;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
