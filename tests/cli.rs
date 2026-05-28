@@ -32,7 +32,7 @@ fn help_lists_core_flags() {
         "--registry-url",
         "--format",
         "--no-cargo-search-fallback",
-        "--check-binstall",
+        "--check-prebuilt",
     ] {
         assert!(out.contains(flag), "help missing {flag}\n--- help ---\n{out}");
     }

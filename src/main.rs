@@ -234,8 +234,7 @@ async fn run() -> Result<i32> {
     // --check-prebuilt:对更新候选并发跑 HEAD 探测,提前标出"会拿预编译产物(快)"
     // 还是"会回退到 cargo install 从源码构建(慢)"。和真正的 update 路径用同一份
     // resolve + HEAD 逻辑,结果保持一致。
-    if cli.check_prebuilt || cli.check_binstall {
-        // --check-binstall 在 0.12 内的兼容支持 —— 下个 commit 会彻底移除。
+    if cli.check_prebuilt {
         cargo_fresh::downloader::probe::annotate_updates(&mut packages).await;
     }
 
