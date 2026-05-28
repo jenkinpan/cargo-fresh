@@ -93,10 +93,12 @@ enum ProbeOutcome {
 
 /// 对单个 crates.io 包跑预编译可用性探测。
 ///
-/// 用"默认 GitHub 仓库猜" (`https://github.com/<name>/<name>`) 生成候选,
-/// 不查 crates.io meta 也不读 .crates2.json bins ——check 阶段要快。
-/// 漏报 (monorepo / 重命名 binary) 时 caller 看到 `Source`,真正 update
-/// 时 downloader 会再做一次全量 resolve,该回去拿预编译的还是会拿到。
+/// 走和真正 update 路径相同的 resolve 输入 —— crates.io API 的 `repository`
+/// 字段 + `.crates2.json` 的 `bins[]`。早期版本用 `{name}/{name}` 启发式猜
+/// repo,但 ripgrep/cargo-deny/mdbook/tauri-cli 这些热门包没一个是这个形状
+/// (BurntSushi/ripgrep、EmbarkStudios/cargo-deny ...),实测全军覆没只能拿
+/// 真实 repo。API 拿不到时 (网络/限流/无 repository 字段) 仍回退到启发式
+/// 猜测,best-effort。
 pub async fn probe_prebuilt(
     client: &reqwest::Client,
     name: &str,
@@ -106,9 +108,22 @@ pub async fn probe_prebuilt(
     if targets.is_empty() {
         return PrebuiltAvailability::Unknown;
     }
-    let repo_guess = format!("https://github.com/{name}/{name}");
-    let name_candidates = vec![name.to_string()];
-    let urls: Vec<String> = match candidate_urls(&name_candidates, version, &repo_guess, &targets) {
+    let repo = crate::package::crates_api::fetch_repo_url(client, name)
+        .await
+        .unwrap_or_else(|| format!("https://github.com/{name}/{name}"));
+
+    // bins 让 monorepo + binary 名 ≠ package 名的情况能命中
+    // (tauri-cli 的 `cargo-tauri-aarch64-apple-darwin.zip`)
+    let mut name_candidates = vec![name.to_string()];
+    if let Some(home) = crate::package::registry::cargo_home() {
+        for b in crate::package::crates2::lookup_bins(&home, name) {
+            if !name_candidates.contains(&b) {
+                name_candidates.push(b);
+            }
+        }
+    }
+
+    let urls: Vec<String> = match candidate_urls(&name_candidates, version, &repo, &targets) {
         Ok(cands) => cands.into_iter().map(|c| c.url).collect(),
         Err(_) => return PrebuiltAvailability::Source,
     };
