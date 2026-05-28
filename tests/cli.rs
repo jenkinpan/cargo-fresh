@@ -171,3 +171,30 @@ fn non_json_mode_keeps_status_off_stdout() {
         "stdout should be empty in non-JSON mode, got:\n{out}"
     );
 }
+
+#[test]
+fn jobs_flag_accepts_zero_and_positive() {
+    // Smoke-test that --jobs / -j values are accepted by the binary without
+    // running an update (use --help so cargo isn't invoked at all).
+    for args in [
+        vec!["-j0", "--help"],
+        vec!["-j1", "--help"],
+        vec!["-j4", "--help"],
+        vec!["--jobs", "16", "--help"],
+    ] {
+        bin().args(&args).assert().success();
+    }
+}
+
+#[test]
+fn jobs_flag_rejects_negative() {
+    let assert = bin()
+        .args(["-j", "-1", "--help"])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(
+        stderr.contains("invalid value") || stderr.contains("-1"),
+        "expected clap to reject -j -1, got: {stderr}"
+    );
+}
