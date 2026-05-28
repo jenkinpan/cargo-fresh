@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.12.0] - 2026-05-28
 
 并发更新调度器——`--jobs N` 默认 4,`-j 0` 表示无限制。N 个包同时跑下载/解压/安装,`cargo install` fallback 自然在 cargo 的 `$CARGO_HOME` 锁上排队,无需额外构建池。MultiProgress 行按输入顺序预注册,完成顺序无关地保留屏幕顺序;summary 也按输入顺序重排。
 
