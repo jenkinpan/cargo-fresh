@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use colored::*;
 
 use cargo_fresh::cli::{Cli, Commands, OutputFormat};
@@ -296,47 +298,87 @@ async fn run() -> Result<i32> {
             .iter()
             .map(|&i| all_packages_to_update[i].name.clone())
             .collect();
-        let plan = (!cli.dry_run && !json_mode).then(|| {
-            cargo_fresh::updater::UpdatePlan::new(&selected_names)
-        });
+        let plan_arc = (!cli.dry_run && !json_mode)
+            .then(|| Arc::new(cargo_fresh::updater::UpdatePlan::new(&selected_names)));
+
+        let cap = if cli.jobs == 0 {
+            selections.len().max(1)
+        } else {
+            cli.jobs as usize
+        };
+        let sem = Arc::new(Semaphore::new(cap));
+        let mut set: JoinSet<(usize, SlotOutcome)> = JoinSet::new();
 
         for (i, &index) in selections.iter().enumerate() {
+            // Pre-flight cancel check — if user Ctrl-C'd before scheduling,
+            // mark aborted and stop spawning.
             if cancel.load(Ordering::SeqCst) {
                 aborted_at = Some(i);
-                if let Some(p) = &plan {
+                if let Some(p) = plan_arc.as_ref() {
                     cargo_fresh::updater::finalize_aborted(&p.row(i), p.name_width());
                 }
                 break;
             }
-            let package_name = &all_packages_to_update[index].name;
+
+            let package_name = all_packages_to_update[index].name.clone();
             let selected_pkg = all_packages_to_update
                 .iter()
-                .find(|p| p.name == *package_name);
+                .find(|p| p.name == package_name);
             let target_version = selected_pkg
                 .and_then(|p| p.latest_version.as_ref())
-                .map(|v| v.as_str());
+                .cloned();
             let source = selected_pkg
                 .map(|p| p.source.clone())
                 .unwrap_or(PackageSource::Crates);
-            let install_opts = selected_pkg.and_then(|p| p.install_opts.as_ref());
+            let install_opts = selected_pkg.and_then(|p| p.install_opts.clone());
 
-            let row = plan
+            let row = plan_arc
                 .as_ref()
                 .map(|p| (p.row(i), p.name_width()));
 
-            let outcome = run_one_update(
-                package_name.clone(),
-                target_version.map(|s| s.to_string()),
-                source.clone(),
-                install_opts.cloned(),
-                cli.dry_run,
-                cli.install_binstall,
-                cli.verbose,
-                cancel.clone(),
-                row,
-            )
-            .await;
+            // acquire_owned BEFORE spawn — this is what bounds concurrency.
+            let permit = match sem.clone().acquire_owned().await {
+                Ok(p) => p,
+                Err(_) => break,
+            };
+            let cancel_task = cancel.clone();
+            let dry_run = cli.dry_run;
+            let install_binstall = cli.install_binstall;
+            let verbose = cli.verbose;
 
+            set.spawn(async move {
+                let _permit = permit; // released on task drop
+                let outcome = run_one_update(
+                    package_name,
+                    target_version,
+                    source,
+                    install_opts,
+                    dry_run,
+                    install_binstall,
+                    verbose,
+                    cancel_task,
+                    row,
+                )
+                .await;
+                (i, outcome)
+            });
+        }
+
+        // Drain in completion order; sort to input order before folding so
+        // counts and update_results match on-screen row order.
+        let mut indexed: Vec<(usize, SlotOutcome)> = Vec::with_capacity(selections.len());
+        while let Some(joined) = set.join_next().await {
+            match joined {
+                Ok(pair) => indexed.push(pair),
+                Err(e) => {
+                    // Tokio JoinError — task panicked. Log and continue.
+                    status_err("Error", &format!("task panicked: {e}"));
+                }
+            }
+        }
+        indexed.sort_by_key(|(i, _)| *i);
+
+        for (i, outcome) in indexed {
             match outcome {
                 SlotOutcome::Success(result) => {
                     success_count += 1;
@@ -347,11 +389,10 @@ async fn run() -> Result<i32> {
                     update_results.push(result);
                 }
                 SlotOutcome::Aborted => {
-                    aborted_at = Some(i);
-                    break;
+                    aborted_at.get_or_insert(i);
                 }
                 SlotOutcome::Error(name, e) => {
-                    if plan.is_none() {
+                    if plan_arc.is_none() {
                         status_err(
                             "Error",
                             &language.format_text(
