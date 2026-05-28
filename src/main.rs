@@ -21,6 +21,73 @@ use cargo_fresh::package::{
 };
 use cargo_fresh::updater::update_package;
 
+/// Outcome of a single package update, ready for the orchestrator to fold
+/// into `success_count` / `fail_count` / `aborted_at` / `update_results`.
+enum SlotOutcome {
+    Success(UpdateResult),
+    Failed(UpdateResult),
+    Aborted,
+    Error(String, anyhow::Error),
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_one_update(
+    package_name: String,
+    target_version: Option<String>,
+    source: PackageSource,
+    install_opts: Option<cargo_fresh::models::InstallOpts>,
+    dry_run: bool,
+    install_binstall: bool,
+    verbose: bool,
+    cancel: Arc<AtomicBool>,
+    row: Option<(indicatif::ProgressBar, usize)>,
+) -> SlotOutcome {
+    let row_for_finalize = row.clone();
+    let target = target_version.as_deref();
+    let opts_ref = install_opts.as_ref();
+
+    match update_package(
+        &package_name,
+        target,
+        &source,
+        opts_ref,
+        dry_run,
+        install_binstall,
+        verbose,
+        cancel,
+        row,
+    )
+    .await
+    {
+        Ok(Some(result)) => {
+            if let Some((pb, w)) = &row_for_finalize {
+                if result.success {
+                    cargo_fresh::updater::finalize_installed(pb, *w);
+                } else {
+                    cargo_fresh::updater::finalize_failed(pb, *w, "");
+                }
+            }
+            if result.success {
+                SlotOutcome::Success(result)
+            } else {
+                SlotOutcome::Failed(result)
+            }
+        }
+        Ok(None) => {
+            if let Some((pb, w)) = &row_for_finalize {
+                cargo_fresh::updater::finalize_aborted(pb, *w);
+            }
+            SlotOutcome::Aborted
+        }
+        Err(e) => {
+            if let Some((pb, w)) = &row_for_finalize {
+                cargo_fresh::updater::finalize_failed(pb, *w, &e.to_string());
+            }
+            SlotOutcome::Error(package_name, e)
+        }
+    }
+}
+
 /// 退出码契约（在 README 同步文档化）：
 ///
 /// | 码  | 含义                                            |
@@ -257,61 +324,47 @@ async fn run() -> Result<i32> {
                 .as_ref()
                 .map(|p| (p.row(i), p.name_width()));
 
-            match update_package(
-                package_name,
-                target_version,
-                &source,
-                install_opts,
+            let outcome = run_one_update(
+                package_name.clone(),
+                target_version.map(|s| s.to_string()),
+                source.clone(),
+                install_opts.cloned(),
                 cli.dry_run,
                 cli.install_binstall,
                 cli.verbose,
                 cancel.clone(),
                 row,
             )
-            .await
-            {
-                Ok(Some(result)) => {
-                    if let Some(p) = &plan {
-                        let row = p.row(i);
-                        if result.success {
-                            // 版本号不在行末态显示, 末尾 summary 统一给出
-                            cargo_fresh::updater::finalize_installed(&row, p.name_width());
-                        } else {
-                            cargo_fresh::updater::finalize_failed(&row, p.name_width(), "");
-                        }
-                    }
-                    if result.success {
-                        success_count += 1;
-                    } else {
-                        fail_count += 1;
-                    }
+            .await;
+
+            match outcome {
+                SlotOutcome::Success(result) => {
+                    success_count += 1;
                     update_results.push(result);
                 }
-                Ok(None) => {
-                    // Ctrl-C
-                    if let Some(p) = &plan {
-                        cargo_fresh::updater::finalize_aborted(&p.row(i), p.name_width());
-                    }
+                SlotOutcome::Failed(result) => {
+                    fail_count += 1;
+                    update_results.push(result);
+                }
+                SlotOutcome::Aborted => {
                     aborted_at = Some(i);
                     break;
                 }
-                Err(e) => {
-                    if let Some(p) = &plan {
-                        cargo_fresh::updater::finalize_failed(&p.row(i), p.name_width(), &e.to_string());
-                    } else {
+                SlotOutcome::Error(name, e) => {
+                    if plan.is_none() {
                         status_err(
                             "Error",
                             &language.format_text(
                                 "package_error",
                                 &[
-                                    ("name", &package_name.red().to_string()),
+                                    ("name", &name.red().to_string()),
                                     ("error", &e.to_string()),
                                 ],
                             ),
                         );
                     }
                     fail_count += 1;
-                    update_results.push(UpdateResult::new(package_name.clone(), None, None, false));
+                    update_results.push(UpdateResult::new(name, None, None, false));
                 }
             }
         }
