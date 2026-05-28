@@ -68,6 +68,15 @@ pub struct Cli {
     #[arg(long)]
     pub check_binstall: bool,
 
+    /// Probe each update candidate with cargo-fresh's own downloader to mark
+    /// whether prebuilt binaries are available (fast) or it'd fall back to
+    /// compiling from source (slow). Replaces the older `--check-binstall`
+    /// flag — same intent, but uses the same HEAD-probe logic as the actual
+    /// update path so the verdict matches what update would do. Off by
+    /// default — each candidate does a few HEAD requests.
+    #[arg(long)]
+    pub check_prebuilt: bool,
+
     /// Maximum number of packages to update concurrently. `0` means unlimited
     /// (one task per selected package). Default 4 — downloads are network-bound
     /// and the inner HEAD-probe pool already caps connection fan-out, so 4
@@ -276,5 +285,11 @@ mod tests {
     fn jobs_zero_is_accepted() {
         let cli = Cli::try_parse_from(["cargo-fresh", "-j", "0"]).unwrap();
         assert_eq!(cli.jobs, 0);
+    }
+
+    #[test]
+    fn parses_check_prebuilt() {
+        let cli = Cli::try_parse_from(["cargo-fresh", "--check-prebuilt"]).unwrap();
+        assert!(cli.check_prebuilt);
     }
 }

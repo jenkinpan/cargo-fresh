@@ -231,14 +231,12 @@ async fn run() -> Result<i32> {
     )
     .await?;
 
-    // --check-binstall:对更新候选并发跑 `cargo binstall --dry-run`,提前标出
-    // "会拿预编译产物(快)"还是"会从源码构建(慢)"。binstall 没装就只给 Hint。
-    if cli.check_binstall {
-        if cargo_fresh::package::is_binstall_available() {
-            cargo_fresh::package::binstall_probe::annotate_updates(&mut packages).await;
-        } else {
-            status_dim("Hint", language.get_text("binstall_hint"));
-        }
+    // --check-prebuilt:对更新候选并发跑 HEAD 探测,提前标出"会拿预编译产物(快)"
+    // 还是"会回退到 cargo install 从源码构建(慢)"。和真正的 update 路径用同一份
+    // resolve + HEAD 逻辑,结果保持一致。
+    if cli.check_prebuilt || cli.check_binstall {
+        // --check-binstall 在 0.12 内的兼容支持 —— 下个 commit 会彻底移除。
+        cargo_fresh::downloader::probe::annotate_updates(&mut packages).await;
     }
 
     let stable_updates: Vec<&PackageInfo> = packages
