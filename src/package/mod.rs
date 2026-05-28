@@ -16,7 +16,6 @@ use crate::errors::CargoFreshError;
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
 
-pub mod binstall_probe;
 pub mod crates_api;
 pub mod crates2;
 pub mod crates_toml;
@@ -945,7 +944,6 @@ mod tests {
             source: PackageSource::Crates,
             install_opts: None,
             check_error: None,
-            binstall_kind: None,
             prebuilt: None,
         }
     }

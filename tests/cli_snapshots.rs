@@ -1,5 +1,5 @@
 //! 锁住 status 行的 cargo-style 外观契约——verb 名、12 字右对齐、
-//! 来源/binstall 尾标的拼装格式。CLAUDE.md 的 "Status verb dictionary"
+//! 来源/prebuilt 尾标的拼装格式。CLAUDE.md 的 "Status verb dictionary"
 //! 把这些列成了事实合约,README/issue templates 教用户读这些行,但代码里
 //! 没有任何东西阻止"顺手把 `Fresh` 改成 `UpToDate`"或者"把宽度从 12
 //! 改到 10"。snapshot 在 PR diff 上把这种漂移变成 `.snap` 文件改动,
@@ -10,7 +10,7 @@
 //! 这层只管 verb 名 + 对齐 + 行结构,分工干净 `.snap` 文件也可读。
 //!
 //! 范围控制:8 条核心 verb——CLAUDE.md verb 字典里使用频次最高 / 用户脚本
-//! 最可能 grep 的几个 + `--check-binstall` 尾标(0.10.4 新加,UX 决策)。
+//! 最可能 grep 的几个 + `--check-prebuilt` 尾标(0.12.0 新加,UX 决策)。
 //! 故意不贪多——snapshot 数量小于 ~10 条 review 时才真的能逐条看,超过
 //! 这个数会退化成 `cargo insta accept` 一把过的橡皮图章。
 
@@ -18,7 +18,7 @@ use cargo_fresh::display::{
     format_status_line, package_transition, StatusStyle,
 };
 use cargo_fresh::locale::Language;
-use cargo_fresh::models::{BinstallKind, PackageInfo, PackageSource};
+use cargo_fresh::models::{PackageInfo, PackageSource, PrebuiltAvailability};
 
 /// 给所有 snapshot 套用同样的 ANSI 剥离 filter,保证 `.snap` 是纯文本
 /// 不论 cargo test 跑在 TTY 还是被 `CLICOLOR_FORCE=1` 强开颜色。
@@ -55,14 +55,15 @@ fn snapshot_updating_line_clean() {
     });
 }
 
-/// `--check-binstall` 在 Updating 行尾追加 `[binstall: prebuilt]`(0.10.4)。
+/// `--check-prebuilt` 在 Updating 行尾追加 `[prebuilt]`(0.12.0)。
 /// 这是个 UX 契约——脚本可以靠它判断"这次升级会从二进制拿还是从源码编",
 /// 用户文档也教读这个尾标。位置(行尾、空格分隔)必须稳。
+/// 注意：0.10.4 的旧标记 `[binstall: prebuilt]` 已更新为 `[prebuilt]`。
 #[test]
-fn snapshot_updating_line_with_binstall_prebuilt() {
+fn snapshot_updating_line_with_prebuilt() {
     settings().bind(|| {
         let mut p = pkg("ripgrep", Some("14.1.0"), Some("14.1.1"), PackageSource::Crates);
-        p.binstall_kind = Some(BinstallKind::Prebuilt);
+        p.prebuilt = Some(PrebuiltAvailability::Prebuilt);
         let msg = package_transition(&p, Language::English);
         insta::assert_snapshot!(format_status_line("Updating", &msg, StatusStyle::Ok));
     });

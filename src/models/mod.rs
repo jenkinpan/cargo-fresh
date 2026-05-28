@@ -106,42 +106,6 @@ pub struct CheckError {
     pub message: String,
 }
 
-/// `cargo binstall --dry-run` 对一个更新候选的预检结论。
-///
-/// 仅在 CLI `--check-binstall` 时填充——对每个有更新的 crates.io 包跑一次
-/// dry-run,提前看出这次升级是拿预编译二进制(快)还是退化成源码构建(慢)。
-/// 这正是"crates.io 已发布新版、但 GitHub release 二进制还没传完"那段
-/// 窗口期里 binstall 会闷头编译十几分钟的场景——预检能提前把它标出来。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BinstallKind {
-    /// binstall 能拉到预编译二进制(GitHub release / QuickInstall)——快。
-    Prebuilt,
-    /// binstall 找不到预编译产物,会退化成 `cargo install` 从源码构建——慢。
-    SourceBuild,
-    /// dry-run 输出无法判别(binstall 报错、网络问题、输出格式变化等)。
-    Unknown,
-}
-
-impl BinstallKind {
-    /// JSON `updates_available[].binstall` 用的稳定短串。
-    pub fn kind_str(self) -> &'static str {
-        match self {
-            BinstallKind::Prebuilt => "prebuilt",
-            BinstallKind::SourceBuild => "source_build",
-            BinstallKind::Unknown => "unknown",
-        }
-    }
-
-    /// 挂在 `Updating` 行尾的 UI 标记。
-    pub fn marker(self) -> &'static str {
-        match self {
-            BinstallKind::Prebuilt => "[binstall: prebuilt]",
-            BinstallKind::SourceBuild => "[binstall: source build]",
-            BinstallKind::Unknown => "[binstall: unknown]",
-        }
-    }
-}
-
 /// Downloader-side prebuilt-binary availability — what `cargo-fresh` would do
 /// if asked to update this package right now. Ternary so we can distinguish
 /// "downloader确实没找到" from "网络/服务端有问题没法判断".
@@ -183,13 +147,8 @@ pub struct PackageInfo {
     pub source: PackageSource,
     pub install_opts: Option<InstallOpts>,
     pub check_error: Option<CheckError>,
-    /// binstall 预检结论。`None` = 未探测(没加 `--check-binstall`,或 binstall
-    /// 没装,或这个包不是更新候选)。
-    pub binstall_kind: Option<BinstallKind>,
-    /// Downloader probe result (set when `--check-prebuilt` runs). `None` = not
-    /// probed (no flag, or this package isn't a crates.io update candidate).
-    /// Replaces `binstall_kind` — both fields coexist during the 0.12.0
-    /// migration; `binstall_kind` is removed in the same release.
+    /// Downloader probe result, populated when `--check-prebuilt` runs.
+    /// `None` = not probed (flag absent, or package isn't a crates.io update candidate).
     pub prebuilt: Option<PrebuiltAvailability>,
 }
 
@@ -234,7 +193,6 @@ impl PackageInfo {
             source,
             install_opts: None,
             check_error: None,
-            binstall_kind: None,
             prebuilt: None,
         }
     }
