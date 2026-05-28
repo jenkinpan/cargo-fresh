@@ -5,9 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.11.0] - 2026-05-28
 
-0.11.0 验证轮收尾——把下载器从"能跑"推到"能跑得过 binstall"，UI 翻成 rustup 风格。三组改动都没动 schema、没改 CLI flag 表面。
+两段式 release：底层是用进程内下载器替换 `cargo binstall` 子进程；后半轮是验证后的覆盖率与 UX 收尾——把下载器从"能跑"推到"能跑得过 binstall"，UI 翻成 rustup 风格。没动 JSON schema、没改 CLI flag 表面。
+
+### 验证轮收尾
 
 ### Added
 
@@ -44,7 +46,7 @@
 - **ripgrep / tauri-cli 走 fallback 的根因**: 不只是包名 != binary 名，monorepo tag 前缀也是必修；现在两者一起修了
 - **`cargo-fresh` 二次运行报 Unchanged**: `.crates.toml` 写入修复后 `cargo install --list` 立即反映新版
 
-## [0.11.0] - 2026-05-27
+### 下载器基础（原 0.11.0，2026-05-27）
 
 替换 `cargo binstall` 子进程依赖为自实现的进程内二进制下载器。Crates 来源包的更新路径不再 spawn `cargo binstall`——`cargo-fresh` 自己 HTTP 流式下载 GitHub Release tarball、校验可选的 sha256 sidecar、原子化安装到 `~/.cargo/bin`、同步更新 `.crates2.json`。多 arch 命名变体探测覆盖 Rust triple / Go-style / Apple-short 三种约定，单个包最多 24 个候选 URL（Linux x86_64：3 约定 × 2 归档 × 4 别名）。临时目录全程由 `tempfile::TempDir` RAII 持有，安装结束或失败都不留 `/tmp` 残渣。BEHAVIOR：JSON `results[].phase` 仍是 `"binstall"`/`"install"` 字符串（schema 不变），但 `"binstall"` 现在意味着"downloader 路径成功"而非"`cargo binstall` 子进程成功"。
 
