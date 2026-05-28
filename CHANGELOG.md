@@ -20,14 +20,20 @@
 - **BEHAVIOR**: 默认行为从串行更新切换为最多 4 包并发。`--jobs 1` 恢复旧行为
 - **`.crates.toml` / `.crates2.json` 写入序列化** (`src/downloader/install.rs::CRATES_FILES_LOCK`): 进程内 `Mutex<()>` 兜住两个文件的 read-modify-write 竞态;两个并发包写不同 binary 行不会再丢失记录
 - **Ctrl-C 双击语义**: 首次 Ctrl-C 软取消(显示 `Aborting Ctrl-C again to force exit`,在飞任务自然收尾);二次 Ctrl-C 立即 `exit(130)`。TempDir Drop + atomic rename 保证不留半安装态
+- **CLI**: `--check-binstall` → `--check-prebuilt`。语义一致(标记每个候选包是预编译还是要从源码构建)
+- **BEHAVIOR**: 预编译探测改用 downloader 自己的 HEAD probe,不再 spawn `cargo binstall --dry-run`。~10s/包 → 1-2s/包。也不再需要 cargo-binstall 装着
+- **BREAKING (JSON)**: `schema_version` 1 → 2;`updates_available[].binstall` → `updates_available[].prebuilt`;enum 值 `source_build` → `source`。这是 1.0 前最后一次破约
 
 ### Removed
 
 - **`--install-binstall` flag**: 已弃用一个版本周期 (0.11),按计划在 0.12.0 移除。如果脚本里还带这个 flag 会被 clap 拒绝。换用 `cargo install cargo-binstall` 在 shell 里显式装
+- `src/package/binstall_probe.rs` 整个模块(原来调 `cargo binstall --dry-run`)
+- `package::is_binstall_available` / `install_binstall` / `ensure_binstall_available`
+- 7 个 locale key: `binstall_hint` / `installing_binstall` / `attempting_to_install_binstall` / `binstall_not_found` / `binstall_installed_successfully` / `binstall_install_failed` / `checking_binstall`
 
 ### Notes for downstream
 
-- JSON `schema_version=1` 不变。`results[]` 顺序仍跟选择顺序一致(由 `sort_by_key` 保证),工具链可以继续按位置读
+- JSON `schema_version` 1 → 2 (BREAKING):脚本消费者需要把字段名 `binstall` 改成 `prebuilt`,枚举值 `source_build` 改成 `source`。`results[]` 顺序仍跟选择顺序一致(由 `sort_by_key` 保证),工具链可以继续按位置读
 - 退出码契约 0/1/2/130 不变
 - `MultiProgress` 在非 TTY 自动降级(0.10.1 起),并发也不例外
 
