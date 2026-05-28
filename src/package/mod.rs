@@ -946,6 +946,7 @@ mod tests {
             install_opts: None,
             check_error: None,
             binstall_kind: None,
+            prebuilt: None,
         }
     }
 

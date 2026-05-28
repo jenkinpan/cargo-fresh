@@ -142,6 +142,39 @@ impl BinstallKind {
     }
 }
 
+/// Downloader-side prebuilt-binary availability — what `cargo-fresh` would do
+/// if asked to update this package right now. Ternary so we can distinguish
+/// "downloader确实没找到" from "网络/服务端有问题没法判断".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrebuiltAvailability {
+    /// At least one candidate URL returned 2xx — downloader will succeed.
+    Prebuilt,
+    /// All candidates returned 4xx (typically 404) — downloader will fall back
+    /// to `cargo install` (compile from source).
+    Source,
+    /// Probe could not reach a verdict (all 5xx, all timed out, or network
+    /// error). Don't blame downloader; treat as "try again later".
+    Unknown,
+}
+
+impl PrebuiltAvailability {
+    pub fn kind_str(self) -> &'static str {
+        match self {
+            PrebuiltAvailability::Prebuilt => "prebuilt",
+            PrebuiltAvailability::Source => "source",
+            PrebuiltAvailability::Unknown => "unknown",
+        }
+    }
+
+    pub fn marker(self) -> &'static str {
+        match self {
+            PrebuiltAvailability::Prebuilt => "[prebuilt]",
+            PrebuiltAvailability::Source => "[source]",
+            PrebuiltAvailability::Unknown => "[probe failed]",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PackageInfo {
     pub name: String,
@@ -153,6 +186,11 @@ pub struct PackageInfo {
     /// binstall 预检结论。`None` = 未探测(没加 `--check-binstall`,或 binstall
     /// 没装,或这个包不是更新候选)。
     pub binstall_kind: Option<BinstallKind>,
+    /// Downloader probe result (set when `--check-prebuilt` runs). `None` = not
+    /// probed (no flag, or this package isn't a crates.io update candidate).
+    /// Replaces `binstall_kind` — both fields coexist during the 0.12.0
+    /// migration; `binstall_kind` is removed in the same release.
+    pub prebuilt: Option<PrebuiltAvailability>,
 }
 
 /// 这次更新走了哪条安装路径——给汇总分组用 (rustup 风格:
@@ -197,6 +235,7 @@ impl PackageInfo {
             install_opts: None,
             check_error: None,
             binstall_kind: None,
+            prebuilt: None,
         }
     }
 
@@ -404,5 +443,19 @@ mod tests {
     fn check_error_kind_str_maps_both_variants() {
         assert_eq!(CheckErrorKind::NotFound.kind_str(), "not_found");
         assert_eq!(CheckErrorKind::Unavailable.kind_str(), "unavailable");
+    }
+
+    #[test]
+    fn prebuilt_availability_kind_str() {
+        assert_eq!(PrebuiltAvailability::Prebuilt.kind_str(), "prebuilt");
+        assert_eq!(PrebuiltAvailability::Source.kind_str(), "source");
+        assert_eq!(PrebuiltAvailability::Unknown.kind_str(), "unknown");
+    }
+
+    #[test]
+    fn prebuilt_availability_marker() {
+        assert_eq!(PrebuiltAvailability::Prebuilt.marker(), "[prebuilt]");
+        assert_eq!(PrebuiltAvailability::Source.marker(), "[source]");
+        assert_eq!(PrebuiltAvailability::Unknown.marker(), "[probe failed]");
     }
 }
