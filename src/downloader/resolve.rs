@@ -156,7 +156,6 @@ pub fn current_targets() -> Vec<String> {
 /// 不带 tag 路径段 —— 这是 asset 文件名,不是 URL。给 github_api::match_winning_asset
 /// 用,做集合交。和 `candidate_urls` 的 URL 拼装是同一份模板,通过分离这块逻辑
 /// 实现「同一份候选,两个消费方:本地匹配 vs 盲探 URL 拼装」。
-#[allow(dead_code)]
 pub(crate) fn expected_filenames(
     name_candidates: &[String],
     version: &str,

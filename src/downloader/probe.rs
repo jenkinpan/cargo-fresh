@@ -123,11 +123,75 @@ pub async fn probe_prebuilt(
         }
     }
 
+    // --- API path (1-6 requests instead of 360 HEADs) ----------------------
+    if let Some((owner, repo_name)) =
+        crate::downloader::github_api::parse_owner_repo(&repo)
+    {
+        let token = crate::downloader::token::discover_token();
+        let expected = crate::downloader::resolve::expected_filenames(
+            &name_candidates,
+            version,
+            &targets,
+        );
+        let candidate_tags = tag_candidates(&name_candidates[0], version);
+        let mut hit_api = false;
+
+        for tag in &candidate_tags {
+            match crate::downloader::github_api::fetch_release_assets(
+                client,
+                "https://api.github.com",
+                &owner,
+                &repo_name,
+                tag,
+                token,
+            )
+            .await
+            {
+                Ok(assets) => {
+                    hit_api = true;
+                    if crate::downloader::github_api::match_winning_asset(&assets, &expected)
+                        .is_some()
+                    {
+                        return PrebuiltAvailability::Prebuilt;
+                    }
+                    // 200 但 asset 都没匹配 —— 试下个 tag(可能 tag 名错)
+                }
+                Err(crate::downloader::github_api::GithubApiError::NotFound) => {
+                    hit_api = true;
+                    // 试下一个 tag
+                }
+                Err(_) => {
+                    // RateLimited / Network / Parse —— 跳出 API 路径,走 fallback
+                    break;
+                }
+            }
+        }
+
+        if hit_api {
+            // 至少一个 tag 200 但 asset 全不匹配,或所有 tag 都 404 —— 都算 Source
+            return PrebuiltAvailability::Source;
+        }
+        // hit_api=false: API 一次都没成 —— 走 fallback 兜底
+    }
+
+    // --- Fallback: 旧的 HEAD 盲探 (API 不可达 / repo 不是 github.com) -------
     let urls: Vec<String> = match candidate_urls(&name_candidates, version, &repo, &targets) {
         Ok(cands) => cands.into_iter().map(|c| c.url).collect(),
         Err(_) => return PrebuiltAvailability::Source,
     };
     probe_with_candidates(client, &urls).await
+}
+
+/// 生成 tag 名候选, 沿用 resolve::candidate_urls 的 6 个模板形状。
+fn tag_candidates(pkg: &str, version: &str) -> Vec<String> {
+    vec![
+        format!("v{version}"),
+        version.to_string(),
+        format!("{pkg}-v{version}"),
+        format!("{pkg}-{version}"),
+        format!("{pkg}/v{version}"),
+        format!("{pkg}/{version}"),
+    ]
 }
 
 /// 顺序对一组 `PackageInfo` 跑预检,只覆盖"有更新且来自 crates.io"的那些,
@@ -153,5 +217,18 @@ pub async fn annotate_updates(packages: &mut [PackageInfo]) {
     for (i, name, ver) in targets {
         let kind = probe_prebuilt(client, &name, &ver).await;
         packages[i].prebuilt = Some(kind);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tag_candidates_covers_common_shapes() {
+        let tags = tag_candidates("ripgrep", "15.1.0");
+        assert!(tags.contains(&"v15.1.0".to_string()));
+        assert!(tags.contains(&"15.1.0".to_string()));
+        assert!(tags.contains(&"ripgrep-v15.1.0".to_string()));
     }
 }
