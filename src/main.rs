@@ -171,29 +171,49 @@ async fn run() -> Result<i32> {
 
     if let Some(command) = cli.command {
         match command {
-            Commands::Completion { shell, cargo_fresh, install } => {
+            Commands::Completion { shell, cargo_fresh, install, yes } => {
                 if install {
-                    match Cli::install_completion(&shell, cargo_fresh, language) {
-                        Ok(cargo_fresh::cli::InstallOutcome::Written(path)) => {
-                            status(
-                                "Installed",
-                                &language
-                                    .get_text("completion_installed_path")
-                                    .replace("{}", &path.display().to_string()),
-                            );
+                    let targets = Cli::select_install_targets(language, yes)?;
+                    if targets.is_empty() {
+                        status_warn("Skipped", language.get_text("completion_no_targets"));
+                        return Ok(EXIT_UPDATES_AVAILABLE);
+                    }
+                    let mut written = 0usize;
+                    let mut skipped = 0usize;
+                    for target in &targets {
+                        match Cli::install_completion_target(&shell, *target, language, yes)? {
+                            cargo_fresh::cli::InstallOutcome::Written(path) => {
+                                written += 1;
+                                status(
+                                    "Installed",
+                                    &language
+                                        .get_text("completion_installed_path")
+                                        .replace("{}", &path.display().to_string()),
+                                );
+                                if let Some(hint) = Cli::install_post_hint(&shell, *target, &path) {
+                                    status_dim("Hint", &hint);
+                                }
+                            }
+                            cargo_fresh::cli::InstallOutcome::Skipped(path) => {
+                                skipped += 1;
+                                status_warn(
+                                    "Skipped",
+                                    &language
+                                        .get_text("completion_path_exists")
+                                        .replace("{}", &path.display().to_string()),
+                                );
+                            }
                         }
-                        Ok(cargo_fresh::cli::InstallOutcome::Skipped(path)) => {
-                            status_warn(
-                                "Skipped",
-                                &language
-                                    .get_text("completion_path_exists")
-                                    .replace("{}", &path.display().to_string()),
-                            );
-                            return Ok(EXIT_UPDATES_AVAILABLE);
-                        }
-                        Err(e) => {
-                            return Err(e);
-                        }
+                    }
+                    let written_s = written.to_string();
+                    let skipped_s = skipped.to_string();
+                    let summary = language.format_text(
+                        "completion_install_summary",
+                        &[("written", written_s.as_str()), ("skipped", skipped_s.as_str())],
+                    );
+                    status("Finished", &summary);
+                    if written == 0 {
+                        return Ok(EXIT_UPDATES_AVAILABLE);
                     }
                     return Ok(EXIT_OK);
                 }

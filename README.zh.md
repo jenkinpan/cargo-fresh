@@ -4,7 +4,6 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Wiki](https://img.shields.io/badge/wiki-Recipes_·_FAQ_·_Troubleshooting-blue)](https://github.com/jenkinpan/cargo-fresh/wiki)
 
-
 <div align="center">
 
 **Language / 语言**
@@ -15,33 +14,39 @@
 
 ---
 
-> 📣 **1.0 临近**。正在收集真实使用反馈，用来锁定 1.0 契约（CLI 形态、`--format=json` schema、退出码、错误提示）。反馈窗口截至 **2026-06-30**，之后切 `1.0.0-rc.1`。请在 [#3 Towards 1.0 — Feedback Wanted](https://github.com/jenkinpan/cargo-fresh/issues/3) 留言。
+> **1.0 临近**。1.0 契约（CLI 形态、`--format=json` schema、退出码、错误提示）的反馈窗口截至 **2026-06-30**，之后切 `1.0.0-rc.1`。请在 [#3 Towards 1.0 — Feedback Wanted](https://github.com/jenkinpan/cargo-fresh/issues/3) 留言。
 
 ---
 
-一个用 Rust 编写的工具，用于检查和管理全局安装的 Cargo 包更新。支持交互式更新、智能预发布版本检测和彩色输出。安装后可以通过 `cargo fresh` 命令使用。工具会自动检测系统语言并相应显示中文或英文界面。
+`cargo-fresh` 用于检查和更新全局安装的 Cargo 包。它并发查询 crates.io sparse index、优先使用 GitHub Release 的预编译二进制（必要时回退到 `cargo install`）、用 `-j N` 并发更新，并提供稳定的 `--format=json` 契约供脚本消费。通过 `cargo install cargo-fresh` 安装，使用 `cargo fresh` 调用。
 
-## 功能特性
+## 目录
 
-- 🔍 自动检测已安装的全局 Cargo 包
-- 📦 检查每个包的最新版本
-- 🎨 彩色输出，清晰显示更新状态
-- ⚡ **并发处理**，快速检查多个包（3-5倍速度提升）
-- 🛠️ 命令行参数支持，灵活使用
-- 🔄 默认交互式更新模式，一键更新包
-- 🧠 智能预发布版本检测和询问
-- 🌍 自动语言检测（中文/英文）
-- 🚀 Cargo 子命令支持（`cargo fresh`）
-- 🌐 双语界面，智能语言切换
-- 🚀 **批量操作** - 自动更新所有包，无需确认
-- 🔍 **包过滤** - 用 `--filter` 保留匹配的包，用 `--exclude`（可重复）剔除，均支持通配符
-- 🧪 **预演模式** - 用 `--dry-run` 预览将要执行的 cargo 命令，不做任何改动
-- 📦 **来源感知更新** - 支持 crates.io、`git`（`--git URL [--rev]`）和本地 `path` 安装，带 `[git]` / `[path]` 标记
-- 🛡️ **增强错误处理** - 智能重试机制和用户友好的错误消息
-- 📊 **快速版本检查** - 直连 crates.io sparse index，连接池 + 并发限流（失败时回退 `cargo search`）
-- ⚡ **快速安装** - 进程内二进制下载器直接流式拉取 GitHub Release tarball，可用时校验 sha256，原子化安装——无需 `cargo binstall` 子进程。非 GitHub 或不支持的包回退到原生 `cargo install`
-- 🚀 **并发更新** - `-j N` / `--jobs N` 同时跑最多 N 个包的更新（默认 4，`0` 表示无限制，`1` 退回串行）。rustup 风格的堆叠进度行
-- 🐙 **GitHub Releases API** - probe + fetch 用 `GET /repos/{owner}/{repo}/releases/tags/{tag}` 一次性拿到匹配的 asset（API 不可达时自动回退 HEAD probe）。设置 `GITHUB_TOKEN` / `GH_TOKEN`，或 `gh auth login` 已配置时,配额从 60/hr 提升到 5000/hr
+- [亮点](#亮点)
+- [安装](#安装)
+- [快速开始](#快速开始)
+- [CLI 参考](#cli-参考)
+- [退出码](#退出码)
+- [JSON 输出](#json-输出)
+- [Shell 补全](#shell-补全)
+- [输出示例](#输出示例)
+- [语言检测](#语言检测)
+- [稳定性承诺](#稳定性承诺)
+- [与 cargo-update 的区别](#与-cargo-update-的区别)
+- [贡献](#贡献)
+- [许可证](#许可证)
+
+## 亮点
+
+- **快速版本检查** —— 直接走 crates.io sparse index（HTTP，每包约 50–100 ms），共享连接池 + 16 路并发上限。仅在 sparse index 不可达时回退 `cargo search`。
+- **来源感知更新** —— crates.io、`git+URL [--rev]`、`path+DIR` 各自使用正确的 `cargo install` 策略；输出带 `[git]` / `[path]` 标记。
+- **进程内二进制下载器** —— 通过 GitHub Releases API（不可达时 HEAD probe 回退）直接拉取 Release tarball，存在 `.sha256` 边车时校验，原子安装到 `~/.cargo/bin`。**不**调用 `cargo binstall`。
+- **并发更新** —— `-j N` / `--jobs N`（默认 4）以 rustup 风格的堆叠进度行并发更新；`-j 1` 退回完全串行。
+- **过滤** —— `--filter PATTERN` 保留匹配，`--exclude PATTERN`（可重复）剔除；均支持通配符（`*`、`?`、`[abc]`）。
+- **`--dry-run`** 仅打印将要执行的 `cargo install …` 命令，不做任何改动。
+- **`--format=json`** 在 stdout 输出一行机器可读 JSON（Draft 2020-12 schema，`schema_version=2`），并禁用所有 spinner / 提示。契约稳定；大版本内仅做加性变更。
+- **保留安装选项** —— 从 `.crates2.json` 读取 `--features` / `--no-default-features` / `--all-features` 并在更新时回填。
+- **双语界面** —— 通过 `LANG` / `LC_ALL` / `LC_CTYPE` 自动切换中英文。
 
 ## 安装
 
@@ -49,451 +54,302 @@
 
 ```bash
 cargo install cargo-fresh
-```
-or
-```bash
-# 使用预编译二进制文件进行快速安装
+# 或者，如果已经有 cargo-binstall：
 cargo binstall cargo-fresh
 ```
 
-**注意**: cargo-fresh 通过 GitHub Releases API 直接拉取 GitHub Release 二进制（API 不可达时自动回退到 HEAD probe），并在进程内流式下载——不会调用、不依赖、也不会自动安装 `cargo binstall`。GitHub API 匿名配额是 60 次/小时;设置 `GITHUB_TOKEN`（或 `GH_TOKEN`，或已配置 `gh auth login`）可提升到 5000 次/小时——主要在 `--check-prebuilt` 批量探测多个包时才会触及配额。
+cargo-fresh 通过 GitHub Releases API（不可达时回退 HEAD probe）直接拉取 GitHub Release 二进制，**不**调用、**不**依赖、**也不会**自动安装 `cargo binstall`。GitHub API 匿名配额是 60 次/小时；设置 `GITHUB_TOKEN`（或 `GH_TOKEN`，或已配置 `gh auth login`）可提升到 5 000 次/小时——主要在 `--check-prebuilt` 批量探测多个包时才会触及配额。
 
 ### 从源码安装
 
 ```bash
-# 克隆项目
 git clone https://github.com/jenkinpan/cargo-fresh.git
 cd cargo-fresh
-
-# 构建并安装
 cargo install --path .
 ```
 
-### 从 GitHub 安装
+### 直接从 GitHub 安装
 
 ```bash
 cargo install --git https://github.com/jenkinpan/cargo-fresh.git
 ```
 
-## 语言支持
-
-工具会自动检测您的系统语言并相应显示界面：
-
-- **中文环境**：自动显示中文界面
-- **英文环境**：自动显示英文界面
-- **语言检测**：基于系统环境变量（LANG, LC_ALL, LC_CTYPE）
-
-您也可以通过设置环境变量手动覆盖语言：
+## 快速开始
 
 ```bash
-# 强制英文界面
-LANG=en_US.UTF-8 cargo fresh
-
-# 强制中文界面
-LANG=zh_CN.UTF-8 cargo fresh
-```
-
-## 使用方法
-
-### 基本使用
-
-安装后，您可以通过以下两种方式使用：
-
-```bash
-# 方式1：作为 cargo 子命令（推荐）
+# 交互模式：列出可更新包，选要装的
 cargo fresh
 
-# 方式2：直接调用
-cargo-fresh
-```
-
-### 命令行选项
-
-- `-v, --verbose`: 显示详细信息
-- `-u, --updates-only`: 只显示有更新的包
-- `--no-interactive`: 非交互模式（默认是交互模式）
-- `--include-prerelease`: 包含预发布版本（alpha、beta、rc 等）
-- `--batch`: 批量模式 - 自动更新所有包，无需确认
-- `--filter <模式>`: 仅保留匹配该通配符模式的包（`*`、`?`、`[abc]`）
-- `--exclude <模式>`: 剔除匹配该通配符模式的包；可重复，在 `--filter` 之后应用
-- `--dry-run`: 打印将要执行的 cargo 命令但不实际执行
-- `--registry-url <URL>`: 覆盖 sparse index 的 base URL（镜像支持）
-- `--format <FORMAT>`: `human`（默认）或 `json`（供 CI 消费）
-- `--check-prebuilt`: 在检查阶段用 cargo-fresh 自己的下载器（GitHub Releases API + HEAD probe 兜底）探测每个候选包，标记是否有预编译产物（`[prebuilt]`）/ 会回退到源码编译（`[source]`）/ 结果不确定（`[unknown]`）。默认关闭——每次探测会发起若干 HTTP 请求；API 配额健康时通常亚秒级。不再 spawn `cargo` 子进程，也不需要 `cargo-binstall`
-- `-j, --jobs <N>`: 并发更新的包数上限。默认 `4`；`0` 表示无限制（每个选中包一个任务）；`1` 退回 0.11.x 串行行为。`cargo install` 回退路径会在 cargo 的 `$CARGO_HOME` 锁上自然排队，不受此参数影响
-- `-h, --help`: 显示帮助信息
-- `-V, --version`: 显示版本信息
-
-### 示例
-
-```bash
-# 检查所有包并显示详细信息
-cargo fresh --verbose
-
-# 只显示有更新的包
-cargo fresh --updates-only
-
-# 组合使用
-cargo fresh --verbose --updates-only
-
-# 默认交互模式（推荐）
-cargo fresh
-
-# 只显示有更新的包（交互模式）
-cargo fresh --updates-only
-
-# 非交互模式
-cargo fresh --no-interactive
-
-# 包含预发布版本检查（交互模式）
-cargo fresh --include-prerelease
-
-# 非交互模式 + 预发布版本
-cargo fresh --no-interactive --include-prerelease
-
-# 批量模式 - 自动更新所有包，无需确认
+# 无提示直接全部更新
 cargo fresh --batch
 
-# 按名称模式过滤包（支持通配符模式）
-cargo fresh --filter "cargo*"              # 只检查以 "cargo" 开头的包
-cargo fresh --filter "*mdbook*"            # 只检查包含 "mdbook" 的包
-cargo fresh --filter "nu*"                 # 只检查以 "nu" 开头的包
+# 预览将执行的 cargo 命令，不改动任何东西
+cargo fresh --dry-run --batch
 
-# 按通配符模式排除包（可重复，在 --filter 之后应用）
-cargo fresh --exclude "cargo-fresh"                  # 检查除 cargo-fresh 外的所有包
-cargo fresh --exclude "ripgrep" --exclude "tokei"    # 跳过多个包
-cargo fresh --filter "cargo*" --exclude "cargo-fresh"  # cargo* 包，但排除 cargo-fresh
+# 只更新匹配的包
+cargo fresh --batch --filter "cargo-*"
 
-# 预演：预览将要执行的 cargo 命令，不做任何改动
-cargo fresh --dry-run                      # 预览所有包的更新
-cargo fresh --dry-run --batch              # 预览完整的批量更新
-
-# 组合新选项与现有选项
-cargo fresh --batch --filter "cargo*"      # 批量更新只更新 cargo 包
-cargo fresh --verbose --filter "*mdbook*"  # 详细检查 mdbook 包
-cargo fresh --batch --updates-only        # 批量更新只更新有更新的包
-
-# 生成 shell 补全脚本
-cargo fresh completion zsh    # 生成 zsh 补全
-cargo fresh completion bash   # 生成 bash 补全
-cargo fresh completion fish   # 生成 fish 补全
-
-# 生成 cargo fresh 子命令补全
-cargo fresh completion zsh --cargo-fresh    # 生成 cargo fresh zsh 补全
-cargo fresh completion bash --cargo-fresh   # 生成 cargo fresh bash 补全
+# CI 检查：有更新即 exit 1
+cargo fresh --format=json
 ```
 
-### Shell 补全安装
+## CLI 参考
 
-#### Zsh
+| 参数 | 说明 |
+|------|------|
+| `-v, --verbose` | 显示每个包的检查细节 |
+| `-u, --updates-only` | 只列出有更新的包 |
+| `--no-interactive` | 跳过交互提示；仅列出更新但不安装（要安装请加 `--batch`） |
+| `--batch` | 无提示直接应用所有选中的更新 |
+| `--include-prerelease` | 把 `α / β / rc` 版本视为候选 |
+| `--filter <PATTERN>` | 只保留匹配 glob 的包（`*`、`?`、`[abc]`） |
+| `--exclude <PATTERN>` | 剔除匹配的包；可重复；在 `--filter` 之后应用 |
+| `--dry-run` | 打印将要执行的 `cargo install …` 命令而不真正运行 |
+| `--registry-url <URL>` | 覆盖 sparse-index 基础 URL（镜像支持） |
+| `--no-cargo-search-fallback` | sparse index 失败时不回退 `cargo search`（等价 `CARGO_FRESH_NO_FALLBACK=1`） |
+| `--check-prebuilt` | 探测每个候选包，标记 `[prebuilt]` / `[source]` / `[unknown]`。默认关——每包会发几个 HEAD 请求 |
+| `-j, --jobs <N>` | 并发更新数。默认 `4`；`0` = 不限；`1` = 串行。`cargo install` 回退路径会在 cargo 的 `$CARGO_HOME` 锁上自然串行化 |
+| `--format <FORMAT>` | `human`（默认）或 `json` |
+| `-h, --help` / `-V, --version` | 帮助 / 版本 |
+
+子命令：`cargo fresh completion <shell> [--install] [--yes]`（见 [Shell 补全](#shell-补全)）以及 `cargo fresh man`（stdout 是 TTY 时调系统 `man`，否则输出 raw roff）。
+
+## 退出码
+
+自 0.10.0 起的稳定契约：
+
+| 码值 | 含义 |
+|------|------|
+| 0    | 没有可用更新，或选中的更新全部成功 |
+| 1    | 有可用更新但未应用（`--format=json` 未配合 `--batch`，或 `--no-interactive` 且没有选中任何包） |
+| 2    | 至少一个更新失败 |
+| 130  | 用户按下 Ctrl-C；剩余包跳过 |
+
 ```bash
-# 生成并安装 zsh 补全
-cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
-# 或者为 cargo fresh 子命令
-cargo-fresh completion zsh --cargo-fresh > ~/.zsh/completions/_cargo
+# 任意全局包有更新即让 CI 失败
+cargo fresh --format=json
+# → 有更新则 exit 1，否则 0
 
-# 添加到你的 ~/.zshrc
-echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
-echo 'autoload -U compinit && compinit' >> ~/.zshrc
+# CI 全量更新，任一失败即非零
+cargo fresh --format=json --batch
+# → 任一失败则 exit 2，否则 0
 ```
 
-#### Bash
+## JSON 输出
+
+`--format=json` 在 **stdout** 输出一个 JSON 对象，所有状态行 / 错误 / 提示走 **stderr**。因此 `cargo fresh --format=json | jq '.'` 可直接消费，`cargo fresh > /dev/null` 仍能在终端看到进度。
+
+完整 schema 见 [`docs/json-schema.json`](docs/json-schema.json)（JSON Schema Draft 2020-12）。`schema_version=2` 是 1.0 之前最后一次破坏性 schema 变更（重命名了 `updates_available[].binstall` → `prebuilt`，枚举 `source_build` → `source`）；在 `schema_version=2` 内字段只增不改。
+
+在原始 `1` 形态之上 `schema_version=2` 已加入的字段：
+
+- **`skipped[].reason_code`** —— 稳定枚举（`path_source` / `git_source` / `unknown_source`）。脚本判断请用这个而非 `reason` 字符串。
+- **`version_check_errors[]`** —— 版本查询失败的包，含 `name`、`kind`（`not_found` / `unavailable`）、可读 `error`。这些包不会出现在 `updates_available[]` 里。
+- **`summary.selected` / `attempted` / `check_errors`** —— 已选 / 已尝试安装 / 查询失败的包数。
+
 ```bash
-# 生成并安装 bash 补全
-cargo-fresh completion bash > ~/.local/share/bash-completion/completions/cargo-fresh
-# 或者为 cargo fresh 子命令
-cargo-fresh completion bash --cargo-fresh > ~/.local/share/bash-completion/completions/cargo
+# 列出所有可更新包名
+cargo fresh --format=json | jq -r '.updates_available[].name'
 
-# 在你的 ~/.bashrc 中加载
-echo 'source ~/.local/share/bash-completion/completions/cargo-fresh' >> ~/.bashrc
+# 批量更新后的失败计数
+cargo fresh --format=json --batch | jq '.summary.failed'
+
+# 仅 git 源的候选
+cargo fresh --format=json | jq '.updates_available[] | select(.source == "git")'
+
+# 检测是否被 Ctrl-C 打断
+cargo fresh --format=json --batch | jq '.aborted'
+
+# 列出版本查询失败的包（网络抖动等）
+cargo fresh --format=json | jq '.version_check_errors[]'
+
+# 用稳定枚举判断跳过原因
+cargo fresh --format=json | jq '.skipped[] | select(.reason_code == "git_source")'
 ```
 
-#### Fish
+## Shell 补全
+
+支持的 shell：**bash**、**zsh**、**fish**、**powershell**、**elvish**、**nushell**。
+
+### 推荐：交互式安装
+
 ```bash
-# 生成并安装 fish 补全
-cargo-fresh completion fish > ~/.config/fish/completions/cargo-fresh.fish
-# 或者为 cargo fresh 子命令
-cargo-fresh completion fish --cargo-fresh > ~/.config/fish/completions/cargo.fish
+cargo fresh completion <shell> --install
 ```
 
-#### Nushell
-```bash
-# 生成并安装 nushell 补全
-cargo-fresh completion nushell > ~/.config/nushell/completions/cargo-fresh.nu
-# 或者为 cargo fresh 子命令
-cargo-fresh completion nushell --cargo-fresh > ~/.config/nushell/completions/cargo.nu
+`--install` 会弹出一个 MultiSelect 选择器（空格切换，回车确认）：
+
 ```
+选择要安装的补全（空格切换，回车确认）
+> [x] cargo-fresh<TAB>  —— 顶层二进制补全
+  [x] cargo fresh<TAB>  —— cargo 子命令补全
+```
+
+两项默认全选。`cargo-fresh<TAB>` 让独立二进制可补全；`cargo fresh<TAB>` 让 cargo 子命令形式可补全。大多数用户两个都需要。
+
+加 `--yes` 可跳过提示直接装两个（适合脚本 / CI）：
+
+```bash
+cargo fresh completion fish --install --yes
+```
+
+若目标文件已存在会逐个询问是否覆盖。对于默认目录不在自动加载路径上的 shell（zsh / powershell / elvish / nushell），cargo-fresh 会用一行 `Hint` 给出确切要在 `~/.zshrc` / `$PROFILE` / `rc.elv` / `config.nu` 里加的那行配置。
+
+### 安装路径
+
+| Shell | 顶层（`cargo-fresh<TAB>`） | cargo 子命令（`cargo fresh<TAB>`） |
+|-------|----------------------------|------------------------------------|
+| bash       | `~/.local/share/bash-completion/completions/cargo-fresh` | `~/.local/share/bash-completion/completions/cargo` |
+| zsh        | `~/.zfunc/_cargo-fresh`（需把 `~/.zfunc` 加入 `$fpath`） | `~/.zfunc/_cargo` |
+| fish       | `~/.config/fish/completions/cargo-fresh.fish` | `~/.config/fish/completions/cargo.fish` |
+| nushell    | `~/.config/nushell/completions/cargo-fresh.nu` | `~/.config/nushell/completions/cargo.nu` |
+| elvish     | `~/.config/elvish/lib/cargo-fresh.elv` | `~/.config/elvish/lib/cargo.elv` |
+| powershell | `~/.config/powershell/cargo-fresh.ps1` | `~/.config/powershell/cargo.ps1` |
+
+设置了 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` 时优先使用。
+
+### 手动安装（重定向 stdout）
+
+如果你想自己选目录，去掉 `--install` 用重定向：
+
+```bash
+# 顶层二进制补全
+cargo fresh completion zsh > ~/.zfunc/_cargo-fresh
+
+# cargo 子命令形式
+cargo fresh completion zsh --cargo-fresh > ~/.zfunc/_cargo
+```
+
+`--cargo-fresh` 用来在两份脚本之间切换。配合 `--install` 时该标志被忽略——选择器已经覆盖两个目标。
 
 ## 输出示例
 
-cargo-fresh 采用 cargo 风格的状态格式：12 字符右对齐的加粗动词 + 内容。
-颜色承载语义——绿色（成功）、黄色（警告）、红色（失败）、灰色（次要信息）。
-全程无 emoji。
+cargo-fresh 使用 cargo 风格状态行：12 字符右对齐加粗动词 + 内容。颜色携带语义——绿（成功）、黄（警告）、红（失败）、暗（次要）。无 emoji。
 
 ### 交互模式（默认）
 
 ```text
-    Checking 全局 cargo 包更新
-       Found 5 个已安装的包
+    Checking for updates to globally installed packages
+       Found 5 installed package(s)
        Fresh ripgrep 14.1.1
     Updating cargo-outdated 0.16.0 -> 0.17.0
     Updating devtool 0.2.4 -> 0.2.5
 
-可用更新：
-稳定版更新：
+Updates available:
+Stable updates:
     Updating cargo-outdated 0.16.0 -> 0.17.0
     Updating devtool 0.2.4 -> 0.2.5
-预发布版更新：
-  Prerelease mdbook 0.4.52 -> 0.5.0-alpha.1
 
-更新这些包？ y
-是否包含预发布版？ n
-选择要更新的包（空格切换，回车确认）
+Update these packages? y
+Select packages (space to toggle, enter to confirm)
 > [x] cargo-outdated
 > [x] devtool
 
-    Updating 选中的包
-    cargo-outdated  resolving
-    cargo-outdated  [#####################>                ] 1.2 MiB/2.1 MiB
-    cargo-outdated  installed 2.10 MiB
-          devtool  resolving
-          devtool  installed 1.42 MiB
+  cargo-outdated  resolving
+  cargo-outdated  [######################>      ] 1.2 MiB/2.1 MiB
+  cargo-outdated  installed 2.10 MiB
+         devtool  resolving
+         devtool  installed 1.42 MiB
 
-更新摘要
-       预编译 cargo-outdated, devtool
-    Finished 2 个成功, 耗时 4.2s
+Update Summary
+    Prebuilt cargo-outdated, devtool
+    Finished 2 succeeded, in 4.2s
 ```
 
-每一行是 `MultiProgress` 持有的实时进度行：
-`pending` → `resolving` → `downloading X.X MiB`（或已知 `Content-Length` 时显示字节进度条）→ `installed X.XX MiB`，
-完成后定格成静态行,屏幕上累积保留完整历史。带 `-j N`（默认 4）时多个行并发推进；最终的摘要按输入顺序列出每个包,与完成顺序无关。
+每行是 `MultiProgress` 上的一行实时状态：`pending` → `resolving` → `downloading X.X MiB`（当 `Content-Length` 已知时显示进度条）→ `installed X.XX MiB`，结束后固化为静态行，屏幕累积完整历史。配合 `-j N`（默认 4）这些行并发更新；最终摘要按选择顺序列包名，与完成顺序无关。
 
 ### 预演模式
 
-`--dry-run` 打印将要执行的 cargo 命令但不做任何改动：
-
 ```text
-    Checking 全局 cargo 包更新
-       Found 5 个已安装的包
+    Checking for updates to globally installed packages
+       Found 5 installed package(s)
     Updating cargo-outdated 0.16.0 -> 0.17.0
 
-     Dry run 不会实际修改任何包
+    Dry run no packages will be modified
    Would run cargo-outdated: cargo install --force cargo-outdated --version 0.17.0
 ```
 
 ### 非交互模式
 
-`--no-interactive` 模式只列出可用更新，不更新任何包（用 `--batch` 自动更新）：
+`--no-interactive` 只列出可更新包但不安装（需要安装请加 `--batch`）：
 
 ```text
-    Checking 全局 cargo 包更新
-       Found 5 个已安装的包
+    Checking for updates to globally installed packages
+       Found 5 installed package(s)
        Fresh ripgrep 14.1.1
     Updating mdbook 0.4.52 -> 0.5.0-alpha.1
-       Note 未选择任何包
+       Note no packages selected
 ```
 
-git 和 path 安装会带一个灰色的 `[git]` / `[path]` 标记，例如
-`    Updating my-tool 0.1.0 -> 0.2.0 [git]`。
+git / path 安装会带一个暗色 `[git]` / `[path]` 标记，例如 `Updating my-tool 0.1.0 -> 0.2.0 [git]`。
 
-## Shell 补全支持
+## 语言检测
 
-`cargo-fresh` 支持多种 shell 的自动补全功能，让命令行使用更加便捷。
+cargo-fresh 通过 `LANG` / `LC_ALL` / `LC_CTYPE` 自动检测语言：
 
-### 支持的 Shell
+- `zh*` 区域 → 中文界面
+- 其它 → 英文界面
 
-- **Zsh** - 完整的补全支持
-- **Bash** - 基础补全支持
-- **Fish** - 原生补全支持
-- **PowerShell** - Windows 补全支持
-- **Elvish** - 现代 shell 补全支持
-- **Nushell** - Nushell 补全支持
-
-### 安装补全
-
-#### 手动安装
+按需覆盖：
 
 ```bash
-# 1. 生成补全脚本
-cargo fresh completion zsh > ~/.zsh_completions/cargo-fresh.zsh
-
-# 2. 添加到 zsh 配置
-echo 'fpath=($HOME/.zsh_completions $fpath)' >> ~/.zshrc
-echo 'autoload -U compinit && compinit' >> ~/.zshrc
-
-# 3. 重新加载配置
-source ~/.zshrc
+LANG=en_US.UTF-8 cargo fresh   # 强制英文
+LANG=zh_CN.UTF-8 cargo fresh   # 强制中文
 ```
 
-#### Cargo Fresh 子命令补全
+## 稳定性承诺
 
-为 `cargo fresh` 子命令生成补全：
+1.0 前仍可能有破坏性变更；1.0.0 之后下表表面均**承诺**遵循 semver：
 
-```bash
-# 生成 cargo fresh 子命令补全
-cargo fresh completion zsh --cargo-fresh > cargo-fresh-completion.zsh
-cargo fresh completion bash --cargo-fresh > cargo-fresh-completion.bash
+| 表面 | 稳定性 |
+|------|--------|
+| 退出码（`0` / `1` / `2` / `130`） | 稳定——同一大版本内不复用 / 不删除 |
+| `--format=json` 输出，`schema_version=2` | 仅加性——可新增字段，但不重命名 / 不改类型 |
+| `--help` 列出的 CLI 参数 | 稳定——弃用前至少留一个小版本周期警告 |
+| 来源感知的安装行为（crates / git / path） | 稳定 |
+| 人类可读的状态动词（`Checking`、`Updating` 等） | **不**稳定——措辞、颜色、对齐可能因 UX 而变 |
+| 本地化文案（中 / 英） | **不**稳定——会有措辞微调，请不要在 `stdout` 上 grep |
+| 内部模块 / 库 API（`cargo_fresh::*`） | **不**稳定——`src/lib.rs` 服务于集成测试，不是下游 API |
 
-# 安装 cargo fresh 补全
-source cargo-fresh-completion.zsh  # For zsh
-source cargo-fresh-completion.bash # For bash
-```
+脚本对接请锚定退出码与 `--format=json`，绝不要锚定带颜色的状态行。
 
-#### 其他 Shell 安装
+## 与 cargo-update 的区别
 
-```bash
-# Bash 补全
-cargo fresh completion bash > ~/.bash_completions/cargo-fresh.bash
-echo 'source ~/.bash_completions/cargo-fresh.bash' >> ~/.bashrc
+[`cargo-update`](https://github.com/nabijaczleweli/cargo-update) 是这个生态里历史最久的工具。cargo-fresh 不是 fork，而是另起的实现——下面是促使我重新做的差异：
 
-# Fish 补全
-cargo fresh completion fish > ~/.config/fish/completions/cargo-fresh.fish
+| | cargo-fresh | cargo-update |
+|---|---|---|
+| **版本来源** | crates.io sparse index（HTTP，每包约 50–100 ms，16 路并发） | 每个包跑一次 `cargo search` 子进程 |
+| **来源感知更新** | crates / `git+URL` / `path+DIR` 各自使用正确的 install 命令 | 注册表 + git；无 `path` 源 |
+| **包选择** | `--filter "tokio*"` + `--exclude "*-test"`（globset） | 必须精确包名或 `--all`（不支持 glob/子串） |
+| **预发布处理** | 显式 `--include-prerelease`；用 semver `.pre` 判断 | 每包通过 `cargo-install-update-config` 单独开关 |
+| **JSON 模式** | `--format=json`，`schema_version=2` 带版本 | 无 |
+| **i18n** | 中英文经 `LANG` 自动切换 | 仅英文 |
+| **Dry-run 预览** | 打印每包确切的 `cargo install` 命令 | 列出会更新哪些 |
+| **二进制安装** | 进程内：GitHub Releases API + sha256 校验 + 原子安装 | 可用时调 `cargo binstall` 子进程 |
+| **并发** | `-j N` 并发更新（默认 4）+ 16 路并发 index/HEAD probe | 串行更新 |
+| **保留安装选项** | 是——从 `.crates2.json` 读取 features | 是——features/profile + 单包 `cargo-install-update-config` |
+| **CI 友好** | 退出码 0/1/2/130 + JSON + 非 TTY 自动降级 | 标准退出码 |
 
-# PowerShell 补全
-cargo fresh completion powershell > cargo-fresh.ps1
-```
-
-### 使用方法
-
-安装完成后，您可以通过两种方式使用自动补全：
-
-#### 直接命令补全
-```bash
-cargo fresh <TAB>
-# 显示所有可用选项：
-# --batch  --dry-run  --exclude  --filter  --help  --include-prerelease
-# --no-interactive  --updates-only  --verbose  --version
-```
-
-#### Cargo 子命令补全
-```bash
-cargo <TAB>        # 显示 'fresh' 作为子命令
-cargo fresh <TAB>  # 显示所有 fresh 选项和参数
-```
-
-## 技术特性
-
-- **Sparse Index 检查**: 直接通过 HTTP 查询 crates.io sparse index（共享连接池、并发限流），不再为每个包启动 `cargo search`；仅在索引不可达时回退到 `cargo search`
-- **并发处理**: 使用 Tokio 异步运行时并发检查包
-- **基于 semver 的比较**: 使用真正的 semver 排序，被 yank 的版本回滚不会误报为更新，而 `1.0.0+build` 重新发布会
-- **来源感知更新**: 检测 crates.io / git / path 安装来源，为每种来源选择正确的 `cargo install` 策略
-- **智能版本检测**: 自动区分稳定版本和预发布版本
-- **交互式界面**: 用户友好的命令行交互体验
-- **彩色输出**: 美观的终端输出，清晰的状态显示
-- **增强错误处理**: 智能重试机制，指数退避和用户友好的错误消息
-- **批量操作**: 支持自动化批量更新，无需用户确认
-- **包过滤**: 高级过滤功能，支持通配符模式
-- **类型安全**: Rust 类型系统保证代码安全性
-- **进度条**: 实时显示更新进度，提升用户体验
-- **Shell 补全**: 支持多种 shell 的自动补全功能
-- **语言检测**: 自动系统语言检测和界面适配
-- **Cargo 集成**: 原生 cargo 子命令支持，无缝工作流
-- **双语支持**: 完整的中英文界面，智能切换
-- **模块化架构**: 清晰、可维护的代码结构，分离模块
-
-## Shell 补全故障排除
-
-### 常见问题
-
-#### 补全不工作
-如果 shell 补全不工作，请尝试以下步骤：
-
-1. **验证补全安装**：
-   ```bash
-   # 检查补全文件是否存在
-   ls ~/.zsh/completions/_cargo-fresh  # 对于 zsh
-   ls ~/.local/share/bash-completion/completions/cargo-fresh  # 对于 bash
-   ```
-
-2. **重新加载 shell 配置**：
-   ```bash
-   # 对于 zsh
-   source ~/.zshrc
-   
-   # 对于 bash
-   source ~/.bashrc
-   
-   # 对于 fish
-   # 重启 fish shell
-   ```
-
-3. **重新生成补全文件**：
-   ```bash
-   # 生成新的补全文件
-   cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
-   cargo-fresh completion bash > ~/.local/share/bash-completion/completions/cargo-fresh
-   ```
-
-#### 补全中缺少选项
-如果你注意到补全中缺少某些选项：
-
-1. **更新 cargo-fresh**：
-   ```bash
-   cargo install --force cargo-fresh
-   ```
-
-2. **重新生成补全文件**：
-   ```bash
-   cargo-fresh completion zsh > ~/.zsh/completions/_cargo-fresh
-   ```
-
-3. **验证补全包含新选项**：
-   ```bash
-   grep -E "(batch|filter)" ~/.zsh/completions/_cargo-fresh
-   ```
-
-#### Cargo fresh 子命令补全
-对于 `cargo fresh` 子命令补全：
-
-1. **生成 cargo fresh 补全**：
-   ```bash
-   cargo-fresh completion zsh --cargo-fresh > ~/.zsh/completions/_cargo
-   ```
-
-2. **验证 cargo 补全**：
-   ```bash
-   cargo <TAB>  # 应该显示 'fresh' 作为子命令
-   cargo fresh <TAB>  # 应该显示所有 fresh 选项
-   ```
+cargo-update 更成熟。两者都会保留安装时的 features；cargo-update 额外保留 build profile，且支持每包配置。按需选用——两个都是健康项目。
 
 ## 贡献
 
-欢迎贡献代码！请遵循以下步骤：
+详见 [CONTRIBUTING.md](CONTRIBUTING.md)。摘要：
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+1. Fork → 分支 → 提交 → PR。
+2. 推送前 `cargo clippy --all-targets -- -D warnings` 和 `cargo test` 都必须绿。
+3. 用户可见变更需要 `CHANGELOG.md` 的 `[Unreleased]` 条目 + 同步 README。
+
+安全问题：见 [SECURITY.md](SECURITY.md)，请不要直接开 issue。
 
 ## 许可证
 
-本项目采用 Apache 2.0 许可证。查看 [LICENSE](LICENSE) 文件了解完整的许可证条款。
-
-### 许可证摘要
-
-Apache 2.0 许可证是一个宽松的开源许可证，允许您：
-
-- ✅ **商业使用** - 在商业项目中使用
-- ✅ **修改** - 修改源代码
-- ✅ **分发** - 分发原始或修改后的代码
-- ✅ **私人使用** - 私人使用
-- ✅ **专利使用** - 使用相关专利
-- ✅ **专利授权** - 自动授予专利许可
-
-**主要要求**：
-- 在分发时必须包含原始许可证和版权声明
-- 必须说明对源代码的修改
-- 不能使用项目名称、商标或产品名称进行推广
-
-### 版权信息
-
-Copyright (c) 2025 Jenkin Pan
-
-本项目基于 Apache 2.0 许可证开源，详见 [LICENSE](LICENSE) 文件。
+Apache 2.0 —— 见 [LICENSE](LICENSE)。版权所有 (c) 2025 Jenkin Pan。
 
 ## 相关链接
 
 - [Crates.io](https://crates.io/crates/cargo-fresh)
-- [GitHub Repository](https://github.com/jenkinpan/cargo-fresh)
+- [GitHub 仓库](https://github.com/jenkinpan/cargo-fresh)
 - [Issues](https://github.com/jenkinpan/cargo-fresh/issues)
+- [Wiki](https://github.com/jenkinpan/cargo-fresh/wiki) —— 食谱、FAQ、故障排查
