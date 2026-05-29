@@ -439,6 +439,13 @@ async fn try_downloader_install(
     // 先从 crates.io API 拿 repo_url；拿不到直接走 cargo install
     let client = crate::package::http_client();
     let repo_url = crate::package::crates_api::fetch_repo_url(client, package_name).await;
+    crate::display::status_debug(
+        "downloader",
+        &format!(
+            "{package_name}: repo_url={}",
+            repo_url.as_deref().unwrap_or("<none>")
+        ),
+    );
     if repo_url.is_none() {
         pb_status_dim(
             pb,
@@ -452,6 +459,10 @@ async fn try_downloader_install(
     let bins = crate::package::registry::cargo_home()
         .map(|home| crate::package::crates2::lookup_bins(&home, package_name))
         .unwrap_or_default();
+    crate::display::status_debug(
+        "downloader",
+        &format!("{package_name}: bins={:?}", bins),
+    );
 
     let (tx, mut rx) = mpsc::unbounded_channel::<ProgressEvent>();
     let spec = InstallSpec {
@@ -590,6 +601,20 @@ pub async fn update_package(
     // - Crates 源 + 自定义 features：直接走 cargo install（downloader 不支持任意 features）。
     // - Git / Path 源：cargo install（downloader 仅支持 crates.io 包）。
     let opts_allow_downloader = install_opts.is_none_or(|o| o.is_default());
+
+    crate::display::status_debug(
+        "updater",
+        &format!(
+            "{package_name}: source={} default_features={} → {}",
+            source.kind_str(),
+            opts_allow_downloader,
+            if matches!(source, PackageSource::Crates) && opts_allow_downloader {
+                "downloader (fallback: cargo install)"
+            } else {
+                "cargo install"
+            }
+        ),
+    );
 
     if verbose {
         if install_opts.is_none() && matches!(source, PackageSource::Crates) {

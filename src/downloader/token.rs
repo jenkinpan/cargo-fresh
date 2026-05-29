@@ -13,39 +13,56 @@
 
 use std::sync::OnceLock;
 
-static TOKEN_CACHE: OnceLock<Option<String>> = OnceLock::new();
+static TOKEN_CACHE: OnceLock<(Option<String>, &'static str)> = OnceLock::new();
 
 /// 生产路径:once-per-process discover + cache。
 pub fn discover_token() -> Option<&'static str> {
     TOKEN_CACHE
-        .get_or_init(discover_token_uncached)
+        .get_or_init(discover_with_source)
+        .0
         .as_deref()
 }
 
-/// 测试/重新查的路径:每次都走全套流程。
-pub fn discover_token_uncached() -> Option<String> {
+/// 给 `--debug` 用:汇报 token 取自哪条来源(`env:GITHUB_TOKEN` / `env:GH_TOKEN`
+/// / `gh` / `none`)。共用 `discover_token` 的 OnceLock cache,所以不会重复
+/// spawn `gh` 子进程。
+pub fn discover_token_source() -> &'static str {
+    TOKEN_CACHE.get_or_init(discover_with_source).1
+}
+
+fn discover_with_source() -> (Option<String>, &'static str) {
     if let Ok(t) = std::env::var("GITHUB_TOKEN") {
         if !t.is_empty() {
-            return Some(t);
+            return (Some(t), "env:GITHUB_TOKEN");
         }
     }
     if let Ok(t) = std::env::var("GH_TOKEN") {
         if !t.is_empty() {
-            return Some(t);
+            return (Some(t), "env:GH_TOKEN");
         }
     }
     // `gh auth token` 失败/不存在静默兜底为 None —— 用户没装 gh CLI 是常态
-    let out = std::process::Command::new("gh")
+    let Some(out) = std::process::Command::new("gh")
         .args(["auth", "token"])
         .output()
-        .ok()?;
+        .ok()
+    else {
+        return (None, "none");
+    };
     if !out.status.success() {
-        return None;
+        return (None, "none");
     }
-    let s = String::from_utf8(out.stdout).ok()?.trim().to_string();
+    let Some(s) = String::from_utf8(out.stdout).ok().map(|s| s.trim().to_string()) else {
+        return (None, "none");
+    };
     if s.is_empty() {
-        None
+        (None, "none")
     } else {
-        Some(s)
+        (Some(s), "gh")
     }
+}
+
+/// 测试/重新查的路径:每次都走全套流程,不命中 OnceLock。
+pub fn discover_token_uncached() -> Option<String> {
+    discover_with_source().0
 }

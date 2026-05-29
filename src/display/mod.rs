@@ -20,6 +20,20 @@ pub fn is_json_mode() -> bool {
     JSON_MODE.load(Ordering::SeqCst)
 }
 
+/// `--debug` 开关：开启后 `status_debug` 把内部决策链(downloader 路径选择/
+/// GitHub API tag 试探/token 来源等)写到 stderr。**不属于 1.0 稳定契约**——
+/// 输出格式与内容可能在任意版本里调整。`JSON_MODE` 下仍然输出,因为 JSON
+/// 在 stdout 而 debug 在 stderr,互不污染,且这正是 CI 里 `2>debug.log` 想要的。
+static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_debug_mode(enabled: bool) {
+    DEBUG_MODE.store(enabled, Ordering::SeqCst);
+}
+
+pub fn is_debug_mode() -> bool {
+    DEBUG_MODE.load(Ordering::SeqCst)
+}
+
 /// Cargo 风格状态行的右对齐宽度。
 ///
 /// 与 `cargo build` 输出对齐——12 字符容得下 `Compiling` / `Installing` / `Finished` 等
@@ -87,6 +101,23 @@ pub fn status_dim(verb: &str, msg: &str) {
         return;
     }
     anstream::eprintln!("{}", format_status_line(verb, msg, StatusStyle::Dim));
+}
+
+/// 调试日志:`--debug` 开启时才输出,scope 标识子系统(downloader / updater /
+/// github_api 等),便于过滤(`2>&1 | grep downloader`)。
+///
+/// 故意**不**短路 JSON 模式——debug 走 stderr,JSON 走 stdout,互不干扰;
+/// CI 里 `cargo fresh --format=json --debug 2>debug.log` 是预期用法。
+///
+/// 输出格式不属于 1.0 契约,可在任意版本调整。
+pub fn status_debug(scope: &str, msg: &str) {
+    if !is_debug_mode() {
+        return;
+    }
+    anstream::eprintln!(
+        "{}",
+        format_status_line("debug", &format!("{scope}: {msg}"), StatusStyle::Dim)
+    );
 }
 
 /// 同 `status`，但把输出送到指定的 ProgressBar（避免与活动进度条冲突）。

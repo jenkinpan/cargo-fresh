@@ -143,6 +143,11 @@ async fn run() -> Result<i32> {
     if json_mode {
         set_json_mode(true);
     }
+    // --debug: open the internal-trace stderr channel. Independent of JSON mode
+    // (JSON → stdout, debug → stderr; they coexist for CI 2>debug.log).
+    if cli.debug {
+        cargo_fresh::display::set_debug_mode(true);
+    }
 
     let language = detect_language();
 

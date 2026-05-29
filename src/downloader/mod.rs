@@ -66,6 +66,18 @@ async fn try_api_winning_url(
         format!("{pkg}/v{}", spec.version),
         format!("{pkg}/{}", spec.version),
     ];
+    crate::display::status_debug(
+        "downloader",
+        &format!(
+            "{}: github={}/{} token={} tags={} expected={}",
+            spec.name,
+            owner,
+            repo,
+            token::discover_token_source(),
+            tags.len(),
+            expected.len()
+        ),
+    );
     for tag in &tags {
         match github_api::fetch_release_assets(
             client,
@@ -79,6 +91,10 @@ async fn try_api_winning_url(
         {
             Ok(assets) => {
                 if let Some(asset) = github_api::match_winning_asset(&assets, &expected) {
+                    crate::display::status_debug(
+                        "downloader",
+                        &format!("{}: API tag={} matched asset={}", spec.name, tag, asset.name),
+                    );
                     let archive_fmt = if asset.name.ends_with(".zip") {
                         resolve::ArchiveFmt::Zip
                     } else if asset.name.ends_with(".tar.gz") || asset.name.ends_with(".tgz") {
@@ -92,11 +108,43 @@ async fn try_api_winning_url(
                     });
                 }
                 // 200 but no asset matched — try next tag
+                crate::display::status_debug(
+                    "downloader",
+                    &format!(
+                        "{}: API tag={} 200 but none of {} assets matched",
+                        spec.name,
+                        tag,
+                        assets.len()
+                    ),
+                );
             }
-            Err(github_api::GithubApiError::NotFound) => continue,
-            Err(_) => return None, // rate limited / network / parse — let caller fallback
+            Err(github_api::GithubApiError::NotFound) => {
+                crate::display::status_debug(
+                    "downloader",
+                    &format!("{}: API tag={} 404", spec.name, tag),
+                );
+                continue;
+            }
+            Err(e) => {
+                crate::display::status_debug(
+                    "downloader",
+                    &format!(
+                        "{}: API tag={} error={}, falling back to URL enumeration",
+                        spec.name, tag, e
+                    ),
+                );
+                return None; // rate limited / network / parse — let caller fallback
+            }
         }
     }
+    crate::display::status_debug(
+        "downloader",
+        &format!(
+            "{}: API exhausted {} tags with no match, falling back to URL enumeration",
+            spec.name,
+            tags.len()
+        ),
+    );
     None
 }
 
@@ -139,8 +187,26 @@ pub async fn download_and_install(
     // when API is unreachable / rate-limited / repo isn't on github.com.
     let candidates =
         match try_api_winning_url(client, &spec, repo_url, &targets, &name_candidates).await {
-            Some(winner) => vec![winner],
-            None => resolve::candidate_urls(&name_candidates, &spec.version, repo_url, &targets)?,
+            Some(winner) => {
+                crate::display::status_debug(
+                    "downloader",
+                    &format!("{}: 1 candidate (API winner)", spec.name),
+                );
+                vec![winner]
+            }
+            None => {
+                let urls =
+                    resolve::candidate_urls(&name_candidates, &spec.version, repo_url, &targets)?;
+                crate::display::status_debug(
+                    "downloader",
+                    &format!(
+                        "{}: {} candidates (URL enumeration fallback)",
+                        spec.name,
+                        urls.len()
+                    ),
+                );
+                urls
+            }
         };
 
     let fetched = fetch::fetch(client, &spec.name, &candidates, &events, cancel.clone()).await?;

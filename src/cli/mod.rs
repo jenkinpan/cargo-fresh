@@ -68,6 +68,17 @@ pub struct Cli {
     #[arg(long)]
     pub check_prebuilt: bool,
 
+    /// Emit internal trace lines (downloader path decisions, GitHub Releases
+    /// API tag attempts, token discovery source, candidate counts) to stderr.
+    /// Off by default. Intended for filing actionable issues — paste the
+    /// `2>&1 | grep debug` output into the bug report.
+    ///
+    /// **Not part of the 1.0 stability contract.** The debug output format may
+    /// change in any release; do not parse it. JSON mode (`--format=json`) is
+    /// unaffected — debug lines go to stderr, the JSON report stays on stdout.
+    #[arg(long)]
+    pub debug: bool,
+
     /// Maximum number of packages to update concurrently. `0` means unlimited
     /// (one task per selected package). Default 4 — downloads are network-bound
     /// and the inner HEAD-probe pool already caps connection fan-out, so 4
@@ -600,5 +611,13 @@ mod tests {
     fn parses_check_prebuilt() {
         let cli = Cli::try_parse_from(["cargo-fresh", "--check-prebuilt"]).unwrap();
         assert!(cli.check_prebuilt);
+    }
+
+    #[test]
+    fn parses_debug_flag() {
+        let cli = Cli::try_parse_from(["cargo-fresh", "--debug"]).unwrap();
+        assert!(cli.debug);
+        let cli = Cli::try_parse_from(["cargo-fresh"]).unwrap();
+        assert!(!cli.debug);
     }
 }
