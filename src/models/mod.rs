@@ -228,11 +228,12 @@ impl PackageInfo {
     }
 }
 
-/// JSON 输出 schema v1。`--format=json` 在 main 末尾把整个流程的快照
+/// JSON 输出 schema v2。`--format=json` 在 main 末尾把整个流程的快照
 /// 写到 stdout 一行——脚本可以直接 `jq` 消费，无需解析 ANSI 文案。
 ///
 /// 字段约定：
-/// - `schema_version`：单调递增，1.x 内只做向后兼容的字段新增
+/// - `schema_version`：当前为 `2`；同一大版本内只做向后兼容的字段新增，
+///   rename / remove 才 bump（0.12.0 由 1 → 2）
 /// - `updates_available`：所有有更新候选的包（不论是否被 batch / 用户选中）
 /// - `results`：实际跑过 cargo install 的包及其结果；非 batch / 无 dry-run 时为空数组
 /// - `summary.duration_ms` 是整个执行的墙钟时间（含检查 + 更新）
