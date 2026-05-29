@@ -260,8 +260,15 @@ impl Cli {
         match shell {
             ShellType::Fish => {
                 let base = Self::config_home()?;
-                let file = if is_cargo { "cargo.fish" } else { "cargo-fresh.fish" };
-                Some(base.join("fish").join("completions").join(file))
+                // CargoSubcommand 走 conf.d/cargo-fresh.fish：shell 启动时 source，注册的
+                // `complete -c cargo ...` 规则会和后续 autoload 进来的系统 cargo.fish 共存。
+                // 不能写到 completions/cargo.fish——那会被 fish 的 autoload 当成 cargo 唯一
+                // 的补全文件，shadow 掉系统自带的 cargo 补全（cargo build/run/test 全没了）。
+                if is_cargo {
+                    Some(base.join("fish").join("conf.d").join("cargo-fresh.fish"))
+                } else {
+                    Some(base.join("fish").join("completions").join("cargo-fresh.fish"))
+                }
             }
             ShellType::Bash => {
                 let base = Self::data_home()?;
@@ -449,9 +456,11 @@ impl Cli {
         }
         let _ = writeln!(
             std::io::stderr(),
-            "hint: install to ~/.config/fish/completions/cargo.fish (merges with cargo's own completion) \
-             or ~/.config/fish/conf.d/cargo-fresh.fish (eager-loaded at shell start). \
-             Saving to ~/.config/fish/completions/cargo-fresh.fish will NOT enable `cargo fresh<TAB>`."
+            "hint: install to ~/.config/fish/conf.d/cargo-fresh.fish (eager-loaded at shell start, \
+             coexists with cargo's own completion). \
+             Do NOT save to ~/.config/fish/completions/cargo.fish — that shadows cargo's built-in \
+             completion and you'll lose `cargo build`/`run`/`test` tab-completion. \
+             Saving to ~/.config/fish/completions/cargo-fresh.fish will NOT enable `cargo fresh<TAB>` either."
         );
     }
 }
@@ -536,7 +545,8 @@ mod tests {
     fn install_target_path_fish_cargo_subcommand() {
         let path = Cli::install_target_path(&ShellType::Fish, InstallTarget::CargoSubcommand)
             .expect("fish supported");
-        assert!(path.ends_with("fish/completions/cargo.fish"));
+        // 必须落到 conf.d 而不是 completions/cargo.fish——后者会 shadow 掉系统 cargo 补全。
+        assert!(path.ends_with("fish/conf.d/cargo-fresh.fish"));
     }
 
     #[test]

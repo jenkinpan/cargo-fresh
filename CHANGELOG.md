@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-05-29
+
+### Fixed
+
+- **`completion fish --install` 选择 cargo 子命令目标时不再覆盖 cargo 自带补全**：之前写到 `~/.config/fish/completions/cargo.fish`，但 fish 的 autoload 规则会让用户目录的同名文件 shadow 掉系统 `cargo.fish`，导致 `cargo build` / `run` / `test` 等内置子命令的 tab 补全全部失效，只剩 `cargo fresh` / `cargo help`。改为写到 `~/.config/fish/conf.d/cargo-fresh.fish` —— shell 启动时 source，注册的 `complete -c cargo ...` 规则与后续 autoload 进来的系统 cargo.fish 共存。已升级且踩坑的用户需要手动删除错误写入的 `~/.config/fish/completions/cargo.fish` 并重新跑一次 `cargo fresh completion fish --install`。`maybe_hint_fish_install` 文案同步更新，明确警告不要直接 `>` 到 `completions/cargo.fish`。
+
 ### Added
 
 - **`--debug` 标志**：开启后向 stderr 输出 downloader 决策链的内部 trace —— 每包路径分支选择（downloader vs cargo install 的原因）、`repo_url` 解析结果、`.crates2.json` 里查到的 `bins[]`、GitHub Releases API 试探每个 tag 的结果（`200 matched=...` / `200 unmatched-of-N` / `404` / `error=...`）、token 来源（`env:GITHUB_TOKEN` / `env:GH_TOKEN` / `gh` / `none`）、API 命中或回退到 360 URL 枚举时的候选数。专门给"为什么这个包没用预编译"类型的 issue 报告使用，用户贴一份 `cargo fresh --debug 2>&1 | grep debug` 输出，足够还原下载器决策。与 `--format=json` 正交（JSON 在 stdout，debug 在 stderr，CI 里 `2>debug.log` 互不污染）。**不属于 1.0 稳定契约**——输出格式与字段可在任意版本调整，请不要 grep/解析具体串。
