@@ -7,9 +7,24 @@
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-05-29
+
 ### Added
 
-- **`cargo fresh completion <shell> --install`**: 新增 `--install` 子标志，把生成的补全脚本直接写到标准配置路径，而不是 stdout。目前只支持 fish（`~/.config/fish/completions/cargo-fresh.fish`；带 `--cargo-fresh` 时写到 `cargo.fish`，覆盖前在 TTY 里询问 y/N）。其它 shell 的标准路径差异大（zsh 走 `$fpath`、bash 走 XDG_DATA 或 `/etc/bash_completion.d`），保留原本 `> file` 的手动重定向方式。无 BREAKING
+- **`cargo fresh completion <shell> --install` 全面重写为交互式多 shell**：`--install` 现在弹出 MultiSelect 让用户挑选要装的目标（顶层 `cargo-fresh<TAB>` 补全 / cargo 子命令 `cargo fresh<TAB>` 补全；两项默认全选）。安装路径覆盖全部六个 shell —— bash（`~/.local/share/bash-completion/completions/`）、zsh（`~/.zfunc/`）、fish（`~/.config/fish/completions/`）、powershell（`~/.config/powershell/`）、elvish（`~/.config/elvish/lib/`）、nushell（`~/.config/nushell/completions/`），均尊重 `XDG_CONFIG_HOME` / `XDG_DATA_HOME`。对默认目录不在自动加载路径上的 shell（zsh / powershell / elvish / nushell），结束时打一行 `Hint` 给出确切要加入 `~/.zshrc` / `$PROFILE` / `rc.elv` / `config.nu` 的那行配置。
+- **`completion --install --yes`**：新增 `--yes` 跳过 MultiSelect 直接装两个目标，便于脚本 / CI。非 TTY 自动等价于 `--yes`。
+- 单包成功 / 跳过仍按原行已有的 `Installed` / `Skipped` 状态行打印；结束时新增一行 `Finished N written, M skipped` 汇总。
+
+### Changed
+
+- `completion <shell> --install --cargo-fresh` 中的 `--cargo-fresh` 与 `--install` 合用时被忽略（picker 已经覆盖两个目标）。不带 `--install` 的纯 stdout 重定向场景下，`--cargo-fresh` 行为不变。
+- README.md / README.zh.md 全面重写：新增目录、用紧凑的 Highlights 段替换 emoji feature 列表、把原本三段重叠的 Shell completion 内容合并为一段（含新的 `--install` 交互流程与各 shell 安装路径对照表）、修正与当前动词格式不一致的示例输出、精简 License 段。中英文 1:1 同步。
+
+### Removed
+
+- 删除根目录下过时的 `completion/` 文件夹（孤儿 `.nu` 文件，遗留自项目早期 `pkg-checker` 名）和 `COMPLETION.md`（文档里仍在引用旧名 `pkg-checker`，且已与现行 CLI 失同步）。
+
+无 BREAKING / 无 BEHAVIOR（旧的 `completion fish --install` 调用仍可用，非 TTY 现在等价于装两个目标 —— 严格超集，没有撤回任何能力）。
 
 ## [0.12.2] - 2026-05-28
 
