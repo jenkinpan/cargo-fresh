@@ -27,7 +27,10 @@ openspec/
 
 # Claude Code
 .claude/
+/.codex/
+/.agents/
 /.mcp.json
 /plan.html
 /plan.md
 docs/superpowers/
+AGENTS.md
