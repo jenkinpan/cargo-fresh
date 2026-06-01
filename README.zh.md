@@ -32,6 +32,7 @@
 - [输出示例](#输出示例)
 - [语言检测](#语言检测)
 - [稳定性承诺](#稳定性承诺)
+- [1.0 契约](#10-契约)
 - [与 cargo-update 的区别](#与-cargo-update-的区别)
 - [贡献](#贡献)
 - [许可证](#许可证)
@@ -108,6 +109,7 @@ cargo fresh --format=json
 | `--registry-url <URL>` | 覆盖 sparse-index 基础 URL（镜像支持） |
 | `--no-cargo-search-fallback` | sparse index 失败时不回退 `cargo search`（等价 `CARGO_FRESH_NO_FALLBACK=1`） |
 | `--check-prebuilt` | 探测每个候选包，标记 `[prebuilt]` / `[source]` / `[unknown]`。默认关——每包会发几个 HEAD 请求 |
+| `--debug` | 向 stderr 输出 downloader 决策 trace，供 issue 排查使用。不属于 1.0 稳定契约；不要解析它 |
 | `-j, --jobs <N>` | 并发更新数。默认 `4`；`0` = 不限；`1` = 串行。`cargo install` 回退路径会在 cargo 的 `$CARGO_HOME` 锁上自然串行化 |
 | `--format <FORMAT>` | `human`（默认）或 `json` |
 | `-h, --help` / `-V, --version` | 帮助 / 版本 |
@@ -312,6 +314,18 @@ LANG=zh_CN.UTF-8 cargo fresh   # 强制中文
 | 内部模块 / 库 API（`cargo_fresh::*`） | **不**稳定——`src/lib.rs` 服务于集成测试，不是下游 API |
 
 脚本对接请锚定退出码与 `--format=json`，绝不要锚定带颜色的状态行。
+
+## 1.0 契约
+
+1.0 前的契约清单见 [`docs/1.0-contract.md`](docs/1.0-contract.md)。它列出了 1.0 后受 semver 保护的表面、仍会保持弹性的表面，以及 `schema_version=2` 的 JSON 规则。
+
+[#3 Towards 1.0 — Feedback Wanted](https://github.com/jenkinpan/cargo-fresh/issues/3) 的反馈窗口截至 **2026-06-30**。如果报告 downloader / 预编译二进制相关问题，请附上：
+
+```bash
+cargo fresh --debug --check-prebuilt 2>&1 | grep debug
+```
+
+`--debug` 只用于诊断；其输出格式不稳定，脚本不要消费。
 
 ## 与 cargo-update 的区别
 

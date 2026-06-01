@@ -4,7 +4,7 @@ This is the detailed, item-by-item plan referenced from `CLAUDE.md`. `CLAUDE.md`
 keeps the one-line-per-release summary; this file carries the rationale, the
 remaining 1.0 checklist, and the deliberately-deferred items.
 
-**Status as of v0.12.3.** The code is feature-complete for 1.0; what remains is a
+**Status as of v0.12.4.** The code is feature-complete for 1.0; what remains is a
 feedback-bake window and freezing the public contract.
 
 ## What 1.0 freezes
@@ -18,6 +18,9 @@ contract". After 1.0, changing any of these is a breaking change requiring 2.0:
 | Exit codes | `0` ok / `1` updates-available-not-applied / `2` failure / `130` SIGINT | `src/main.rs` (`EXIT_*`), `run() -> Result<i32>` |
 | CLI flag inventory | the `--help` flag set + `completion` / `man` subcommands | `src/cli/mod.rs`, locked by `tests/cli.rs` |
 | Status verb dictionary | the human-output verbs | `CLAUDE.md` → "Status verb dictionary" |
+
+The public checklist for users and issue triage lives in
+[`docs/1.0-contract.md`](docs/1.0-contract.md).
 
 Additive changes (new JSON fields, new flags with defaults that preserve behavior)
 remain allowed within 1.x.
@@ -73,6 +76,10 @@ remain allowed within 1.x.
 - ✅ **0.12.3** — interactive multi-shell `completion --install` (MultiSelect
   picker, six shells, XDG-aware, `--yes`); README rewrite; removed stale
   `completion/` dir + `COMPLETION.md`.
+- ✅ **0.12.4** — fish completion install fix: `completion fish --install` no
+  longer shadows fish's built-in `cargo.fish`; added `--debug` downloader
+  decision tracing for issue reports. `--debug` is explicitly outside the 1.0
+  stable contract.
 
 ## In progress
 

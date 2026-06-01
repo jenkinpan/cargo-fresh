@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### Docs
+
+- 新增 `docs/1.0-contract.md`，集中说明 1.0 将冻结的 CLI / JSON / exit-code 契约、非稳定表面，以及 #3 反馈窗口的 issue 排查信息。
+- README / README.zh / ROADMAP 同步到 0.12.4，并把 `--debug` 明确标为仅供诊断、非 1.0 稳定契约。
+
 ## [0.12.4] - 2026-05-29
 
 ### Fixed

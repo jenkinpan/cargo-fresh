@@ -32,6 +32,7 @@
 - [Output examples](#output-examples)
 - [Language detection](#language-detection)
 - [Stability guarantees](#stability-guarantees)
+- [1.0 contract](#10-contract)
 - [How cargo-fresh differs from cargo-update](#how-cargo-fresh-differs-from-cargo-update)
 - [Contributing](#contributing)
 - [License](#license)
@@ -108,6 +109,7 @@ cargo fresh --format=json
 | `--registry-url <URL>` | Override sparse-index base URL (mirror support) |
 | `--no-cargo-search-fallback` | Don't fall back to `cargo search` when the sparse index fails (also `CARGO_FRESH_NO_FALLBACK=1`) |
 | `--check-prebuilt` | Probe each candidate to mark `[prebuilt]` / `[source]` / `[unknown]`. Off by default — each probe issues a few HEAD requests |
+| `--debug` | Emit downloader decision traces to stderr for issue reports. Not part of the 1.0 stability contract; don't parse it |
 | `-j, --jobs <N>` | Concurrent package updates. Default `4`; `0` = unlimited; `1` = serial. `cargo install` fallback still serializes on cargo's `$CARGO_HOME` lock |
 | `--format <FORMAT>` | `human` (default) or `json` |
 | `-h, --help` / `-V, --version` | Help / version |
@@ -312,6 +314,18 @@ Pre-1.0 still ships breaking changes; once 1.0.0 lands the surface below is **pr
 | Internal modules / library API (`cargo_fresh::*`) | **Not** stable — `src/lib.rs` exists for integration tests, not as a downstream API |
 
 When scripting against cargo-fresh, anchor on exit codes and `--format=json`; never on colored status text.
+
+## 1.0 contract
+
+The pre-1.0 contract checklist lives in [`docs/1.0-contract.md`](docs/1.0-contract.md). It names the surfaces that will become semver-protected at 1.0, the surfaces that intentionally stay flexible, and the exact `schema_version=2` JSON rules.
+
+Feedback is still open until **2026-06-30** on [#3 Towards 1.0 — Feedback Wanted](https://github.com/jenkinpan/cargo-fresh/issues/3). For downloader/prebuilt issues, include:
+
+```bash
+cargo fresh --debug --check-prebuilt 2>&1 | grep debug
+```
+
+`--debug` is for diagnostics only; its output format is not stable and should not be consumed by scripts.
 
 ## How cargo-fresh differs from cargo-update
 
