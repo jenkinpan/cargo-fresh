@@ -36,6 +36,14 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: cargo-fresh
             asset_name: cargo-fresh-x86_64-unknown-linux-gnu.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: cargo-fresh.exe
+            asset_name: cargo-fresh-x86_64-pc-windows-msvc.zip
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact_name: cargo-fresh.exe
+            asset_name: cargo-fresh-aarch64-pc-windows-msvc.zip
 
     steps:
       - name: Extract version from tag
@@ -90,23 +98,25 @@ jobs:
         run: |
           cargo build --release --target ${{ matrix.target }}
 
-      - name: Package binary
+      - name: Package binary (Unix)
+        if: runner.os != 'Windows'
         id: package
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          # Homebrew format: artifact-target.tar.gz (no version in filename)
-          ASSET_NAME="${{ matrix.artifact_name }}-${{ matrix.target }}.tar.gz"
-          echo "asset_name=$ASSET_NAME" >> $GITHUB_OUTPUT
-
           cd target/${{ matrix.target }}/release
-          tar czf $ASSET_NAME ${{ matrix.artifact_name }}
-          cd -
-          mv target/${{ matrix.target }}/release/$ASSET_NAME .
+          tar czf ${{ matrix.asset_name }} ${{ matrix.artifact_name }}
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        id: package
+        shell: pwsh
+        run: |
+          cd target/${{ matrix.target }}/release
+          Compress-Archive -Path ${{ matrix.artifact_name }} -DestinationPath ${{ matrix.asset_name }}
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.asset_name }}
+          files: ${{ matrix.asset_name }}
           tag_name: v${{ steps.version.outputs.version }}
           name: Release v${{ steps.version.outputs.version }}
           draft: false
@@ -114,12 +124,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Calculate SHA256
+      - name: Calculate SHA256 (Unix)
+        if: runner.os != 'Windows'
         id: sha256
         run: |
-          SHA256=$(shasum -a 256 ${{ steps.package.outputs.asset_name }} | cut -d ' ' -f 1)
+          SHA256=$(shasum -a 256 ${{ matrix.asset_name }} | cut -d ' ' -f 1)
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
-          echo "SHA256 for ${{ steps.package.outputs.asset_name }}: $SHA256"
+          echo "SHA256 for ${{ matrix.asset_name }}: $SHA256"
+
+      - name: Calculate SHA256 (Windows)
+        if: runner.os == 'Windows'
+        id: sha256
+        shell: pwsh
+        run: |
+          $sha = (Get-FileHash ${{ matrix.asset_name }} -Algorithm SHA256).Hash.ToLower()
+          echo "sha256=$sha" >> $env:GITHUB_OUTPUT
+          echo "SHA256 for ${{ matrix.asset_name }}: $sha"
 
       - name: Save SHA256 to artifact
         run: |
