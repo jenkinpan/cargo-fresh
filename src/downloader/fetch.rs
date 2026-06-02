@@ -58,21 +58,24 @@ pub async fn fetch(
     let archive_path = temp_dir.path().join(&filename);
 
     // 3. GET 流式下载
-    let resp = client.get(&winner.url).send().await.map_err(|e| {
-        DownloaderError::Failed {
-            kind: FailureKind::DownloadInterrupted,
-            source: anyhow!(e).context("GET archive"),
-        }
-    })?;
-    let total = resp.content_length();
-    let mut stream = resp.bytes_stream();
-
-    let mut file = tokio::fs::File::create(&archive_path)
+    let resp = client
+        .get(&winner.url)
+        .send()
         .await
         .map_err(|e| DownloaderError::Failed {
             kind: FailureKind::DownloadInterrupted,
-            source: anyhow!(e).context("create archive file"),
+            source: anyhow!(e).context("GET archive"),
         })?;
+    let total = resp.content_length();
+    let mut stream = resp.bytes_stream();
+
+    let mut file =
+        tokio::fs::File::create(&archive_path)
+            .await
+            .map_err(|e| DownloaderError::Failed {
+                kind: FailureKind::DownloadInterrupted,
+                source: anyhow!(e).context("create archive file"),
+            })?;
 
     let mut got: u64 = 0;
     while let Some(chunk) = stream.next().await {
@@ -96,12 +99,10 @@ pub async fn fetch(
             total,
         });
     }
-    file.flush()
-        .await
-        .map_err(|e| DownloaderError::Failed {
-            kind: FailureKind::DownloadInterrupted,
-            source: anyhow!(e).context("flush"),
-        })?;
+    file.flush().await.map_err(|e| DownloaderError::Failed {
+        kind: FailureKind::DownloadInterrupted,
+        source: anyhow!(e).context("flush"),
+    })?;
     drop(file);
 
     // 4. sha256 校验 (best-effort)
@@ -112,18 +113,17 @@ pub async fn fetch(
         if resp.status().is_success() {
             let expected_hex = resp.text().await.ok().and_then(parse_sha256_hex);
             if let Some(expected) = expected_hex {
-                let actual = compute_sha256(&archive_path)
-                    .await
-                    .map_err(|e| DownloaderError::Failed {
-                        kind: FailureKind::ChecksumMismatch,
-                        source: e.context("compute sha256"),
-                    })?;
+                let actual =
+                    compute_sha256(&archive_path)
+                        .await
+                        .map_err(|e| DownloaderError::Failed {
+                            kind: FailureKind::ChecksumMismatch,
+                            source: e.context("compute sha256"),
+                        })?;
                 if actual != expected {
                     return Err(DownloaderError::Failed {
                         kind: FailureKind::ChecksumMismatch,
-                        source: anyhow!(
-                            "expected sha256={expected}, got sha256={actual}"
-                        ),
+                        source: anyhow!("expected sha256={expected}, got sha256={actual}"),
                     });
                 }
             }
@@ -197,7 +197,11 @@ async fn head_probe_concurrent<'a>(
         Some(idx) => Ok(&candidates[idx]),
         None => Err(DownloaderError::Failed {
             kind: FailureKind::AllUrlsFailed,
-            source: anyhow!("no candidate URL returned 2xx within {}s × {} probes", PROBE_TIMEOUT.as_secs(), candidates.len()),
+            source: anyhow!(
+                "no candidate URL returned 2xx within {}s × {} probes",
+                PROBE_TIMEOUT.as_secs(),
+                candidates.len()
+            ),
         }),
     }
 }
@@ -214,7 +218,9 @@ fn parse_sha256_hex(body: String) -> Option<String> {
 
 async fn compute_sha256(path: &std::path::Path) -> Result<String> {
     use tokio::io::AsyncReadExt;
-    let mut f = tokio::fs::File::open(path).await.context("open for sha256")?;
+    let mut f = tokio::fs::File::open(path)
+        .await
+        .context("open for sha256")?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 8192];
     loop {

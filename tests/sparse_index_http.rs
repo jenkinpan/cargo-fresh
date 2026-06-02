@@ -34,7 +34,9 @@ async fn success_returns_parsed_versions() {
         .mount(&server)
         .await;
 
-    let v = fetch_latest(&client(), &server.uri(), "ripgrep").await.unwrap();
+    let v = fetch_latest(&client(), &server.uri(), "ripgrep")
+        .await
+        .unwrap();
     assert_eq!(v.stable.as_deref(), Some("14.1.1"));
 }
 
@@ -94,7 +96,9 @@ async fn server_error_then_success_recovers() {
         .mount(&server)
         .await;
 
-    let v = fetch_latest(&client(), &server.uri(), "ripgrep").await.unwrap();
+    let v = fetch_latest(&client(), &server.uri(), "ripgrep")
+        .await
+        .unwrap();
     assert_eq!(v.stable.as_deref(), Some("14.0.0"));
 }
 
@@ -108,7 +112,9 @@ async fn empty_body_returns_empty_versions() {
         .mount(&server)
         .await;
 
-    let v = fetch_latest(&client(), &server.uri(), "cargo-fresh").await.unwrap();
+    let v = fetch_latest(&client(), &server.uri(), "cargo-fresh")
+        .await
+        .unwrap();
     assert!(v.stable.is_none() && v.prerelease.is_none());
 }
 

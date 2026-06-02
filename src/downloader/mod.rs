@@ -93,7 +93,10 @@ async fn try_api_winning_url(
                 if let Some(asset) = github_api::match_winning_asset(&assets, &expected) {
                     crate::display::status_debug(
                         "downloader",
-                        &format!("{}: API tag={} matched asset={}", spec.name, tag, asset.name),
+                        &format!(
+                            "{}: API tag={} matched asset={}",
+                            spec.name, tag, asset.name
+                        ),
                     );
                     let archive_fmt = if asset.name.ends_with(".zip") {
                         resolve::ArchiveFmt::Zip
@@ -165,13 +168,17 @@ pub async fn download_and_install(
 
     let targets = resolve::current_targets();
     if targets.is_empty() {
-        return Err(DownloaderError::Unsupported(UnsupportedReason::UnsupportedPlatform));
+        return Err(DownloaderError::Unsupported(
+            UnsupportedReason::UnsupportedPlatform,
+        ));
     }
 
     let repo_url = spec
         .repo_url
         .as_deref()
-        .ok_or(DownloaderError::Unsupported(UnsupportedReason::NoMetadataAndNoConvention))?;
+        .ok_or(DownloaderError::Unsupported(
+            UnsupportedReason::NoMetadataAndNoConvention,
+        ))?;
 
     // {name} 候选: package 名先 (canonical, 多数包文件名沿用), 再加 binary 名
     // (覆盖 tauri-cli 这种情况: 包名 tauri-cli, 二进制 cargo-tauri,

@@ -14,9 +14,7 @@
 //! 故意不贪多——snapshot 数量小于 ~10 条 review 时才真的能逐条看,超过
 //! 这个数会退化成 `cargo insta accept` 一把过的橡皮图章。
 
-use cargo_fresh::display::{
-    format_status_line, package_transition, StatusStyle,
-};
+use cargo_fresh::display::{format_status_line, package_transition, StatusStyle};
 use cargo_fresh::locale::Language;
 use cargo_fresh::models::{PackageInfo, PackageSource, PrebuiltAvailability};
 
@@ -29,7 +27,12 @@ fn settings() -> insta::Settings {
     s
 }
 
-fn pkg(name: &str, current: Option<&str>, latest: Option<&str>, source: PackageSource) -> PackageInfo {
+fn pkg(
+    name: &str,
+    current: Option<&str>,
+    latest: Option<&str>,
+    source: PackageSource,
+) -> PackageInfo {
     let mut p = PackageInfo::with_source(name.to_string(), current.map(String::from), source);
     p.latest_version = latest.map(String::from);
     p
@@ -49,7 +52,12 @@ fn snapshot_fresh_line() {
 #[test]
 fn snapshot_updating_line_clean() {
     settings().bind(|| {
-        let p = pkg("ripgrep", Some("14.1.0"), Some("14.1.1"), PackageSource::Crates);
+        let p = pkg(
+            "ripgrep",
+            Some("14.1.0"),
+            Some("14.1.1"),
+            PackageSource::Crates,
+        );
         let msg = package_transition(&p, Language::English);
         insta::assert_snapshot!(format_status_line("Updating", &msg, StatusStyle::Ok));
     });
@@ -62,7 +70,12 @@ fn snapshot_updating_line_clean() {
 #[test]
 fn snapshot_updating_line_with_prebuilt() {
     settings().bind(|| {
-        let mut p = pkg("ripgrep", Some("14.1.0"), Some("14.1.1"), PackageSource::Crates);
+        let mut p = pkg(
+            "ripgrep",
+            Some("14.1.0"),
+            Some("14.1.1"),
+            PackageSource::Crates,
+        );
         p.prebuilt = Some(PrebuiltAvailability::Prebuilt);
         let msg = package_transition(&p, Language::English);
         insta::assert_snapshot!(format_status_line("Updating", &msg, StatusStyle::Ok));

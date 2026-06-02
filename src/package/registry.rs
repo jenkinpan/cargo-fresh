@@ -52,7 +52,9 @@ pub(crate) fn cargo_home() -> Option<PathBuf> {
             return Some(PathBuf::from(s));
         }
     }
-    env::var("HOME").ok().map(|h| PathBuf::from(h).join(".cargo"))
+    env::var("HOME")
+        .ok()
+        .map(|h| PathBuf::from(h).join(".cargo"))
 }
 
 fn resolve_from_config() -> Option<String> {

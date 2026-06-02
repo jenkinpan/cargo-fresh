@@ -124,15 +124,10 @@ pub async fn probe_prebuilt(
     }
 
     // --- API path (1-6 requests instead of 360 HEADs) ----------------------
-    if let Some((owner, repo_name)) =
-        crate::downloader::github_api::parse_owner_repo(&repo)
-    {
+    if let Some((owner, repo_name)) = crate::downloader::github_api::parse_owner_repo(&repo) {
         let token = crate::downloader::token::discover_token();
-        let expected = crate::downloader::resolve::expected_filenames(
-            &name_candidates,
-            version,
-            &targets,
-        );
+        let expected =
+            crate::downloader::resolve::expected_filenames(&name_candidates, version, &targets);
         let candidate_tags = tag_candidates(&name_candidates[0], version);
         let mut hit_api = false;
 

@@ -44,7 +44,11 @@ async fn run_with_cap(cap: usize, delays_ms: &[u64]) -> (Duration, Vec<usize>) {
 async fn cap_1_is_serial() {
     let delays = [80u64, 80, 80, 80];
     let (elapsed, results) = run_with_cap(1, &delays).await;
-    assert_eq!(results, vec![0, 10, 20, 30], "results must be in input order");
+    assert_eq!(
+        results,
+        vec![0, 10, 20, 30],
+        "results must be in input order"
+    );
     assert!(
         elapsed >= Duration::from_millis(300),
         "serial should be ~320ms, got {elapsed:?}"
@@ -55,7 +59,11 @@ async fn cap_1_is_serial() {
 async fn cap_4_is_parallel() {
     let delays = [80u64, 80, 80, 80];
     let (elapsed, results) = run_with_cap(4, &delays).await;
-    assert_eq!(results, vec![0, 10, 20, 30], "results must be in input order");
+    assert_eq!(
+        results,
+        vec![0, 10, 20, 30],
+        "results must be in input order"
+    );
     assert!(
         elapsed < Duration::from_millis(250),
         "parallel should be ~80ms, must be < 250ms, got {elapsed:?}"

@@ -267,9 +267,8 @@ mod tests {
 
     #[test]
     fn missing_fields_default_to_false_empty() {
-        let m = parse_crates2(
-            r#"{"installs":{"x 1.0.0 (registry+https://example)":{"bins":["x"]}}}"#,
-        );
+        let m =
+            parse_crates2(r#"{"installs":{"x 1.0.0 (registry+https://example)":{"bins":["x"]}}}"#);
         let o = m.get("x 1.0.0 (registry+https://example)").unwrap();
         assert!(o.is_default());
     }
@@ -295,14 +294,19 @@ mod tests {
         }}"#;
         let m = parse_crates2(json);
         assert_eq!(
-            match_install_opts(&m, "dup", &PackageSource::Crates).unwrap().features,
+            match_install_opts(&m, "dup", &PackageSource::Crates)
+                .unwrap()
+                .features,
             vec!["reg".to_string()]
         );
         assert_eq!(
             match_install_opts(
                 &m,
                 "dup",
-                &PackageSource::Git { url: "https://github.com/x/dup".into(), rev: None }
+                &PackageSource::Git {
+                    url: "https://github.com/x/dup".into(),
+                    rev: None
+                }
             )
             .unwrap()
             .features,

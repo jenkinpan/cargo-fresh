@@ -125,9 +125,10 @@ pub async fn fetch_latest(
             Ok(resp) => {
                 let status = resp.status();
                 if status.is_success() {
-                    let body = resp.text().await.map_err(|e| {
-                        SparseIndexError::Unavailable(anyhow::Error::new(e))
-                    })?;
+                    let body = resp
+                        .text()
+                        .await
+                        .map_err(|e| SparseIndexError::Unavailable(anyhow::Error::new(e)))?;
                     return Ok(parse_index_body(&body));
                 }
                 // 4xx 不重试——通常是真的没这个包，再请求一次浪费时间
@@ -144,9 +145,9 @@ pub async fn fetch_latest(
             tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
         }
     }
-    Err(SparseIndexError::Unavailable(last_err.unwrap_or_else(|| {
-        anyhow::anyhow!("sparse index: all retries exhausted")
-    })))
+    Err(SparseIndexError::Unavailable(last_err.unwrap_or_else(
+        || anyhow::anyhow!("sparse index: all retries exhausted"),
+    )))
 }
 
 #[cfg(test)]

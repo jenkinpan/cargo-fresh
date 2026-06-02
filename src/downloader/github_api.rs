@@ -108,5 +108,7 @@ pub fn match_winning_asset<'a>(
     assets: &'a [ReleaseAsset],
     expected: &[String],
 ) -> Option<&'a ReleaseAsset> {
-    assets.iter().find(|a| expected.iter().any(|e| e == &a.name))
+    assets
+        .iter()
+        .find(|a| expected.iter().any(|e| e == &a.name))
 }

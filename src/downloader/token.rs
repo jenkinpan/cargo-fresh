@@ -17,10 +17,7 @@ static TOKEN_CACHE: OnceLock<(Option<String>, &'static str)> = OnceLock::new();
 
 /// 生产路径:once-per-process discover + cache。
 pub fn discover_token() -> Option<&'static str> {
-    TOKEN_CACHE
-        .get_or_init(discover_with_source)
-        .0
-        .as_deref()
+    TOKEN_CACHE.get_or_init(discover_with_source).0.as_deref()
 }
 
 /// 给 `--debug` 用:汇报 token 取自哪条来源(`env:GITHUB_TOKEN` / `env:GH_TOKEN`
@@ -52,7 +49,10 @@ fn discover_with_source() -> (Option<String>, &'static str) {
     if !out.status.success() {
         return (None, "none");
     }
-    let Some(s) = String::from_utf8(out.stdout).ok().map(|s| s.trim().to_string()) else {
+    let Some(s) = String::from_utf8(out.stdout)
+        .ok()
+        .map(|s| s.trim().to_string())
+    else {
         return (None, "none");
     };
     if s.is_empty() {

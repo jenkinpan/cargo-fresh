@@ -1,9 +1,7 @@
 //! HTTP integration tests for github_api. wiremock stands up a fake
 //! api.github.com so we don't depend on real rate limit / network.
 
-use cargo_fresh::downloader::github_api::{
-    fetch_release_assets, parse_owner_repo, GithubApiError,
-};
+use cargo_fresh::downloader::github_api::{fetch_release_assets, parse_owner_repo, GithubApiError};
 
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -64,10 +62,7 @@ async fn returns_not_found_on_404() {
 async fn returns_rate_limited_on_403() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .respond_with(
-            ResponseTemplate::new(403)
-                .insert_header("x-ratelimit-remaining", "0"),
-        )
+        .respond_with(ResponseTemplate::new(403).insert_header("x-ratelimit-remaining", "0"))
         .mount(&server)
         .await;
     let client = reqwest::Client::new();

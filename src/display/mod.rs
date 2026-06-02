@@ -209,12 +209,23 @@ pub fn format_version_info(
             )
         }
         (Some(old), None) => {
-            format!("{} -> {}", old.red(), language.get_text("unknown_version").dimmed())
+            format!(
+                "{} -> {}",
+                old.red(),
+                language.get_text("unknown_version").dimmed()
+            )
         }
         (None, Some(new)) => {
-            format!("{} -> {}", language.get_text("unknown_version").dimmed(), new.green())
+            format!(
+                "{} -> {}",
+                language.get_text("unknown_version").dimmed(),
+                new.green()
+            )
         }
-        _ => language.get_text("version_info_unknown").dimmed().to_string(),
+        _ => language
+            .get_text("version_info_unknown")
+            .dimmed()
+            .to_string(),
     }
 }
 
@@ -329,10 +340,16 @@ pub fn print_update_summary(update_results: &[UpdateResult], language: Language)
         .map(|r| r.package_name.as_str())
         .collect();
     if !prebuilt.is_empty() {
-        status_dim(language.get_text("summary_prebuilt"), &prebuilt.join(", ").cyan().to_string());
+        status_dim(
+            language.get_text("summary_prebuilt"),
+            &prebuilt.join(", ").cyan().to_string(),
+        );
     }
     if !compiled.is_empty() {
-        status_dim(language.get_text("summary_compiled"), &compiled.join(", ").yellow().to_string());
+        status_dim(
+            language.get_text("summary_compiled"),
+            &compiled.join(", ").yellow().to_string(),
+        );
     }
 }
 

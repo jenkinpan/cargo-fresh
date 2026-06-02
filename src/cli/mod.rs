@@ -186,7 +186,12 @@ impl ShellType {
 
 impl Cli {
     /// 生成补全脚本的通用方法。`out` 让调用者决定写到 stdout 还是缓冲区。
-    fn render_completion_into(shell: &ShellType, cmd: &mut clap::Command, name: &str, out: &mut dyn Write) {
+    fn render_completion_into(
+        shell: &ShellType,
+        cmd: &mut clap::Command,
+        name: &str,
+        out: &mut dyn Write,
+    ) {
         let shell_type = match shell {
             ShellType::Bash => Shell::Bash,
             ShellType::Zsh => Shell::Zsh,
@@ -236,13 +241,17 @@ impl Cli {
     fn config_home() -> Option<std::path::PathBuf> {
         std::env::var_os("XDG_CONFIG_HOME")
             .map(std::path::PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
+            .or_else(|| {
+                std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config"))
+            })
     }
 
     fn data_home() -> Option<std::path::PathBuf> {
         std::env::var_os("XDG_DATA_HOME")
             .map(std::path::PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")))
+            .or_else(|| {
+                std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share"))
+            })
     }
 
     fn home_dir() -> Option<std::path::PathBuf> {
@@ -267,7 +276,11 @@ impl Cli {
                 if is_cargo {
                     Some(base.join("fish").join("conf.d").join("cargo-fresh.fish"))
                 } else {
-                    Some(base.join("fish").join("completions").join("cargo-fresh.fish"))
+                    Some(
+                        base.join("fish")
+                            .join("completions")
+                            .join("cargo-fresh.fish"),
+                    )
                 }
             }
             ShellType::Bash => {
@@ -285,17 +298,29 @@ impl Cli {
             }
             ShellType::Nushell => {
                 let base = Self::config_home()?;
-                let file = if is_cargo { "cargo.nu" } else { "cargo-fresh.nu" };
+                let file = if is_cargo {
+                    "cargo.nu"
+                } else {
+                    "cargo-fresh.nu"
+                };
                 Some(base.join("nushell").join("completions").join(file))
             }
             ShellType::Elvish => {
                 let base = Self::config_home()?;
-                let file = if is_cargo { "cargo.elv" } else { "cargo-fresh.elv" };
+                let file = if is_cargo {
+                    "cargo.elv"
+                } else {
+                    "cargo-fresh.elv"
+                };
                 Some(base.join("elvish").join("lib").join(file))
             }
             ShellType::Powershell => {
                 let base = Self::config_home()?;
-                let file = if is_cargo { "cargo.ps1" } else { "cargo-fresh.ps1" };
+                let file = if is_cargo {
+                    "cargo.ps1"
+                } else {
+                    "cargo-fresh.ps1"
+                };
                 Some(base.join("powershell").join(file))
             }
         }
@@ -496,10 +521,15 @@ mod tests {
 
     #[test]
     fn cli_completion_subcommand() {
-        let cli =
-            Cli::try_parse_from(["cargo-fresh", "completion", "bash", "--cargo-fresh"]).expect("parse");
+        let cli = Cli::try_parse_from(["cargo-fresh", "completion", "bash", "--cargo-fresh"])
+            .expect("parse");
         match cli.command {
-            Some(Commands::Completion { cargo_fresh, install, yes, .. }) => {
+            Some(Commands::Completion {
+                cargo_fresh,
+                install,
+                yes,
+                ..
+            }) => {
                 assert!(cargo_fresh);
                 assert!(!install);
                 assert!(!yes);
@@ -510,9 +540,15 @@ mod tests {
 
     #[test]
     fn cli_completion_install_flag() {
-        let cli = Cli::try_parse_from(["cargo-fresh", "completion", "fish", "--install"]).expect("parse");
+        let cli =
+            Cli::try_parse_from(["cargo-fresh", "completion", "fish", "--install"]).expect("parse");
         match cli.command {
-            Some(Commands::Completion { install, cargo_fresh, yes, .. }) => {
+            Some(Commands::Completion {
+                install,
+                cargo_fresh,
+                yes,
+                ..
+            }) => {
                 assert!(install);
                 assert!(!cargo_fresh);
                 assert!(!yes);
@@ -553,7 +589,8 @@ mod tests {
     fn install_target_path_bash_paths() {
         let top = Cli::install_target_path(&ShellType::Bash, InstallTarget::TopLevel).unwrap();
         assert!(top.ends_with("bash-completion/completions/cargo-fresh"));
-        let cargo = Cli::install_target_path(&ShellType::Bash, InstallTarget::CargoSubcommand).unwrap();
+        let cargo =
+            Cli::install_target_path(&ShellType::Bash, InstallTarget::CargoSubcommand).unwrap();
         assert!(cargo.ends_with("bash-completion/completions/cargo"));
     }
 
@@ -561,7 +598,8 @@ mod tests {
     fn install_target_path_zsh_paths() {
         let top = Cli::install_target_path(&ShellType::Zsh, InstallTarget::TopLevel).unwrap();
         assert!(top.ends_with(".zfunc/_cargo-fresh"));
-        let cargo = Cli::install_target_path(&ShellType::Zsh, InstallTarget::CargoSubcommand).unwrap();
+        let cargo =
+            Cli::install_target_path(&ShellType::Zsh, InstallTarget::CargoSubcommand).unwrap();
         assert!(cargo.ends_with(".zfunc/_cargo"));
     }
 
@@ -575,7 +613,8 @@ mod tests {
     fn install_target_path_elvish_powershell_paths() {
         let elv = Cli::install_target_path(&ShellType::Elvish, InstallTarget::TopLevel).unwrap();
         assert!(elv.ends_with("elvish/lib/cargo-fresh.elv"));
-        let ps = Cli::install_target_path(&ShellType::Powershell, InstallTarget::CargoSubcommand).unwrap();
+        let ps = Cli::install_target_path(&ShellType::Powershell, InstallTarget::CargoSubcommand)
+            .unwrap();
         assert!(ps.ends_with("powershell/cargo.ps1"));
     }
 

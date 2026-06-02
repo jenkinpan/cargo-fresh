@@ -131,10 +131,8 @@ mod tests {
     #[test]
     fn test_format_text_single_named_placeholder() {
         // 单个命名占位符替换
-        let out = Language::English.format_text("package_error", &[
-            ("name", "ripgrep"),
-            ("error", "boom"),
-        ]);
+        let out = Language::English
+            .format_text("package_error", &[("name", "ripgrep"), ("error", "boom")]);
         assert_eq!(out, "ripgrep: boom");
     }
 
@@ -143,31 +141,33 @@ mod tests {
         // 这是修复 i18n bug 的关键回归测试：
         // 旧代码用链式 .replace("{}", x) 会把所有 {} 都替换成第一个值。
         // 命名占位符必须保证 {name}/{old}/{new} 各自只替换到自己的位置。
-        let out = Language::English.format_text("package_updated_version", &[
-            ("name", "ripgrep"),
-            ("old", "13.0.0"),
-            ("new", "14.1.0"),
-        ]);
+        let out = Language::English.format_text(
+            "package_updated_version",
+            &[("name", "ripgrep"), ("old", "13.0.0"), ("new", "14.1.0")],
+        );
         assert_eq!(out, "ripgrep 13.0.0 -> 14.1.0");
     }
 
     #[test]
     fn test_format_text_missing_arg_leaves_placeholder() {
         // 缺失参数时占位符原样保留，便于及时发现遗漏的 key
-        let out = Language::English.format_text("package_update_failed", &[
-            ("name", "tokei"),
-            // 故意不传 code
-        ]);
+        let out = Language::English.format_text(
+            "package_update_failed",
+            &[
+                ("name", "tokei"),
+                // 故意不传 code
+            ],
+        );
         assert_eq!(out, "tokei failed (exit code: {code})");
     }
 
     #[test]
     fn test_format_text_works_for_chinese_template() {
         // 中文模板同样使用命名占位符
-        let out = Language::Chinese.format_text("retry_attempt", &[
-            ("attempt", "2"),
-            ("name", "cargo-fresh"),
-        ]);
+        let out = Language::Chinese.format_text(
+            "retry_attempt",
+            &[("attempt", "2"), ("name", "cargo-fresh")],
+        );
         assert_eq!(out, "第 2 次重试 cargo-fresh");
     }
 }

@@ -35,7 +35,10 @@ fn help_lists_core_flags() {
         "--check-prebuilt",
         "--debug",
     ] {
-        assert!(out.contains(flag), "help missing {flag}\n--- help ---\n{out}");
+        assert!(
+            out.contains(flag),
+            "help missing {flag}\n--- help ---\n{out}"
+        );
     }
 }
 
@@ -63,7 +66,10 @@ fn completion_bash_emits_script() {
 fn completion_fish_emits_script() {
     let assert = bin().args(["completion", "fish"]).assert().success();
     let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
-    assert!(out.contains("complete -c"), "fish completion looks empty:\n{out}");
+    assert!(
+        out.contains("complete -c"),
+        "fish completion looks empty:\n{out}"
+    );
 }
 
 #[test]
@@ -72,11 +78,19 @@ fn man_subcommand_emits_roff() {
     // 应包含 .TH 头、NAME/SYNOPSIS/OPTIONS 段，以及若干核心标志名
     let assert = bin().arg("man").assert().success();
     let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
-    assert!(out.starts_with(".ie") || out.contains(".TH"), "man output missing roff header:\n{}", &out[..out.len().min(200)]);
+    assert!(
+        out.starts_with(".ie") || out.contains(".TH"),
+        "man output missing roff header:\n{}",
+        &out[..out.len().min(200)]
+    );
     for marker in [".TH cargo-fresh", ".SH NAME", ".SH SYNOPSIS", ".SH OPTIONS"] {
         assert!(out.contains(marker), "man output missing {marker}");
     }
-    for flag in ["\\-\\-dry\\-run", "\\-\\-format", "\\-\\-include\\-prerelease"] {
+    for flag in [
+        "\\-\\-dry\\-run",
+        "\\-\\-format",
+        "\\-\\-include\\-prerelease",
+    ] {
         assert!(out.contains(flag), "man output missing {flag}");
     }
 }
@@ -85,7 +99,12 @@ fn man_subcommand_emits_roff() {
 fn json_mode_keeps_stdout_clean() {
     // --format=json 的合约：stdout 只有一行可解析的 JSON；状态行/进度全部走 stderr
     let assert = bin()
-        .args(["--batch", "--dry-run", "--format=json", "--filter=__nonexistent_pkg_xyz__"])
+        .args([
+            "--batch",
+            "--dry-run",
+            "--format=json",
+            "--filter=__nonexistent_pkg_xyz__",
+        ])
         .assert()
         .success();
     let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
@@ -110,7 +129,12 @@ fn json_mode_emits_new_contract_fields() {
     // 1.0 合约新增字段（schema_version=1 增量）必须始终出现在 JSON 报告中，
     // 即便本次运行匹配不到任何包——下游脚本据此可无条件解析这些键
     let assert = bin()
-        .args(["--batch", "--dry-run", "--format=json", "--filter=__nonexistent_pkg_xyz__"])
+        .args([
+            "--batch",
+            "--dry-run",
+            "--format=json",
+            "--filter=__nonexistent_pkg_xyz__",
+        ])
         .assert()
         .success();
     let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
@@ -139,7 +163,10 @@ fn no_color_env_strips_ansi_from_stderr() {
         "stderr should be ANSI-free under NO_COLOR=1, got:\n{err}"
     );
     // 但状态行的文字内容应仍在
-    assert!(err.contains("Checking"), "expected 'Checking' verb in stderr:\n{err}");
+    assert!(
+        err.contains("Checking"),
+        "expected 'Checking' verb in stderr:\n{err}"
+    );
 }
 
 #[test]
@@ -188,10 +215,7 @@ fn jobs_flag_accepts_zero_and_positive() {
 
 #[test]
 fn jobs_flag_rejects_negative() {
-    let assert = bin()
-        .args(["-j", "-1", "--help"])
-        .assert()
-        .failure();
+    let assert = bin().args(["-j", "-1", "--help"]).assert().failure();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
     assert!(
         stderr.contains("invalid value") || stderr.contains("-1"),

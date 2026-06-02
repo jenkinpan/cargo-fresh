@@ -78,11 +78,7 @@ fn install_binary_atomically_into_isolated_cargo_home() {
     let leftover: Vec<_> = std::fs::read_dir(cargo_home.path().join("bin"))
         .unwrap()
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(".cargo-fresh-")
-        })
+        .filter(|e| e.file_name().to_string_lossy().starts_with(".cargo-fresh-"))
         .collect();
     assert!(leftover.is_empty(), "tmp file leaked: {leftover:?}");
 }

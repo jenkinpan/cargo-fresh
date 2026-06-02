@@ -14,8 +14,8 @@ use crate::errors::CargoFreshError;
 use crate::locale::detection::detect_language;
 use crate::models::{PackageInfo, PackageSource};
 
-pub mod crates_api;
 pub mod crates2;
+pub mod crates_api;
 pub mod crates_toml;
 pub mod registry;
 pub mod sparse_index;
@@ -141,8 +141,9 @@ pub async fn get_installed_packages() -> Result<Vec<PackageInfo>> {
 ///
 /// 在 `get_installed_packages` 首次运行时填充；`get_installed_version` 优先读缓存。
 /// 升级后通过 `invalidate_installed_version` 让对应条目下次重新查询。
-static INSTALLED_VERSION_CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
-    OnceLock::new();
+static INSTALLED_VERSION_CACHE: OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, String>>,
+> = OnceLock::new();
 
 /// 升级一个包后调用：从版本表里移除该条目，强制下次重新查询真实安装版本。
 pub fn invalidate_installed_version(package_name: &str) {
@@ -206,9 +207,13 @@ fn parse_source(s: &str) -> PackageSource {
         };
         PackageSource::Git { url, rev }
     } else if let Some(rest) = s.strip_prefix("path+file://") {
-        PackageSource::Path { dir: rest.to_string() }
+        PackageSource::Path {
+            dir: rest.to_string(),
+        }
     } else if let Some(rest) = s.strip_prefix("path+") {
-        PackageSource::Path { dir: rest.to_string() }
+        PackageSource::Path {
+            dir: rest.to_string(),
+        }
     } else if s.starts_with("registry+") || s.is_empty() {
         // registry+... 是 cargo 标记 crates.io 或自定义 registry 的标准前缀；
         // 空串通常来自旧 cargo 输出格式（包名 vX.Y.Z: 无括号）
@@ -429,10 +434,9 @@ pub async fn get_latest_version(
     package_name: &str,
     include_prerelease: bool,
 ) -> Result<Option<String>> {
-    let latest =
-        fetch_latest_versions(package_name, include_prerelease, None, false, false)
-            .await
-            .versions;
+    let latest = fetch_latest_versions(package_name, include_prerelease, None, false, false)
+        .await
+        .versions;
     Ok(if include_prerelease {
         latest.prerelease.or(latest.stable)
     } else {
@@ -758,7 +762,10 @@ mod tests {
     #[test]
     fn extract_version_from_line_prerelease() {
         let line = r#"my-crate = "1.0.0-beta.2"  # description"#;
-        assert_eq!(extract_version_from_line(line), Some("1.0.0-beta.2".to_string()));
+        assert_eq!(
+            extract_version_from_line(line),
+            Some("1.0.0-beta.2".to_string())
+        );
     }
 
     // ---------- is_stable_version ----------
@@ -864,11 +871,7 @@ mod tests {
     #[test]
     fn exclude_packages_multiple_patterns() {
         let mut pkgs = vec![pkg("cargo-edit"), pkg("ripgrep"), pkg("tokei")];
-        exclude_packages(
-            &mut pkgs,
-            &["cargo*".to_string(), "tokei".to_string()],
-        )
-        .unwrap();
+        exclude_packages(&mut pkgs, &["cargo*".to_string(), "tokei".to_string()]).unwrap();
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].name, "ripgrep");
     }

@@ -106,9 +106,15 @@ pub fn get_english_text(key: &str) -> &'static str {
         "completion_installed_path" => "completion to {}",
         "completion_path_exists" => "{} already exists",
         "completion_overwrite_prompt" => "Overwrite {}?",
-        "completion_install_unsupported" => "--install currently only supports fish; redirect stdout for other shells",
-        "completion_install_no_home" => "cannot resolve install path for {shell}: $HOME / $XDG_CONFIG_HOME unset",
-        "completion_install_prompt" => "Select which completions to install (space to toggle, enter to confirm)",
+        "completion_install_unsupported" => {
+            "--install currently only supports fish; redirect stdout for other shells"
+        }
+        "completion_install_no_home" => {
+            "cannot resolve install path for {shell}: $HOME / $XDG_CONFIG_HOME unset"
+        }
+        "completion_install_prompt" => {
+            "Select which completions to install (space to toggle, enter to confirm)"
+        }
         "completion_target_top" => "cargo-fresh<TAB>  — top-level binary completion",
         "completion_target_cargo" => "cargo fresh<TAB>  — cargo subcommand completion",
         "completion_install_summary" => "{written} written, {skipped} skipped",
@@ -221,8 +227,12 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         "completion_installed_path" => "补全脚本已写入 {}",
         "completion_path_exists" => "{} 已存在",
         "completion_overwrite_prompt" => "覆盖 {}？",
-        "completion_install_unsupported" => "--install 目前仅支持 fish，其它 shell 请通过重定向 stdout 安装",
-        "completion_install_no_home" => "无法解析 {shell} 的安装路径：$HOME / $XDG_CONFIG_HOME 未设置",
+        "completion_install_unsupported" => {
+            "--install 目前仅支持 fish，其它 shell 请通过重定向 stdout 安装"
+        }
+        "completion_install_no_home" => {
+            "无法解析 {shell} 的安装路径：$HOME / $XDG_CONFIG_HOME 未设置"
+        }
         "completion_install_prompt" => "选择要安装的补全（空格切换，回车确认）",
         "completion_target_top" => "cargo-fresh<TAB>  —— 顶层二进制补全",
         "completion_target_cargo" => "cargo fresh<TAB>  —— cargo 子命令补全",
@@ -252,10 +262,7 @@ mod tests {
 
     #[test]
     fn test_chinese_texts() {
-        assert_eq!(
-            get_chinese_text("checking_packages"),
-            "全局 cargo 包更新"
-        );
+        assert_eq!(get_chinese_text("checking_packages"), "全局 cargo 包更新");
         assert_eq!(get_chinese_text("all_up_to_date"), "所有包均为最新");
         assert_eq!(get_chinese_text("nonexistent_key"), "");
     }

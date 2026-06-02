@@ -17,14 +17,9 @@ pub enum PackageSource {
     /// crates.io 注册表（默认或自定义 registry）
     Crates,
     /// git 仓库；rev 是固定的 commit / branch / tag
-    Git {
-        url: String,
-        rev: Option<String>,
-    },
+    Git { url: String, rev: Option<String> },
     /// 本地路径
-    Path {
-        dir: String,
-    },
+    Path { dir: String },
     /// `cargo install --list` 中无法识别的来源前缀。
     ///
     /// 旧版会把这些悄悄归到 `Crates`，导致 cargo-fresh 试图去 sparse index
@@ -389,7 +384,11 @@ mod tests {
             "path_source"
         );
         assert_eq!(
-            PackageSource::Git { url: "u".into(), rev: None }.skip_reason_code(),
+            PackageSource::Git {
+                url: "u".into(),
+                rev: None
+            }
+            .skip_reason_code(),
             "git_source"
         );
         assert_eq!(
