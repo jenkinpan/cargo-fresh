@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context, Result};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::downloader::events::{DownloaderError, FailureKind, UnsupportedReason};
+use crate::downloader::events::{DownloaderError, FailureKind};
 
 /// Serialize concurrent writes to `$CARGO_HOME/.crates.toml` and
 /// `$CARGO_HOME/.crates2.json` from this process. Concurrent updates
@@ -24,17 +24,20 @@ pub fn install_binary(
     binary_name: &str,
     new_version: &str,
 ) -> Result<PathBuf, DownloaderError> {
-    if cfg!(windows) {
-        return Err(DownloaderError::Unsupported(
-            UnsupportedReason::UnsupportedPlatform,
-        ));
-    }
     let cargo_home = cargo_home_path().map_err(failed_install)?;
     let bin_dir = cargo_home.join("bin");
-    let dest = bin_dir.join(binary_name);
+    // Windows 上 cargo 安装的 binary 以 .exe 结尾 (.crates2.json 里也带后缀)。
+    // EXE_SUFFIX 在 Unix 上是 ""，无行为改变。
+    let dest = bin_dir.join(format!("{}{}", binary_name, std::env::consts::EXE_SUFFIX));
 
-    let uuid = format!("{:x}", std::process::id() as u128 * 1_000_000 + rand_u32() as u128);
-    let tmp = bin_dir.join(format!(".cargo-fresh-{binary_name}-{uuid}.tmp"));
+    let uuid = format!(
+        "{:x}",
+        std::process::id() as u128 * 1_000_000 + rand_u32() as u128
+    );
+    let tmp = bin_dir.join(format!(
+        ".cargo-fresh-{binary_name}-{uuid}.tmp{}",
+        std::env::consts::EXE_SUFFIX
+    ));
 
     // 1. 拷 + fsync
     std::fs::copy(src, &tmp).map_err(|e| failed_install(anyhow!(e).context("copy to tmp")))?;
