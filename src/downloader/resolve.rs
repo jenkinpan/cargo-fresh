@@ -42,7 +42,8 @@ const FILENAME_TEMPLATES: &[&str] = &[
     "{name}_{target}.{ext}",
 ];
 
-const ARCHIVE_EXTS: &[(ArchiveFmt, &str)] = &[(ArchiveFmt::TarGz, "tar.gz"), (ArchiveFmt::Zip, "zip")];
+const ARCHIVE_EXTS: &[(ArchiveFmt, &str)] =
+    &[(ArchiveFmt::TarGz, "tar.gz"), (ArchiveFmt::Zip, "zip")];
 
 /// 推导候选 URL 列表。第一个返回 2xx 的胜出。
 ///
@@ -89,7 +90,8 @@ pub fn candidate_urls(
         format!("{pkg}/v{version}"),
         format!("{pkg}/{version}"),
     ];
-    let mut out = Vec::with_capacity(40 * targets.len() * name_candidates.len() * tag_paths.len() / 2);
+    let mut out =
+        Vec::with_capacity(40 * targets.len() * name_candidates.len() * tag_paths.len() / 2);
     let mut seen = std::collections::HashSet::new();
     for name in name_candidates {
         for target in targets {
@@ -106,7 +108,10 @@ pub fn candidate_urls(
                         // 同一 name (如 package == binary 时) 会产生重复
                         // 候选, 这里去重避免做无效 HEAD
                         if seen.insert(url.clone()) {
-                            out.push(CandidateUrl { url, archive_fmt: *fmt });
+                            out.push(CandidateUrl {
+                                url,
+                                archive_fmt: *fmt,
+                            });
                         }
                     }
                 }
@@ -121,8 +126,12 @@ pub fn candidate_urls(
 /// 不同发布者命名约定不一 (Rust triple vs Go/npm 风格 vs Apple 简写),
 /// 所以同一 (arch, os) 给出多个等价候选, 由 fetch 阶段 HEAD 探测决定哪个真实存在。
 pub fn current_targets() -> Vec<String> {
-    let arch = std::env::consts::ARCH;
-    let os = std::env::consts::OS;
+    targets_for(std::env::consts::ARCH, std::env::consts::OS)
+}
+
+/// 纯函数: 按 (arch, os) 返回 target 别名列表。
+/// 抽出来以便测试不依赖运行时的 ARCH/OS 环境变量。
+fn targets_for(arch: &str, os: &str) -> Vec<String> {
     match (arch, os) {
         ("aarch64", "macos") => vec![
             "aarch64-apple-darwin".into(),
@@ -147,6 +156,13 @@ pub fn current_targets() -> Vec<String> {
             "linux-amd64".into(),
             "linux-x64".into(),
         ],
+        ("x86_64", "windows") => vec![
+            "x86_64-pc-windows-msvc".into(),
+            "x86_64-pc-windows-gnu".into(),
+            "windows-amd64".into(),
+            "win64".into(),
+        ],
+        ("aarch64", "windows") => vec!["aarch64-pc-windows-msvc".into(), "windows-arm64".into()],
         _ => Vec::new(),
     }
 }
@@ -290,7 +306,9 @@ mod tests {
         )
         .unwrap();
         let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
-        assert!(urls.iter().any(|u| u.contains("mdbook-v0.5.3-x86_64-apple-darwin.tar.gz")));
+        assert!(urls
+            .iter()
+            .any(|u| u.contains("mdbook-v0.5.3-x86_64-apple-darwin.tar.gz")));
     }
 
     #[test]
@@ -317,7 +335,9 @@ mod tests {
         )
         .unwrap();
         let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
-        assert!(urls.iter().any(|u| u.contains("somepkg_x86_64-apple-darwin_1.0.0")));
+        assert!(urls
+            .iter()
+            .any(|u| u.contains("somepkg_x86_64-apple-darwin_1.0.0")));
     }
 
     #[test]
@@ -349,10 +369,30 @@ mod tests {
     }
 
     #[test]
+    fn current_targets_windows_x86_64() {
+        let targets = super::targets_for("x86_64", "windows");
+        assert_eq!(targets.len(), 4);
+        assert!(targets.contains(&"x86_64-pc-windows-msvc".to_string()));
+        assert!(targets.contains(&"x86_64-pc-windows-gnu".to_string()));
+        assert!(targets.contains(&"windows-amd64".to_string()));
+        assert!(targets.contains(&"win64".to_string()));
+    }
+
+    #[test]
+    fn current_targets_windows_aarch64() {
+        let targets = super::targets_for("aarch64", "windows");
+        assert_eq!(targets.len(), 2);
+        assert!(targets.contains(&"aarch64-pc-windows-msvc".to_string()));
+        assert!(targets.contains(&"windows-arm64".to_string()));
+    }
+
+    #[test]
     fn expected_filenames_includes_canonical_ripgrep() {
         let names = vec!["ripgrep".to_string()];
         let targets = vec!["aarch64-apple-darwin".to_string()];
         let filenames = expected_filenames(&names, "15.1.0", &targets);
-        assert!(filenames.iter().any(|f| f == "ripgrep-15.1.0-aarch64-apple-darwin.tar.gz"));
+        assert!(filenames
+            .iter()
+            .any(|f| f == "ripgrep-15.1.0-aarch64-apple-darwin.tar.gz"));
     }
 }
