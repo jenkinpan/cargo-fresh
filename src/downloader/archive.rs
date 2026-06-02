@@ -34,7 +34,9 @@ pub fn extract(
     bin_candidates: &[String],
 ) -> Result<ExtractResult, DownloaderError> {
     if bin_candidates.is_empty() {
-        return Err(DownloaderError::Unsupported(UnsupportedReason::UnknownArchiveFormat));
+        return Err(DownloaderError::Unsupported(
+            UnsupportedReason::UnknownArchiveFormat,
+        ));
     }
     let temp_dir = tempfile::tempdir()
         .map_err(|e| failed_extract(anyhow!(e).context("mkdir tempdir for extract")))?;
@@ -50,8 +52,7 @@ pub fn extract(
             std::fs::copy(archive_path, &dest)
                 .map_err(|e| failed_extract(anyhow!(e).context("copy raw bin")))?;
             #[cfg(unix)]
-            set_executable(&dest)
-                .map_err(|e| failed_extract(e.context("chmod +x bin")))?;
+            set_executable(&dest).map_err(|e| failed_extract(e.context("chmod +x bin")))?;
         }
     }
 
@@ -64,7 +65,9 @@ pub fn extract(
             });
         }
     }
-    Err(DownloaderError::Unsupported(UnsupportedReason::UnknownArchiveFormat))
+    Err(DownloaderError::Unsupported(
+        UnsupportedReason::UnknownArchiveFormat,
+    ))
 }
 
 fn extract_targz(archive: &Path, into: &Path) -> Result<()> {
@@ -93,8 +96,10 @@ fn set_executable(path: &Path) -> Result<()> {
 
 /// 递归找名为 `name` 的文件 (优先匹配可执行位)。先广度优先扫一层,
 /// 再下一层——大多数 release tarball 把 binary 放第 1-2 层。
+/// Windows 上额外尝试 `name.exe` 变体, 因为部分发布者的 zip
+/// 不带 .exe 后缀, 部分带。
 fn find_binary(root: &Path, name: &str) -> Option<PathBuf> {
-    fn walk(dir: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    fn walk(dir: &Path, names: &[String], depth: usize) -> Option<PathBuf> {
         if depth > 3 {
             return None;
         }
@@ -102,21 +107,29 @@ fn find_binary(root: &Path, name: &str) -> Option<PathBuf> {
         let mut subdirs = Vec::new();
         for entry in entries.flatten() {
             let p = entry.path();
-            if p.is_file() && p.file_name().map(|f| f == name).unwrap_or(false) {
-                return Some(p);
+            if p.is_file() {
+                let file_name = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                if names.iter().any(|n| n == file_name) {
+                    return Some(p);
+                }
             }
             if p.is_dir() {
                 subdirs.push(p);
             }
         }
         for sub in subdirs {
-            if let Some(found) = walk(&sub, name, depth + 1) {
+            if let Some(found) = walk(&sub, names, depth + 1) {
                 return Some(found);
             }
         }
         None
     }
-    walk(root, name, 0)
+    // Windows: try both "name" and "name.exe"
+    let mut candidates = vec![name.to_string()];
+    if cfg!(windows) && !name.ends_with(".exe") {
+        candidates.push(format!("{}.exe", name));
+    }
+    walk(root, &candidates, 0)
 }
 
 fn failed_extract(e: anyhow::Error) -> DownloaderError {
@@ -138,16 +151,24 @@ mod tests {
 
     #[test]
     fn extract_ripgrep_like_targz() {
-        let r = extract(&fixture("ripgrep-like.tar.gz"), ArchiveFmt::TarGz, &["rg".into()])
-            .expect("extract ok");
+        let r = extract(
+            &fixture("ripgrep-like.tar.gz"),
+            ArchiveFmt::TarGz,
+            &["rg".into()],
+        )
+        .expect("extract ok");
         assert!(r.binary_path.exists());
         assert!(r.binary_path.ends_with("rg"));
     }
 
     #[test]
     fn extract_mdbook_like_targz_root_binary() {
-        let r = extract(&fixture("mdbook-like.tar.gz"), ArchiveFmt::TarGz, &["mdbook".into()])
-            .expect("extract ok");
+        let r = extract(
+            &fixture("mdbook-like.tar.gz"),
+            ArchiveFmt::TarGz,
+            &["mdbook".into()],
+        )
+        .expect("extract ok");
         assert!(r.binary_path.exists());
         assert!(r.binary_path.ends_with("mdbook"));
     }
@@ -180,8 +201,12 @@ mod tests {
 
     #[test]
     fn temp_dir_cleaned_up_on_drop() {
-        let r = extract(&fixture("mdbook-like.tar.gz"), ArchiveFmt::TarGz, &["mdbook".into()])
-            .expect("extract ok");
+        let r = extract(
+            &fixture("mdbook-like.tar.gz"),
+            ArchiveFmt::TarGz,
+            &["mdbook".into()],
+        )
+        .expect("extract ok");
         let dir_path = r.temp_dir.path().to_owned();
         assert!(dir_path.exists());
         drop(r);
