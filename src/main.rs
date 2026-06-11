@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
+use colored::*;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use colored::*;
 
 use cargo_fresh::cli::{Cli, Commands, OutputFormat};
 use cargo_fresh::display::{
-    print_results, print_update_selection, print_update_summary, set_json_mode, status,
-    status_dim, status_err, status_warn,
+    print_results, print_update_selection, print_update_summary, set_json_mode, status, status_dim,
+    status_err, status_warn,
 };
 use cargo_fresh::locale::detect_language;
 use cargo_fresh::models::{
@@ -176,7 +176,12 @@ async fn run() -> Result<i32> {
 
     if let Some(command) = cli.command {
         match command {
-            Commands::Completion { shell, cargo_fresh, install, yes } => {
+            Commands::Completion {
+                shell,
+                cargo_fresh,
+                install,
+                yes,
+            } => {
                 if install {
                     let targets = Cli::select_install_targets(language, yes)?;
                     if targets.is_empty() {
@@ -214,7 +219,10 @@ async fn run() -> Result<i32> {
                     let skipped_s = skipped.to_string();
                     let summary = language.format_text(
                         "completion_install_summary",
-                        &[("written", written_s.as_str()), ("skipped", skipped_s.as_str())],
+                        &[
+                            ("written", written_s.as_str()),
+                            ("skipped", skipped_s.as_str()),
+                        ],
                     );
                     status("Finished", &summary);
                     if written == 0 {
@@ -271,7 +279,8 @@ async fn run() -> Result<i32> {
             .replace("{}", &packages.len().to_string()),
     );
 
-    let no_fallback = cargo_fresh::package::cargo_search_fallback_disabled(cli.no_cargo_search_fallback);
+    let no_fallback =
+        cargo_fresh::package::cargo_search_fallback_disabled(cli.no_cargo_search_fallback);
     check_package_updates(
         &mut packages,
         cli.verbose,
@@ -378,21 +387,13 @@ async fn run() -> Result<i32> {
                 break;
             }
 
-            let package_name = all_packages_to_update[index].name.clone();
-            let selected_pkg = all_packages_to_update
-                .iter()
-                .find(|p| p.name == package_name);
-            let target_version = selected_pkg
-                .and_then(|p| p.latest_version.as_ref())
-                .cloned();
-            let source = selected_pkg
-                .map(|p| p.source.clone())
-                .unwrap_or(PackageSource::Crates);
-            let install_opts = selected_pkg.and_then(|p| p.install_opts.clone());
+            let pkg = &all_packages_to_update[index];
+            let package_name = pkg.name.clone();
+            let target_version = pkg.latest_version.clone();
+            let source = pkg.source.clone();
+            let install_opts = pkg.install_opts.clone();
 
-            let row = plan_arc
-                .as_ref()
-                .map(|p| (p.row(i), p.name_width()));
+            let row = plan_arc.as_ref().map(|p| (p.row(i), p.name_width()));
 
             // acquire_owned BEFORE spawn — this is what bounds concurrency.
             let permit = match sem.clone().acquire_owned().await {
@@ -453,10 +454,7 @@ async fn run() -> Result<i32> {
                             "Error",
                             &language.format_text(
                                 "package_error",
-                                &[
-                                    ("name", &name.red().to_string()),
-                                    ("error", &e.to_string()),
-                                ],
+                                &[("name", &name.red().to_string()), ("error", &e.to_string())],
                             ),
                         );
                     }
@@ -559,14 +557,16 @@ fn build_report<'a>(
     let updates_available: Vec<JsonUpdateCandidate> = all_updates
         .iter()
         .filter_map(|p| {
-            p.latest_version.as_deref().map(|latest| JsonUpdateCandidate {
-                name: p.name.as_str(),
-                current: p.current_version.as_deref(),
-                latest,
-                source: p.source.kind_str(),
-                prerelease: p.is_prerelease(),
-                prebuilt: p.prebuilt.map(|k| k.kind_str()),
-            })
+            p.latest_version
+                .as_deref()
+                .map(|latest| JsonUpdateCandidate {
+                    name: p.name.as_str(),
+                    current: p.current_version.as_deref(),
+                    latest,
+                    source: p.source.kind_str(),
+                    prerelease: p.is_prerelease(),
+                    prebuilt: p.prebuilt.map(|k| k.kind_str()),
+                })
         })
         .collect();
 
@@ -665,7 +665,8 @@ fn print_json(report: &JsonReport) {
         Ok(s) => anstream::println!("{}", s),
         Err(e) => {
             anstream::eprintln!(
-                "{{\"schema_version\":2,\"error\":\"failed to serialize report: {}\"}}", e
+                "{{\"schema_version\":2,\"error\":\"failed to serialize report: {}\"}}",
+                e
             );
         }
     }
@@ -674,8 +675,8 @@ fn print_json(report: &JsonReport) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::Parser;
     use cargo_fresh::models::{PackageInfo, PackageSource};
+    use clap::Parser;
 
     fn empty_cli() -> Cli {
         Cli::parse_from(["cargo-fresh"])
@@ -684,10 +685,20 @@ mod tests {
     #[test]
     fn build_report_counts_packages_and_sets_format() {
         let cli = empty_cli();
-        let packages = vec![
-            PackageInfo::with_source("ripgrep".into(), Some("14.1.1".into()), PackageSource::Crates),
-        ];
-        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
+        let packages = vec![PackageInfo::with_source(
+            "ripgrep".into(),
+            Some("14.1.1".into()),
+            PackageSource::Crates,
+        )];
+        let report = build_report(
+            &cli,
+            &packages,
+            &[],
+            &[],
+            false,
+            std::time::Instant::now(),
+            0,
+        );
         assert_eq!(report.schema_version, 2);
         assert_eq!(report.format, "cargo-fresh-v1");
         assert_eq!(report.summary.checked, 1);
@@ -700,9 +711,20 @@ mod tests {
         let packages = vec![PackageInfo::with_source(
             "my-tool".into(),
             Some("0.1.0".into()),
-            PackageSource::Git { url: "u".into(), rev: None },
+            PackageSource::Git {
+                url: "u".into(),
+                rev: None,
+            },
         )];
-        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
+        let report = build_report(
+            &cli,
+            &packages,
+            &[],
+            &[],
+            false,
+            std::time::Instant::now(),
+            0,
+        );
         assert_eq!(report.skipped.len(), 1);
         assert_eq!(report.skipped[0].reason_code, "git_source");
     }
@@ -712,11 +734,8 @@ mod tests {
         use cargo_fresh::models::{CheckError, CheckErrorKind};
 
         let cli = empty_cli();
-        let mut errored = PackageInfo::with_source(
-            "bat".into(),
-            Some("0.24.0".into()),
-            PackageSource::Crates,
-        );
+        let mut errored =
+            PackageInfo::with_source("bat".into(), Some("0.24.0".into()), PackageSource::Crates);
         errored.check_error = Some(CheckError {
             kind: CheckErrorKind::Unavailable,
             message: "sparse index HTTP 503".into(),
@@ -728,7 +747,15 @@ mod tests {
         );
         let packages = vec![errored, fresh_pkg];
 
-        let report = build_report(&cli, &packages, &[], &[], false, std::time::Instant::now(), 0);
+        let report = build_report(
+            &cli,
+            &packages,
+            &[],
+            &[],
+            false,
+            std::time::Instant::now(),
+            0,
+        );
 
         assert_eq!(report.fresh, vec!["ripgrep"]);
         assert_eq!(report.version_check_errors.len(), 1);
@@ -791,15 +818,7 @@ mod tests {
     #[test]
     fn build_report_summary_has_selection_counts() {
         let cli = empty_cli();
-        let report = build_report(
-            &cli,
-            &[],
-            &[],
-            &[],
-            false,
-            std::time::Instant::now(),
-            3,
-        );
+        let report = build_report(&cli, &[], &[], &[], false, std::time::Instant::now(), 3);
         assert_eq!(report.summary.selected, 3);
         assert_eq!(report.summary.attempted, 0);
     }

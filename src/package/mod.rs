@@ -305,20 +305,9 @@ async fn cargo_search_fallback(
         }
     }
 
-    // 如果没有找到稳定版本且不包含预发布版本，返回None
-    if !include_prerelease {
-        return Ok(None);
-    }
-
-    // 如果包含预发布版本但没有找到精确匹配，返回第一个匹配的版本
-    for line in output_str.lines() {
-        if line.starts_with(&package_prefix) && line.contains('"') {
-            if let Some(version) = extract_version_from_line(line) {
-                return Ok(Some(version));
-            }
-        }
-    }
-
+    // 如果没找到稳定版本且不包含预发布版本，返回 None。
+    // 如果 include_prerelease=true 且这里还没返回，说明在第一个循环里
+    // 也没找到任何匹配行——包在 registry 上不存在（或输出格式变了）。
     Ok(None)
 }
 

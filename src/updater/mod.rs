@@ -47,15 +47,16 @@ fn download_bar_style(name_width: usize) -> ProgressStyle {
 /// 非下载阶段 spinner 样式 —— 名字右对齐, 后接 spinner + 状态动词。
 fn spinner_style(name_width: usize) -> ProgressStyle {
     ProgressStyle::default_spinner()
-        .template(&format!("{{msg:>{name_width}.cyan}} {{spinner:.green}} {{prefix}}"))
+        .template(&format!(
+            "{{msg:>{name_width}.cyan}} {{spinner:.green}} {{prefix}}"
+        ))
         .unwrap()
         .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
 }
 
 /// 终态静态行: 不带 spinner/bar, 名字右对齐 + 动词 + 详情。
 fn static_style(name_width: usize) -> ProgressStyle {
-    ProgressStyle::with_template(&format!("{{msg:>{name_width}.cyan}} {{prefix}}"))
-        .unwrap()
+    ProgressStyle::with_template(&format!("{{msg:>{name_width}.cyan}} {{prefix}}")).unwrap()
 }
 
 /// 一组同时显示的包行的视图. main 在更新循环前调用 `Plan::new(names)`,
@@ -68,7 +69,12 @@ pub struct UpdatePlan {
 
 impl UpdatePlan {
     pub fn new(names: &[String]) -> Self {
-        let name_width = names.iter().map(|n| n.chars().count()).max().unwrap_or(0).max(10);
+        let name_width = names
+            .iter()
+            .map(|n| n.chars().count())
+            .max()
+            .unwrap_or(0)
+            .max(10);
         let mp = multi_progress();
         let rows: Vec<ProgressBar> = names
             .iter()
@@ -82,8 +88,12 @@ impl UpdatePlan {
             .collect();
         Self { rows, name_width }
     }
-    pub fn row(&self, i: usize) -> ProgressBar { self.rows[i].clone() }
-    pub fn name_width(&self) -> usize { self.name_width }
+    pub fn row(&self, i: usize) -> ProgressBar {
+        self.rows[i].clone()
+    }
+    pub fn name_width(&self) -> usize {
+        self.name_width
+    }
 }
 
 /// 创建当前正在更新的包的 progress bar (初始 spinner 形态)。
@@ -233,8 +243,7 @@ fn build_args(
             a
         }
         PackageSource::Git { url, rev } => {
-            let mut a: Vec<String> =
-                vec!["install".into(), "--git".into(), url.clone()];
+            let mut a: Vec<String> = vec!["install".into(), "--git".into(), url.clone()];
             if let Some(r) = rev {
                 a.push("--rev".into());
                 a.push(r.clone());
@@ -274,51 +283,6 @@ fn build_args(
         }
     }
     args
-}
-
-/// 重试循环的命令选择器。
-///
-/// 持有主命令（Crates 源通常是 `cargo binstall`）和可选的 `cargo install`
-/// 回退命令。第一次 [`switch_to_fallback`](Self::switch_to_fallback) 把活动
-/// 命令一次性、永久地切到回退命令——之后每一次重试都跑 `cargo install`。
-///
-/// 这是修复 "binstall 失败回退到 install 后，后续重试又跑回 binstall" bug
-/// 的关键：binstall 一旦在当前环境失败（典型是没有预编译产物、退化成从
-/// 源码构建后仍失败），重试它只会重复那条又慢又必然失败的路径。
-struct CommandSelector {
-    primary: Vec<String>,
-    fallback: Option<Vec<String>>,
-    fell_back: bool,
-}
-
-impl CommandSelector {
-    fn new(primary: Vec<String>, fallback: Option<Vec<String>>) -> Self {
-        Self {
-            primary,
-            fallback,
-            fell_back: false,
-        }
-    }
-
-    /// 当前重试步应执行的 cargo 参数。
-    fn current(&self) -> &[String] {
-        match (self.fell_back, &self.fallback) {
-            (true, Some(fb)) => fb,
-            _ => &self.primary,
-        }
-    }
-
-    /// 当前命令失败后调用。若存在回退命令且尚未切换，则切到回退命令并
-    /// 返回 `true`（调用方据此打印 `Fallback` 状态行并立即重跑一次）。
-    /// 已经回退过、或根本没有回退命令时返回 `false`。
-    fn switch_to_fallback(&mut self) -> bool {
-        if !self.fell_back && self.fallback.is_some() {
-            self.fell_back = true;
-            true
-        } else {
-            false
-        }
-    }
 }
 
 async fn run_cargo(pb: &ProgressBar, args: &[String]) -> Result<Output> {
@@ -413,11 +377,7 @@ fn report_command_failure(pb: &ProgressBar, package_name: &str, output: &Output)
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !stderr.is_empty() {
-        pb_status_dim(
-            pb,
-            "stderr",
-            &format!("{}", stderr.trim().dimmed()),
-        );
+        pb_status_dim(pb, "stderr", &format!("{}", stderr.trim().dimmed()));
     }
 }
 
@@ -459,10 +419,7 @@ async fn try_downloader_install(
     let bins = crate::package::registry::cargo_home()
         .map(|home| crate::package::crates2::lookup_bins(&home, package_name))
         .unwrap_or_default();
-    crate::display::status_debug(
-        "downloader",
-        &format!("{package_name}: bins={:?}", bins),
-    );
+    crate::display::status_debug("downloader", &format!("{package_name}: bins={:?}", bins));
 
     let (tx, mut rx) = mpsc::unbounded_channel::<ProgressEvent>();
     let spec = InstallSpec {
@@ -533,14 +490,8 @@ async fn try_downloader_install(
         }
     });
 
-    let result = downloader::download_and_install(
-        client,
-        spec,
-        old_version.clone(),
-        tx,
-        cancel_arc,
-    )
-    .await;
+    let result =
+        downloader::download_and_install(client, spec, old_version.clone(), tx, cancel_arc).await;
 
     // 等事件消费者结束
     let _ = event_handle.await;
@@ -646,7 +597,10 @@ pub async fn update_package(
         if matches!(source, PackageSource::Crates) && opts_allow_downloader {
             status(
                 "Would run",
-                &format!("{header}: self-hosted downloader → cargo {}", cargo_install_args.join(" ")),
+                &format!(
+                    "{header}: self-hosted downloader → cargo {}",
+                    cargo_install_args.join(" ")
+                ),
             );
         } else {
             status(
@@ -686,7 +640,11 @@ pub async fn update_package(
         }
         PackageSource::Unknown(_) => {
             // 不应该到这一步——main 不会把 unknown 包放进 selections。
-            pb_status_warn(&pb, "Skip", &format!("{} {}", package_name, source.marker()));
+            pb_status_warn(
+                &pb,
+                "Skip",
+                &format!("{} {}", package_name, source.marker()),
+            );
             return Ok(Some(UpdateResult::new(
                 package_name.to_string(),
                 old_version,
@@ -701,7 +659,17 @@ pub async fn update_package(
     // Unsupported/Failed → 回退 cargo install。Cancelled → 中止。
     if matches!(source, PackageSource::Crates) && opts_allow_downloader {
         if let Some(v) = target_version {
-            match try_downloader_install(&pb, name_width, package_name, v, &old_version, cancel.clone(), verbose).await {
+            match try_downloader_install(
+                &pb,
+                name_width,
+                package_name,
+                v,
+                &old_version,
+                cancel.clone(),
+                verbose,
+            )
+            .await
+            {
                 Ok(true) => {
                     let result = verify_and_report_update(&pb, package_name, &old_version)
                         .await
@@ -732,7 +700,6 @@ pub async fn update_package(
     pb.set_style(spinner_style(name_width));
     pb.set_prefix("compiling from source".yellow().bold().to_string());
     pb.enable_steady_tick(std::time::Duration::from_millis(PROGRESS_TICK_MS));
-    let mut selector = CommandSelector::new(cargo_install_args, None);
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
         // 每次重试前检查取消标志:用户按 Ctrl-C 后立即停手,不再消耗重试
@@ -752,7 +719,7 @@ pub async fn update_package(
             ));
         }
 
-        let output = run_cargo(&pb, selector.current()).await?;
+        let output = run_cargo(&pb, &cargo_install_args).await?;
 
         if output.status.success() {
             let result = verify_and_report_update(&pb, package_name, &old_version)
@@ -774,28 +741,7 @@ pub async fn update_package(
             return Ok(None);
         }
 
-        // binstall 第一次失败时立刻切到 cargo install 并就地重跑一次（这次
-        // 回退不消耗 attempt 计数器）。关键：switch_to_fallback 之后
-        // selector.current() 对后续每一次重试都返回 install——不再跑回
-        // binstall（已修复"回退后重试又跑 binstall"的 bug）。
-        if selector.switch_to_fallback() {
-            pb_status_warn(&pb, "Fallback", language.get_text("binstall_failed_fallback"));
-            let fb_output = run_cargo(&pb, selector.current()).await?;
-            if fb_output.status.success() {
-                let result = verify_and_report_update(&pb, package_name, &old_version)
-                    .await
-                    .with_install_method(InstallMethod::CargoInstall);
-                return Ok(Some(result));
-            }
-            // 回退命令也失败:同样先排除"是用户取消造成的"。
-            if cancel.load(Ordering::SeqCst) {
-                pb_status_warn(&pb, "Aborted", &package_name.cyan().to_string());
-                return Ok(None);
-            }
-            report_command_failure(&pb, package_name, &fb_output);
-        } else {
-            report_command_failure(&pb, package_name, &output);
-        }
+        report_command_failure(&pb, package_name, &output);
 
         if attempt < MAX_RETRY_ATTEMPTS {
             pb_status_dim(&pb, "Retry", language.get_text("waiting_retry"));
@@ -821,7 +767,7 @@ pub async fn update_package(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_args, CommandSelector};
+    use super::build_args;
     use crate::models::{InstallOpts, PackageSource};
 
     fn s(v: &[&str]) -> Vec<String> {
@@ -832,7 +778,7 @@ mod tests {
     async fn cancelled_before_start_returns_none() {
         // 复现并锁定 bug:用户按下 Ctrl-C 后,update_package 必须立即返回
         // None 表示"被取消"——绝不当成更新失败,绝不 spawn cargo 子进程。
-        use std::sync::{Arc, atomic::AtomicBool};
+        use std::sync::{atomic::AtomicBool, Arc};
         let cancel = Arc::new(AtomicBool::new(true));
         let result = super::update_package(
             "cargo-fresh-no-such-package",
@@ -842,7 +788,7 @@ mod tests {
             false, // dry_run
             false, // verbose
             cancel,
-            None,  // row
+            None, // row
         )
         .await
         .expect("update_package 不应返回 Err");
@@ -850,24 +796,6 @@ mod tests {
             result.is_none(),
             "已取消时 update_package 必须返回 None,而不是一个结果"
         );
-    }
-
-    #[test]
-    fn selector_starts_on_primary() {
-        let primary = s(&["install", "--force", "mdbook"]);
-        let sel = CommandSelector::new(primary.clone(), None);
-        assert_eq!(sel.current(), primary.as_slice());
-    }
-
-    #[test]
-    fn selector_without_fallback_always_primary() {
-        // downloader 失败后只有 cargo install 作为唯一 subprocess 路径——
-        // CommandSelector 不再有 binstall primary + install fallback 模式。
-        let primary = s(&["install", "--force", "ripgrep"]);
-        let mut sel = CommandSelector::new(primary.clone(), None);
-        assert_eq!(sel.current(), primary.as_slice());
-        assert!(!sel.switch_to_fallback());
-        assert_eq!(sel.current(), primary.as_slice());
     }
 
     #[test]
@@ -938,8 +866,15 @@ mod tests {
         assert_eq!(
             got,
             s(&[
-                "install", "--git", "https://github.com/x/y", "--rev", "abc",
-                "--force", "y", "--features", "a"
+                "install",
+                "--git",
+                "https://github.com/x/y",
+                "--rev",
+                "abc",
+                "--force",
+                "y",
+                "--features",
+                "a"
             ])
         );
     }
@@ -951,12 +886,18 @@ mod tests {
             all_features: false,
             features: vec![],
         };
-        let src = PackageSource::Path { dir: "/tmp/p".into() };
+        let src = PackageSource::Path {
+            dir: "/tmp/p".into(),
+        };
         let got = build_args("p", None, &src, Some(&opts));
         assert_eq!(
             got,
             s(&[
-                "install", "--path", "/tmp/p", "--force", "p",
+                "install",
+                "--path",
+                "/tmp/p",
+                "--force",
+                "p",
                 "--no-default-features"
             ])
         );

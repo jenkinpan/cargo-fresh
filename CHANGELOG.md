@@ -7,10 +7,18 @@
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-06-11
+
+### Changed
+
+- **代码清理**：移除 `CommandSelector` 死代码（binstall 时代遗留，fallback 始终为 `None`，`switch_to_fallback` 永远返回 `false`，其后 ~26 行分支完全不可达）。`cargo install` 重试循环直接用 `&cargo_install_args`，逻辑不变。
+- **代码清理**：移除 `cargo_search_fallback` 中不可达的第二个 for 循环（`include_prerelease=true` 时第一个循环必然返回，第二个循环永不被执行）。
+- **代码清理**：`main.rs` 中用直接索引 `all_packages_to_update[index]` 替换冗余的 `.iter().find()` O(n) 搜索。
+
 ### Docs
 
 - 新增 `docs/1.0-contract.md`，集中说明 1.0 将冻结的 CLI / JSON / exit-code 契约、非稳定表面，以及 #3 反馈窗口的 issue 排查信息。
-- README / README.zh / ROADMAP 同步到 0.12.4，并把 `--debug` 明确标为仅供诊断、非 1.0 稳定契约。
+- README / README.zh / ROADMAP 同步到 0.12.5，并把 `--debug` 明确标为仅供诊断、非 1.0 稳定契约。
 
 ## [0.12.4] - 2026-05-29
 
@@ -335,32 +343,39 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.14] - 2026-05-17
 
 ### Fixed
+
 - **进度条残留污染输出**: 旧版同时活着两个进度条——`create_main_progress_bar` 的 `0/1 cargo-fresh (1/1)` 总进度条 + 每包 spinner——两者在终端互相覆盖，且 spinner 在 `update_package` 多条 return 分支漏写 `finish_and_clear`，留下 `⠋` 帧残留污染后续输出。修复后输出干净
 
 ### Changed
+
 - **删除主进度条**: `create_main_progress_bar` 整个函数移除。包数 N/M 提示改用单行 `   Package 3/18 cargo-fresh` 状态行，仅在多包升级时显示
 - **引入 `PbGuard` RAII 守卫**: `update_package` 持有 spinner pb 后立刻包进守卫，Drop 时自动 `finish_and_clear()`，保证从任何 return 分支（成功 / 失败 / 重试用尽 / dry-run）退出都不会留下 spinner 帧
 - 删除 `models::PROGRESS_BAR_WIDTH` 常量（主进度条移除后已无人使用）
 
 ### Technical
+
 - 全部 63 个单元测试通过；`cargo clippy --all-targets -- -D warnings` 零警告
 - 实测验证：本机降级到 0.9.11 再用 0.9.14 二进制升回 0.9.13，输出无 spinner 残留
 
 ## [0.9.13] - 2026-05-17
 
 ### Changed
+
 - **CLI 输出重做为 cargo 风格**: 全面剥离 emoji（✅❌⚠️📋🧪🔍⚡🔄📦），改用 cargo 自身的 `   Verb message` 风格——12 字符右对齐绿色加粗动词 + 内容。视觉风格与 `cargo build` / `rustup` 一致，更专业
 - **多行展示压缩为单行**: 旧版每个升级包要 3 行（`xxx 有更新可用\n  当前版本: 0.9.8\n  最新版本: 0.9.10`），现在一行搞定（`    Updating cargo-fresh 0.9.8 -> 0.9.12`）
 - **统一的状态动词词典**: `Checking` / `Found` / `Updating` / `Updated` / `Fresh` / `Running` / `Installing` / `Installed` / `Would run` / `Fallback` / `Unchanged` / `Failed` / `Note` / `Finished` 等。绿色（成功）/ 黄色（警告）/ 红色（失败）/ dim 灰（次要信息）四种语义颜色
 - **摘要尾行合并**: 旧版三行 `✅ Update completed!\n成功: 1 个包\n总耗时: 63 毫秒` 压缩为 cargo 风格单行 `    Finished 1 个成功, 耗时 63ms`
 
 ### Added
+
 - **`display::status*` 系列辅助函数**: `status` / `status_warn` / `status_err` / `status_dim` 用于直接 println；`pb_status*` 四个对应版本用于进度条上下文。所有用户面输出都走这 8 个函数，保证视觉一致性
 
 ### Fixed
+
 - **`no_updates_selected` 键名拼写错误**: 老代码引用的 key 不存在，导致 `--no-interactive` 走完后那行提示永远是空字符串。改成正确的 `no_packages_selected`
 
 ### Technical
+
 - `cargo install --list` 解析的箭头从 `→` 改为 ASCII `->`，避免 mono 字体下宽度估算不一致
 - 4 个 `format_text` 单元测试的硬编码断言更新以匹配新模板（断言文本去除 emoji 前缀）
 - 全部 63 个单元测试通过，`cargo clippy --all-targets -- -D warnings` 零警告
@@ -368,42 +383,50 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.12] - 2026-05-17
 
 ### Added
+
 - **新模块 `package::sparse_index`**: crates.io sparse index 客户端，作为 `cargo search` 的高速替代。直接 HTTPS GET `https://index.crates.io/{shard}/{name}`，按行 JSON 解析、按 semver 取最新未 yank 版本，同时返回稳定 + 预发布两个候选。`fetch_latest` 异步函数 + `parse_index_body` 纯函数 + `index_path` 分片规则函数三层分离，便于离线单测
 - **`fetch_latest_versions` 统一入口**: 主路径走 sparse index；网络错误、HTTP 非 2xx、解析失败时自动回退到 `cargo search`。回退路径无法一次拿两个版本，按 `include_prerelease` 标志选一个填入对应字段
 
 ### Changed
+
 - **`check_package_updates` 改单次 RPC 同时拿稳定+预发布**: 旧版稳定版和预发布版各发一轮请求；新版 sparse index 单次响应即包含全部历史版本。`main.rs` 删除了串行 prerelease 循环（19 行）
 - **并发限流 `Semaphore(16)`**: `check_package_updates` 中每个 `tokio::spawn` 先 acquire permit 再发请求，防止超大包数（100+）触发 crates.io 限流或本地 fd 耗尽
 - **缓存 `cargo install --list` 结果**: 新增 `INSTALLED_VERSION_CACHE`（`OnceLock<Mutex<HashMap>>`），`get_installed_packages` 首次解析时填充；`get_installed_version` 优先读缓存，避免 N 个包升级需要 N+1 次 `cargo install --list` 启动 cargo 子进程。升级成功后通过 `invalidate_installed_version` 失效单条记录强制下次重读真实状态
 
 ### Technical
+
 - 引入 `reqwest = "0.12"` 依赖，`default-features = false` + `rustls-tls` 避免拉 native-tls / openssl 链
 - 单进程共享 `OnceLock<reqwest::Client>` 复用 connection pool，UA 设置为 `cargo-fresh/VERSION`，超时 10s
 - 新增 11 个单元测试覆盖 sparse index：`index_path`（1/2/3/4+ 字符分片、大小写归一）共 5 个；`parse_index_body`（最大稳定版、稳定+预发布分流、跳过 yank、跳过不可解析行、空输入、全 yank）共 6 个。测试数 52 → 63
 - 实测性能：本机 18 个全局包，沿用 0.9.11 二进制需要 ~22s，新二进制 ~2.6s，瓶颈现在是纯网络延迟（单次 sparse index RPC ~1s，Semaphore(16) 两个 wave 完成）
 
 ### Notes
+
 - `cargo search` 回退路径完整保留——为企业代理 / 防火墙环境留好生路
 - 未做：完整 `std::process::Command` → `tokio::process::Command` 重写。剩余 `Command` 调用只在 sequential update loop 中执行（一次一个包），不阻塞并发热点；sparse index 接入后真正的瓶颈已消除。完整重写收益小、破坏 binstall 探测逻辑的风险大，推到 1.0.0-rc.1 阶段
 
 ## [0.9.11] - 2026-05-17
 
 ### Added
+
 - **真正的 glob 过滤**: `--filter` 改用 `globset` crate，支持标准 glob 语义（`*` / `?` / `[abc]`）。无 glob 字符的纯词自动包裹为 `*p*` 保留旧版"模糊匹配"友好行为
 - **`--exclude PATTERN`**（可重复）: 从过滤后的列表再剔除匹配的包。先 filter 后 exclude，支持完整 glob 语法
 - **`--dry-run`**: 打印将要执行的 cargo 命令但不实际执行。绕过进度条直接 println 保证命令清晰可见；连 binstall 安装副作用都避免（用只读 `is_binstall_available` 探测而非 `ensure_binstall_available`）
 - **支持 git 和 path 安装源**: 解析 `cargo install --list` 的 `(git+URL#rev)` 和 `(path+file:///DIR)` 后缀，在显示时附加 `[git]` / `[path]` 标记。更新策略按来源分流：crates.io 走 binstall→install fallback；git 用 `cargo install --git URL [--rev REV] --force`；path 用 `cargo install --path DIR --force`
 
 ### Fixed
+
 - **`parse_package_line` 误切 git URL**: 旧实现用 `split(':').next()` 找版本字段边界，但 git URL 中的 `https://` 含 `:`，会被错误截断成 `url = "https"`。改用先 `strip_suffix(':')` 剥掉行尾冒号再 `split_once(" v")`
 
 ### Changed
+
 - 引入 `globset = "0.4"` 依赖
 - `PackageInfo` 加 `source: PackageSource` 字段，新增 `PackageInfo::with_source` 构造器
 - `check_package_updates` 跳过非 crates.io 源（git/path 在 crates.io 上查不到"最新版本"）
 - `update_package` 签名扩展为 `(name, version, source, dry_run)`
 
 ### Technical
+
 - 新增 9 个单元测试（52 总数）：3 个 PackageSource 解析（registry / git±rev / path）、2 个 glob 过滤（prefix / suffix）、3 个 exclude（空列表 / 单模式 / 多模式）、原有 7 个 parse_package_line 测试更新为新签名
 - `cargo clippy --all-targets -- -D warnings` 零警告
 - 实测验证：`--filter cargo-fresh --dry-run --batch` 在 100ms 内打印 `cargo binstall --force cargo-fresh --version 0.9.10` 命令且未修改本地安装
@@ -411,15 +434,18 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.10] - 2026-05-17
 
 ### Fixed
+
 - **yank 回滚场景误报需要更新**: `PackageInfo::has_update` 旧实现用字符串 `!=` 比较，当本地版本高于 crates.io 最新版本（例如上游 yank 后回滚）时会被误报需要更新。现在改用 `semver::Version` 比较，仅在 `latest > current` 时返回 true
 - **含 "rc" 字面量的稳定版被误判为预发布**: `is_stable_version` / `PackageInfo::is_prerelease` 旧实现用 `contains("rc")`，会把 `1.0.0+rc-meta`、`1.0.0+arc-build` 等含子串 "rc" 的合法稳定版误判为预发布。现在改用 semver 标准 `Version.pre.is_empty()` 判断
 
 ### Changed
+
 - **引入 `semver = "1"` 依赖**: 用 semver crate 替代字符串关键字匹配做版本判断和预发布检测
 - **删除 `PRERELEASE_KEYWORDS` 常量**: 改用 semver 标准 API
 - **`Cargo.lock` 入库**: 二进制 crate 必须提交 `Cargo.lock` 以保证可复现构建。从 `.gitignore` 移除
 
 ### Technical
+
 - 新增 29 个单元测试覆盖核心纯函数：`parse_package_line`（7 个）、`extract_version_from_line`（3 个）、`is_stable_version`（4 个含关键回归）、`filter_packages`（4 个）、`PackageInfo::has_update`（8 个含 yank 回滚、major upgrade、build metadata、不可解析字串等场景）、`PackageInfo::is_prerelease`（3 个）
 - 测试数从 14 增加到 43，`cargo clippy --all-targets -- -D warnings` 零警告
 - 关于 semver crate 的 `Ord` 实现：会比较 build metadata 提供全序（虽然 SemVer 规范说应忽略）。对 cargo-fresh 来说这恰好对路——同语义版本但 build 不同通常意味着上游重发了 artifact，值得 `cargo install`
@@ -427,16 +453,19 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.9] - 2026-05-17
 
 ### Fixed
+
 - **i18n 多占位符模板渲染 bug**: 修复 `package_updated_version`、`package_update_failed`、`package_error`、`retry_attempt` 等模板的渲染问题。旧代码使用链式 `.replace("{}", x).replace("{}", y)`，第一次调用就会替换掉模板中所有 `{}`，导致第二、第三个变量永远不显示
 - **`retry_attempt` 模板未生效**: 原实现 `.replace("{}", "").trim()` 抹空模板再手动拼接，现在能正确显示 "Retry attempt N for X..."
 - **进度条生命周期**: 不再在 `pb.finish_and_clear()` 后继续使用进度条，改用 `enable_steady_tick` / `disable_steady_tick` 配对
 
 ### Changed
+
 - **新增 `Language::format_text(key, &[(name, value)])`**: 使用命名占位符（`{name}` / `{old}` / `{new}` / `{code}` / `{error}` / `{attempt}`）替代位置占位符，每个变量只替换到自己的位置
 - **`updater::update_package` 重构去重**: 抽出 `build_args` / `run_cargo` / `verify_and_report_update` / `report_command_failure` 四个辅助函数，消除 binstall → install 回退路径中约 80 行的"验证安装结果 + 打印 + 返回 UpdateResult"重复代码。`src/updater/mod.rs` 从 355 行降到 219 行（-38%）
 - **`executing_command` 日志改为每次重试都打印**: 便于排查重试时实际执行的命令
 
 ### Technical
+
 - 新增 4 个 `Language::format_text` 单元测试，关键回归测试锁死 `package_updated_version` 三个变量不再串扰
 - 删除未使用的 `package_updated` 文本键
 - 全部 14 个单元测试通过，`cargo clippy -- -D warnings` 零警告
@@ -444,16 +473,19 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.8] - 2025-10-18
 
 ### Fixed
+
 - **cargo binstall 缓存逻辑修复**: 修复了 cargo binstall 检查逻辑中的命令参数错误
 - **重复安装提示问题**: 解决了即使 cargo binstall 已安装仍显示"正在安装 cargo binstall"的问题
 - **缓存机制优化**: 改进了 `is_binstall_available()` 函数，使用正确的命令检查可用性
 
 ### Enhanced
+
 - **用户体验优化**: 避免重复的安装提示，提供更清晰的状态反馈
 - **性能提升**: 避免不必要的系统调用和重复操作
 - **缓存效率**: 确保 cargo binstall 状态只检查一次，提升响应速度
 
 ### Technical
+
 - 修复 `is_binstall_available()` 函数中的命令参数错误（`--version` → `--help`）
 - 优化 `ensure_binstall_available()` 函数的逻辑流程
 - 改进缓存机制，确保正确的状态管理
@@ -462,16 +494,19 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.7] - 2025-10-18
 
 ### Added
+
 - **智能缓存机制**: 添加 cargo binstall 状态缓存，避免重复检查和安装
 - **时间统计功能**: 显示更新过程的总耗时，提供性能反馈
 - **优化的进度条**: 改进进度条样式和显示逻辑，提供更好的视觉反馈
 
 ### Enhanced
+
 - **用户体验**: 修复 cargo binstall 重复检查问题，提供更流畅的安装体验
 - **进度显示**: 优化进度条显示，使用更美观的样式和清晰的状态提示
 - **状态反馈**: 添加表情符号和更清晰的操作提示，提升用户交互体验
 
 ### Technical
+
 - 新增 `OnceLock` 缓存机制，避免重复检查 cargo binstall
 - 实现时间统计功能，使用 `std::time::Instant` 记录更新耗时
 - 优化进度条样式，添加旋转器和改进的完成状态显示
@@ -480,16 +515,19 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.6] - 2025-10-18
 
 ### Added
+
 - **快速安装支持**: 集成 `cargo binstall` 支持，提供更快的包安装体验
 - **自动补全完善**: 支持 zsh、bash、fish、nushell 的自动补全功能
 - **代码质量优化**: 清理未使用代码，修复所有 Clippy 警告
 
 ### Enhanced
+
 - **安装体验**: 使用 `cargo binstall` 进行快速安装，支持自动回退到 `cargo install`
 - **补全功能**: 完善 shell 补全脚本，支持 `cargo fresh` 和 `cargo-fresh` 两种调用方式
 - **代码质量**: 零编译警告，零 Clippy 警告，符合 Rust 最佳实践
 
 ### Technical
+
 - 新增 `cargo binstall` 集成，支持快速包安装
 - 更新补全脚本生成逻辑，支持多种 shell
 - 清理未使用的 `error_handling` 和 `http_client` 模块
@@ -499,6 +537,7 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.5] - 2025-10-18
 
 ### Added
+
 - **并发处理**: 使用 `tokio::spawn` 实现并发包检查，性能提升 3-5 倍
 - **批量操作**: 新增 `--batch` 选项，支持自动更新所有包而无需确认
 - **包过滤**: 新增 `--filter` 选项，支持按名称模式过滤包（支持通配符）
@@ -507,12 +546,14 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 - **性能优化**: 并发包检查、HTTP 连接复用、请求缓存等多项性能改进
 
 ### Enhanced
+
 - **用户体验**: 更详细的进度显示和状态指示
 - **错误处理**: 区分不同类型的错误并提供相应的处理策略
 - **网络稳定性**: 增强网络重试机制和离线模式支持
 - **文档更新**: 全面更新 README 文档，添加新功能说明和使用示例
 
 ### Technical
+
 - 新增 `src/http_client/mod.rs` 模块，实现 HTTP 客户端优化
 - 新增 `src/error_handling/mod.rs` 模块，实现增强的错误处理
 - 更新 `src/package/mod.rs`，实现并发包检查和过滤功能
@@ -522,18 +563,21 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.4] - 2025-10-16
 
 ### Fixed
+
 - 修复重复的 `[Y/n]: [Y/n]` 提示问题，移除文本中的重复提示符
 - 修复 `dialoguer` 库在非终端环境中的错误处理
 - 优化更新完成后的信息显示，移除重复的成功信息
 - 修复 `src/locale/texts.rs` 中的语法错误（缺失逗号）
 
 ### Enhanced
+
 - 改进交互式确认的用户体验，使用 `show_default(false)` 配置
 - 优化错误处理机制，在非终端环境中优雅降级
 - 完善 GitHub Actions 工作流配置，修复项目名称不匹配问题
 - 添加自动化的 crates.io 发布和 GitHub Release 创建流程
 
 ### Changed
+
 - 更新 GitHub Actions 工作流，支持自动触发 release 构建
 - 修复 Homebrew formula 配置，指向正确的项目仓库
 - 优化 release 流程，实现推送标签后自动发布到 crates.io 并创建 release
@@ -541,12 +585,14 @@ MSRV 抬到 1.88。0.12.1 升级了 `zip` 到 8.x,而整个 zip 8 系列要求 r
 ## [0.9.3] - 2025-10-15
 
 ### Enhanced
+
 - 完善updater模块的国际化支持，所有更新相关文本支持中英文切换
 - 完善package模块的国际化支持，所有包检查相关文本支持中英文切换
 - 添加17个新的文本键，确保完整的双语支持
 - 优化语言检测测试，确保环境变量正确恢复
 
 ### Fixed
+
 - 修复语言检测测试中的环境变量污染问题
 - 修复文本键重复定义问题
 
