@@ -12,12 +12,12 @@ feedback-bake window and freezing the public contract.
 1.0 promotes three things from "current behavior" to "permanent, semver-protected
 contract". After 1.0, changing any of these is a breaking change requiring 2.0:
 
-| Contract | Frozen value | Source of truth |
-|----------|--------------|-----------------|
-| JSON output schema | `schema_version = 2` | `docs/json-schema.json`, `src/models/mod.rs::JsonReport` |
-| Exit codes | `0` ok / `1` updates-available-not-applied / `2` failure / `130` SIGINT | `src/main.rs` (`EXIT_*`), `run() -> Result<i32>` |
-| CLI flag inventory | the `--help` flag set + `completion` / `man` subcommands | `src/cli/mod.rs`, locked by `tests/cli.rs` |
-| Status verb dictionary | the human-output verbs | `CLAUDE.md` → "Status verb dictionary" |
+| Contract               | Frozen value                                                            | Source of truth                                          |
+| ---------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- |
+| JSON output schema     | `schema_version = 2`                                                    | `docs/json-schema.json`, `src/models/mod.rs::JsonReport` |
+| Exit codes             | `0` ok / `1` updates-available-not-applied / `2` failure / `130` SIGINT | `src/main.rs` (`EXIT_*`), `run() -> Result<i32>`         |
+| CLI flag inventory     | the `--help` flag set + `completion` / `man` subcommands                | `src/cli/mod.rs`, locked by `tests/cli.rs`               |
+| Status verb dictionary | the human-output verbs                                                  | `CLAUDE.md` → "Status verb dictionary"                   |
 
 The public checklist for users and issue triage lives in
 [`docs/1.0-contract.md`](docs/1.0-contract.md).
@@ -31,7 +31,7 @@ remain allowed within 1.x.
   index client, cargo-style status output, `PbGuard` progress cleanup.
 - ✅ **0.10.0** — `--include-prerelease` strict (BREAKING), `--registry-url`,
   mirror auto-detect from `$CARGO_HOME/config.toml`, Ctrl-C cancel, `--format=json`
-  + the exit-code contract.
+  - the exit-code contract.
 - ✅ **0.10.1** — async cargo subprocess, `--no-cargo-search-fallback`,
   `--install-binstall` (BEHAVIOR; later removed), non-TTY downgrade, `SlowGuard`
   30s watchdog, `PackageSource::Unknown`, `errors::hint_for`, `tests/` integration
@@ -80,6 +80,13 @@ remain allowed within 1.x.
   longer shadows fish's built-in `cargo.fish`; added `--debug` downloader
   decision tracing for issue reports. `--debug` is explicitly outside the 1.0
   stable contract.
+- ✅ **0.12.5** — code cleanup: removed `CommandSelector` dead code, unreachable
+  `cargo_search_fallback` loop, redundant `.iter().find()` in `main.rs`.
+- ✅ **perf (unreleased)** — concurrent GitHub API tag probing in downloader
+  (`try_api_winning_url`, `FuturesUnordered` + `Semaphore(2)`, cuts 3–5 RTT
+  for monorepo packages) and `--check-prebuilt` probe (`probe_prebuilt`, same
+  pattern). `registry_override` wrapped in `Arc` in `check_package_updates`
+  (one heap alloc instead of N).
 
 ## In progress
 

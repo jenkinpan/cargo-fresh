@@ -123,55 +123,87 @@ pub async fn probe_prebuilt(
         }
     }
 
-    // --- API path (1-6 requests instead of 360 HEADs) ----------------------
-    if let Some((owner, repo_name)) =
-        crate::downloader::github_api::parse_owner_repo(&repo)
-    {
+    // --- API path (1-6 requests instead of 360 HEADs, now concurrent) -----
+    if let Some((owner, repo_name)) = crate::downloader::github_api::parse_owner_repo(&repo) {
         let token = crate::downloader::token::discover_token();
-        let expected = crate::downloader::resolve::expected_filenames(
+        let expected = Arc::new(crate::downloader::resolve::expected_filenames(
             &name_candidates,
             version,
             &targets,
-        );
+        ));
         let candidate_tags = tag_candidates(&name_candidates[0], version);
+
+        #[derive(Debug)]
+        enum ApiTagResult {
+            Hit,
+            NoMatch,
+            NotFound,
+        }
+
+        let sem = Arc::new(Semaphore::new(2));
+        let mut tasks = FuturesUnordered::new();
+
+        for tag in candidate_tags {
+            let sem = sem.clone();
+            let client = client.clone();
+            let owner = owner.clone();
+            let repo_name = repo_name.clone();
+            let expected = expected.clone();
+            tasks.push(async move {
+                let _permit = sem.acquire_owned().await.ok()?;
+                match crate::downloader::github_api::fetch_release_assets(
+                    &client,
+                    "https://api.github.com",
+                    &owner,
+                    &repo_name,
+                    &tag,
+                    token,
+                )
+                .await
+                {
+                    Ok(assets) => {
+                        if crate::downloader::github_api::match_winning_asset(&assets, &expected)
+                            .is_some()
+                        {
+                            return Some(ApiTagResult::Hit);
+                        }
+                        Some(ApiTagResult::NoMatch)
+                    }
+                    Err(crate::downloader::github_api::GithubApiError::NotFound) => {
+                        Some(ApiTagResult::NotFound)
+                    }
+                    Err(_) => None, // RateLimited / Network / Parse — fatal
+                }
+            });
+        }
+
+        let mut hit = false;
         let mut hit_api = false;
 
-        for tag in &candidate_tags {
-            match crate::downloader::github_api::fetch_release_assets(
-                client,
-                "https://api.github.com",
-                &owner,
-                &repo_name,
-                tag,
-                token,
-            )
-            .await
-            {
-                Ok(assets) => {
-                    hit_api = true;
-                    if crate::downloader::github_api::match_winning_asset(&assets, &expected)
-                        .is_some()
-                    {
-                        return PrebuiltAvailability::Prebuilt;
-                    }
-                    // 200 但 asset 都没匹配 —— 试下个 tag(可能 tag 名错)
-                }
-                Err(crate::downloader::github_api::GithubApiError::NotFound) => {
-                    hit_api = true;
-                    // 试下一个 tag
-                }
-                Err(_) => {
-                    // RateLimited / Network / Parse —— 跳出 API 路径,走 fallback
+        while let Some(res) = tasks.next().await {
+            match res {
+                Some(ApiTagResult::Hit) => {
+                    hit = true;
                     break;
+                }
+                Some(ApiTagResult::NoMatch) | Some(ApiTagResult::NotFound) => {
+                    hit_api = true;
+                }
+                None => {
+                    // fatal: API unreachable — will fall through to HEAD
                 }
             }
         }
+        drop(tasks);
 
+        if hit {
+            return PrebuiltAvailability::Prebuilt;
+        }
         if hit_api {
             // 至少一个 tag 200 但 asset 全不匹配,或所有 tag 都 404 —— 都算 Source
             return PrebuiltAvailability::Source;
         }
-        // hit_api=false: API 一次都没成 —— 走 fallback 兜底
+        // API 一次都没成 —— 走 fallback 兜底
     }
 
     // --- Fallback: 旧的 HEAD 盲探 (API 不可达 / repo 不是 github.com) -------

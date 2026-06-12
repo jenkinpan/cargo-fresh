@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+### Perf
+
+- **下载器 API tag 探测并发化**：`try_api_winning_url` 对 6 个 GitHub Release tag 候选从串行切换为 `FuturesUnordered` + `Semaphore(2)` 并发探测，第一个命中即返回。monorepo 包（tauri-cli 等）从最多 6 RTT 降至 ~3 RTT，典型节省 200–800ms。
+- **`--check-prebuilt` API tag 探测并发化**：`probe_prebuilt` 的 GitHub API 路径同样从串行 6 tag 切换为 `FuturesUnordered` + `Semaphore(2)` 并发。多包场景下总计可省数秒。
+- **`registry_override` 去分配**：`check_package_updates` 将 `Option<String>` 在循环前包一层 `Arc`，循环内只做引用计数 bump 而不再逐个堆分配克隆。
+
 ## [0.12.5] - 2026-06-11
 
 ### Changed

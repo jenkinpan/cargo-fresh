@@ -56,9 +56,13 @@ async fn try_api_winning_url(
 ) -> Option<CandidateUrl> {
     let (owner, repo) = github_api::parse_owner_repo(repo_url)?;
     let token = token::discover_token();
-    let expected = resolve::expected_filenames(name_candidates, &spec.version, targets);
+    let expected = Arc::new(resolve::expected_filenames(
+        name_candidates,
+        &spec.version,
+        targets,
+    ));
     let pkg = name_candidates.first()?;
-    let tags = [
+    let tag_strings: Vec<String> = vec![
         format!("v{}", spec.version),
         spec.version.clone(),
         format!("{pkg}-v{}", spec.version),
@@ -74,78 +78,121 @@ async fn try_api_winning_url(
             owner,
             repo,
             token::discover_token_source(),
-            tags.len(),
+            tag_strings.len(),
             expected.len()
         ),
     );
-    for tag in &tags {
-        match github_api::fetch_release_assets(
-            client,
-            "https://api.github.com",
-            &owner,
-            &repo,
-            tag,
-            token,
-        )
-        .await
-        {
-            Ok(assets) => {
-                if let Some(asset) = github_api::match_winning_asset(&assets, &expected) {
+
+    let tag_count = tag_strings.len();
+
+    // 并发探测 6 个 tag, 最多 2 个同时在飞 (5000/hr 认证限额下安全)。
+    use futures_util::stream::{FuturesUnordered, StreamExt};
+    let sem = Arc::new(tokio::sync::Semaphore::new(2));
+    let mut tasks = FuturesUnordered::new();
+
+    for tag in tag_strings {
+        let sem = sem.clone();
+        let client = client.clone();
+        let owner = owner.clone();
+        let repo = repo.clone();
+        let expected = expected.clone();
+        let spec_name = spec.name.clone();
+        tasks.push(async move {
+            let _permit = sem.acquire_owned().await.ok()?;
+            match github_api::fetch_release_assets(
+                &client,
+                "https://api.github.com",
+                &owner,
+                &repo,
+                &tag,
+                token,
+            )
+            .await
+            {
+                Ok(assets) => {
+                    if let Some(asset) = github_api::match_winning_asset(&assets, &expected) {
+                        let asset = asset.clone();
+                        crate::display::status_debug(
+                            "downloader",
+                            &format!(
+                                "{}: API tag={} matched asset={}",
+                                spec_name, tag, asset.name
+                            ),
+                        );
+                        return Some(Ok((asset, tag)));
+                    }
                     crate::display::status_debug(
                         "downloader",
-                        &format!("{}: API tag={} matched asset={}", spec.name, tag, asset.name),
+                        &format!(
+                            "{}: API tag={} 200 but none of {} assets matched",
+                            spec_name,
+                            tag,
+                            assets.len()
+                        ),
                     );
-                    let archive_fmt = if asset.name.ends_with(".zip") {
-                        resolve::ArchiveFmt::Zip
-                    } else if asset.name.ends_with(".tar.gz") || asset.name.ends_with(".tgz") {
-                        resolve::ArchiveFmt::TarGz
-                    } else {
-                        resolve::ArchiveFmt::Bin
-                    };
-                    return Some(CandidateUrl {
-                        url: asset.browser_download_url.clone(),
-                        archive_fmt,
-                    });
+                    None
                 }
-                // 200 but no asset matched — try next tag
-                crate::display::status_debug(
-                    "downloader",
-                    &format!(
-                        "{}: API tag={} 200 but none of {} assets matched",
-                        spec.name,
-                        tag,
-                        assets.len()
-                    ),
-                );
+                Err(github_api::GithubApiError::NotFound) => {
+                    crate::display::status_debug(
+                        "downloader",
+                        &format!("{}: API tag={} 404", spec_name, tag),
+                    );
+                    None
+                }
+                Err(e) => {
+                    crate::display::status_debug(
+                        "downloader",
+                        &format!(
+                            "{}: API tag={} error={}, falling back to URL enumeration",
+                            spec_name, tag, e
+                        ),
+                    );
+                    Some(Err(e))
+                }
             }
-            Err(github_api::GithubApiError::NotFound) => {
-                crate::display::status_debug(
-                    "downloader",
-                    &format!("{}: API tag={} 404", spec.name, tag),
-                );
-                continue;
+        });
+    }
+
+    let mut result: Option<github_api::ReleaseAsset> = None;
+    while let Some(res) = tasks.next().await {
+        match res {
+            Some(Ok((asset, _tag))) => {
+                result = Some(asset);
+                break; // first hit wins — drop(tasks) cancels the rest
             }
-            Err(e) => {
-                crate::display::status_debug(
-                    "downloader",
-                    &format!(
-                        "{}: API tag={} error={}, falling back to URL enumeration",
-                        spec.name, tag, e
-                    ),
-                );
-                return None; // rate limited / network / parse — let caller fallback
+            Some(Err(_)) => {
+                return None; // fatal — fall back to URL enumeration
             }
+            None => {} // NotFound or no-match, keep waiting
         }
     }
-    crate::display::status_debug(
-        "downloader",
-        &format!(
-            "{}: API exhausted {} tags with no match, falling back to URL enumeration",
-            spec.name,
-            tags.len()
-        ),
-    );
-    None
+    drop(tasks);
+
+    match result {
+        Some(asset) => {
+            let archive_fmt = if asset.name.ends_with(".zip") {
+                resolve::ArchiveFmt::Zip
+            } else if asset.name.ends_with(".tar.gz") || asset.name.ends_with(".tgz") {
+                resolve::ArchiveFmt::TarGz
+            } else {
+                resolve::ArchiveFmt::Bin
+            };
+            Some(CandidateUrl {
+                url: asset.browser_download_url.clone(),
+                archive_fmt,
+            })
+        }
+        None => {
+            crate::display::status_debug(
+                "downloader",
+                &format!(
+                    "{}: API exhausted {} tags with no match, falling back to URL enumeration",
+                    spec.name, tag_count
+                ),
+            );
+            None
+        }
+    }
 }
 
 /// 主入口——把 (spec, events_tx, cancel) 串成完整流水线。
@@ -165,13 +212,17 @@ pub async fn download_and_install(
 
     let targets = resolve::current_targets();
     if targets.is_empty() {
-        return Err(DownloaderError::Unsupported(UnsupportedReason::UnsupportedPlatform));
+        return Err(DownloaderError::Unsupported(
+            UnsupportedReason::UnsupportedPlatform,
+        ));
     }
 
     let repo_url = spec
         .repo_url
         .as_deref()
-        .ok_or(DownloaderError::Unsupported(UnsupportedReason::NoMetadataAndNoConvention))?;
+        .ok_or(DownloaderError::Unsupported(
+            UnsupportedReason::NoMetadataAndNoConvention,
+        ))?;
 
     // {name} 候选: package 名先 (canonical, 多数包文件名沿用), 再加 binary 名
     // (覆盖 tauri-cli 这种情况: 包名 tauri-cli, 二进制 cargo-tauri,
