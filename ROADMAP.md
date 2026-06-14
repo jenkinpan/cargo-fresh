@@ -4,7 +4,7 @@ This is the detailed, item-by-item plan referenced from `CLAUDE.md`. `CLAUDE.md`
 keeps the one-line-per-release summary; this file carries the rationale, the
 remaining 1.0 checklist, and the deliberately-deferred items.
 
-**Status as of v0.12.4.** The code is feature-complete for 1.0; what remains is a
+**Status as of v0.12.5.** The code is feature-complete for 1.0; what remains is a
 feedback-bake window and freezing the public contract.
 
 ## What 1.0 freezes
