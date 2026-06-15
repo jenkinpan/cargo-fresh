@@ -123,10 +123,16 @@ remain allowed within 1.x.
 
 ## Open questions / deferred
 
-- **Keep the `cargo search` fallback?** Today it's the safety net for environments
-  where the sparse index is blocked. If 1.0 feedback shows nobody relies on it,
-  drop it in 1.x (additive removal of a fallback, behavior-preserving for the
-  common path).
+- **Keep the `cargo search` fallback? → DECIDED: keep through 1.0.** It's the only
+  path that still works when sparse-index HTTP is blocked but cargo's own
+  configured registry is reachable (corporate proxy / firewall / private mirror).
+  Cost is near-zero (~30 lines, tested, already opt-out via
+  `--no-cargo-search-fallback` + `CARGO_FRESH_NO_FALLBACK`), and dropping it now
+  is the irreversible/breaking direction — it would silently fail those
+  environments and force shrinking the frozen flag inventory (the opt-out flag).
+  Freeze the conservative superset for 1.0; revisit in 1.x only with concrete
+  feedback/telemetry showing nobody relies on it, then remove with a deprecation
+  cycle.
 - **Non-github release hosts.** The downloader's API-first path only understands
   `github.com`; GitLab / Gitea / self-hosted forges fall through to `cargo install`.
   Not a 1.0 blocker — `cargo install` is a correct (if slower) fallback.

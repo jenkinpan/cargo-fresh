@@ -183,4 +183,4 @@ Detailed item-by-item plan lives in `ROADMAP.md`. Status as of **v0.12.6**:
 - ⏭ **1.0.0-rc.1** — only ships if 0.12.x picks up BREAKING-class feedback that needs to bake before 1.0
 - ⏭ **1.0.0** — promote `schema_version=2`, exit codes, and the CLI flag inventory to permanent contract
 
-Remaining open question: whether to keep the `cargo search` fallback long-term. Today it's the safety net for environments where sparse index is blocked; if 1.0 feedback shows nobody relies on it, we can drop it in 1.x.
+Resolved open question: the `cargo search` fallback **stays through 1.0**. It's the only path that still works when sparse-index HTTP is blocked but cargo's own configured registry is reachable (proxy/firewall/private mirror); cost is near-zero (~30 lines, tested, already opt-out via `--no-cargo-search-fallback` + `CARGO_FRESH_NO_FALLBACK`); and dropping it now is the irreversible/breaking direction (silent failure for those environments + shrinks the frozen flag inventory). Revisit in 1.x only with concrete feedback that nobody relies on it, then remove with a deprecation cycle.
