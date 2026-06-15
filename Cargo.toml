@@ -55,6 +55,25 @@ toml = { version = "1.1", default-features = false, features = [
 ] }
 thiserror = "2"
 
+# Ship a small, fast prebuilt binary. Fat LTO + a single codegen unit maximize
+# cross-crate inlining/dead-code elimination; `strip` drops symbols. We do NOT
+# set `panic = "abort"`: the progress-bar teardown (`PbGuard` Drop, terminal
+# restore) and `tempfile` cleanup run on unwind, and aborting would skip them.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# Curated, opt-in clippy lints beyond the default set (CI enforces these via
+# `-D warnings`). Kept to stable, low-noise, mostly-autofixable style lints —
+# deliberately not blanket `pedantic`/`nursery`, which flood doc-backtick and
+# `# Errors`-section noise that carries no value for a binary crate.
+[lints.clippy]
+uninlined_format_args = "warn"
+redundant_closure = "warn"
+map_unwrap_or = "warn"
+manual_let_else = "warn"
+
 [dev-dependencies]
 assert_cmd = "2"
 insta = { version = "1", features = ["filters"] }

@@ -50,7 +50,7 @@ fn build_globset(patterns: &[&str]) -> Result<GlobSet> {
         let normalized = if p.contains(['*', '?', '[']) {
             p.to_string()
         } else {
-            format!("*{}*", p)
+            format!("*{p}*")
         };
         let glob = GlobBuilder::new(&normalized)
             .case_insensitive(true)
@@ -275,8 +275,7 @@ pub fn extract_version_from_line(line: &str) -> Option<String> {
 /// 解析失败时保守返回 true（视为稳定版），避免把无法解析的合法版本号误归为预发布。
 pub fn is_stable_version(version: &str) -> bool {
     Version::parse(version)
-        .map(|v| v.pre.is_empty())
-        .unwrap_or(true)
+        .map_or(true, |v| v.pre.is_empty())
 }
 
 /// 用 `cargo search` 回退路径取最新版本。
@@ -297,7 +296,7 @@ async fn cargo_search_fallback(
     }
 
     let output_str = String::from_utf8(output.stdout)?;
-    let package_prefix = format!("{} =", package_name);
+    let package_prefix = format!("{package_name} =");
 
     // 查找精确匹配的包名
     for line in output_str.lines() {
@@ -322,8 +321,7 @@ pub fn cargo_search_fallback_disabled(cli_flag: bool) -> bool {
         return true;
     }
     std::env::var("CARGO_FRESH_NO_FALLBACK")
-        .map(|v| !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false"))
-        .unwrap_or(false)
+        .is_ok_and(|v| !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false"))
 }
 
 /// `fetch_latest_versions` 的返回值：版本号 + 可选的检查失败信息。
@@ -450,13 +448,13 @@ pub fn choose_latest(
     include_prerelease: bool,
 ) -> Option<String> {
     if let Some(s) = stable {
-        if current.map(|c| c != s).unwrap_or(true) {
+        if current != Some(s) {
             return Some(s.to_string());
         }
     }
     if include_prerelease {
         if let Some(pre) = prerelease {
-            if current.map(|c| c != pre).unwrap_or(true) {
+            if current != Some(pre) {
                 return Some(pre.to_string());
             }
         }
@@ -719,7 +717,7 @@ mod tests {
             PackageSource::Unknown(raw) => {
                 assert_eq!(raw, "sparse+https://example.com/index");
             }
-            other => panic!("expected Unknown, got {:?}", other),
+            other => panic!("expected Unknown, got {other:?}"),
         }
     }
 

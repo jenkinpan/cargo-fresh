@@ -62,14 +62,14 @@ pub enum StatusStyle {
 ///
 /// 颜色码不计入宽度——必须先 pad 再上色,否则 ANSI 序列被算进宽度导致错位。
 pub fn format_status_line(verb: &str, msg: &str, style: StatusStyle) -> String {
-    let padded = format!("{:>w$}", verb, w = STATUS_WIDTH);
+    let padded = format!("{verb:>STATUS_WIDTH$}");
     let colored_verb = match style {
         StatusStyle::Ok => padded.green().bold().to_string(),
         StatusStyle::Warn => padded.yellow().bold().to_string(),
         StatusStyle::Err => padded.red().bold().to_string(),
         StatusStyle::Dim => padded.dimmed().to_string(),
     };
-    format!("{} {}", colored_verb, msg)
+    format!("{colored_verb} {msg}")
 }
 
 /// 用 cargo 风格输出一行状态："{右对齐12字符绿色加粗动词} {描述}"。

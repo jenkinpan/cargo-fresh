@@ -338,8 +338,7 @@ mod tests {
             if !english.is_empty() {
                 assert!(
                     !chinese.is_empty(),
-                    "Missing Chinese translation for key: {}",
-                    key
+                    "Missing Chinese translation for key: {key}"
                 );
             }
         }

@@ -303,8 +303,7 @@ async fn run() -> Result<i32> {
             p.has_update()
                 && p.latest_version
                     .as_ref()
-                    .map(|v| is_stable_version(v))
-                    .unwrap_or(false)
+                    .is_some_and(|v| is_stable_version(v))
         })
         .collect();
 
@@ -396,9 +395,8 @@ async fn run() -> Result<i32> {
             let row = plan_arc.as_ref().map(|p| (p.row(i), p.name_width()));
 
             // acquire_owned BEFORE spawn — this is what bounds concurrency.
-            let permit = match sem.clone().acquire_owned().await {
-                Ok(p) => p,
-                Err(_) => break,
+            let Ok(permit) = sem.clone().acquire_owned().await else {
+                break;
             };
             let cancel_task = cancel.clone();
             let dry_run = cli.dry_run;
@@ -499,9 +497,9 @@ async fn run() -> Result<i32> {
                 let fail_text = language
                     .get_text("fail_count")
                     .replace("{}", &fail_count.to_string());
-                format!("{}, {}, {}", success_text, fail_text, time_text)
+                format!("{success_text}, {fail_text}, {time_text}")
             } else {
-                format!("{}, {}", success_text, time_text)
+                format!("{success_text}, {time_text}")
             };
             if fail_count > 0 {
                 status_err("Finished", &summary);

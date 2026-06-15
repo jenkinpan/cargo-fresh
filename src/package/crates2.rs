@@ -17,9 +17,8 @@ pub fn parse_crates2(json: &str) -> HashMap<String, InstallOpts> {
         Ok(v) => v,
         Err(_) => return out,
     };
-    let installs = match value.get("installs").and_then(|v| v.as_object()) {
-        Some(m) => m,
-        None => return out,
+    let Some(installs) = value.get("installs").and_then(|v| v.as_object()) else {
+        return out;
     };
     for (key, entry) in installs {
         let no_default_features = entry
@@ -56,13 +55,12 @@ pub fn parse_crates2(json: &str) -> HashMap<String, InstallOpts> {
 /// 复用 `registry::cargo_home()`（`CARGO_HOME` env，回退 `$HOME/.cargo`）。
 /// 文件不存在 / 不可读 / 解析失败 → 空 map。永不报错、永不打印告警。
 pub fn load_install_opts() -> HashMap<String, InstallOpts> {
-    let path = match crate::package::registry::cargo_home() {
-        Some(p) => p.join(".crates2.json"),
-        None => return HashMap::new(),
+    let Some(home) = crate::package::registry::cargo_home() else {
+        return HashMap::new();
     };
-    let body = match std::fs::read_to_string(&path) {
-        Ok(b) => b,
-        Err(_) => return HashMap::new(),
+    let path = home.join(".crates2.json");
+    let Ok(body) = std::fs::read_to_string(&path) else {
+        return HashMap::new();
     };
     parse_crates2(&body)
 }
@@ -95,8 +93,7 @@ pub fn match_install_opts(
         if let Some((_, opts)) = candidates.iter().find(|(k, _)| {
             k.find('(')
                 .and_then(|i| k.get(i + 1..))
-                .map(|s| s.starts_with(want_prefix))
-                .unwrap_or(false)
+                .is_some_and(|s| s.starts_with(want_prefix))
         }) {
             return Some((*opts).clone());
         }
@@ -111,17 +108,14 @@ pub fn match_install_opts(
 /// 文件缺失 / 包不在文件里 → 返回空 Vec, caller fallback 到 package_name 本身。
 pub fn lookup_bins(cargo_home: &std::path::Path, package_name: &str) -> Vec<String> {
     let path = cargo_home.join(".crates2.json");
-    let body = match std::fs::read_to_string(&path) {
-        Ok(b) => b,
-        Err(_) => return Vec::new(),
+    let Ok(body) = std::fs::read_to_string(&path) else {
+        return Vec::new();
     };
-    let json: serde_json::Value = match serde_json::from_str(&body) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) else {
+        return Vec::new();
     };
-    let installs = match json.get("installs").and_then(|v| v.as_object()) {
-        Some(m) => m,
-        None => return Vec::new(),
+    let Some(installs) = json.get("installs").and_then(|v| v.as_object()) else {
+        return Vec::new();
     };
     installs
         .iter()
@@ -168,8 +162,7 @@ pub fn write_install_record(
                 .find(|(_, v)| {
                     v.get("bins")
                         .and_then(|b| b.as_array())
-                        .map(|arr| arr.iter().any(|b| b.as_str() == Some(package_name)))
-                        .unwrap_or(false)
+                        .is_some_and(|arr| arr.iter().any(|b| b.as_str() == Some(package_name)))
                 })
                 .map(|(k, _)| k.clone())
         });

@@ -50,8 +50,8 @@ pub fn index_path(name: &str) -> String {
     let chars: Vec<char> = lower.chars().collect();
     match chars.len() {
         0 => String::new(),
-        1 => format!("1/{}", lower),
-        2 => format!("2/{}", lower),
+        1 => format!("1/{lower}"),
+        2 => format!("2/{lower}"),
         3 => format!("3/{}/{}", chars[0], lower),
         _ => format!(
             "{}{}/{}{}/{}",
@@ -134,7 +134,7 @@ pub async fn fetch_latest(
                 if status.is_client_error() {
                     return Err(SparseIndexError::NotFound);
                 }
-                last_err = Some(anyhow::anyhow!("sparse index HTTP {}", status));
+                last_err = Some(anyhow::anyhow!("sparse index HTTP {status}"));
             }
             Err(e) => {
                 last_err = Some(anyhow::Error::new(e));

@@ -419,7 +419,7 @@ async fn try_downloader_install(
     let bins = crate::package::registry::cargo_home()
         .map(|home| crate::package::crates2::lookup_bins(&home, package_name))
         .unwrap_or_default();
-    crate::display::status_debug("downloader", &format!("{package_name}: bins={:?}", bins));
+    crate::display::status_debug("downloader", &format!("{package_name}: bins={bins:?}"));
 
     let (tx, mut rx) = mpsc::unbounded_channel::<ProgressEvent>();
     let spec = InstallSpec {

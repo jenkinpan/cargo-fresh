@@ -238,8 +238,7 @@ impl PackageInfo {
         self.latest_version
             .as_ref()
             .and_then(|v| Version::parse(v).ok())
-            .map(|v| !v.pre.is_empty())
-            .unwrap_or(false)
+            .is_some_and(|v| !v.pre.is_empty())
     }
 }
 

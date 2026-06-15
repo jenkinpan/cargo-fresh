@@ -40,7 +40,7 @@ impl Language {
     pub fn format_text(&self, key: &str, args: &[(&str, &str)]) -> String {
         let mut s = self.get_text(key).to_string();
         for (name, value) in args {
-            s = s.replace(&format!("{{{}}}", name), value);
+            s = s.replace(&format!("{{{name}}}"), value);
         }
         s
     }

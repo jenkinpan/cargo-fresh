@@ -102,7 +102,7 @@ fn find_binary(root: &Path, name: &str) -> Option<PathBuf> {
         let mut subdirs = Vec::new();
         for entry in entries.flatten() {
             let p = entry.path();
-            if p.is_file() && p.file_name().map(|f| f == name).unwrap_or(false) {
+            if p.is_file() && p.file_name().is_some_and(|f| f == name) {
                 return Some(p);
             }
             if p.is_dir() {

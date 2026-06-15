@@ -107,9 +107,8 @@ pub async fn probe_prebuilt(
     if targets.is_empty() {
         return PrebuiltAvailability::Unknown;
     }
-    let repo = match crate::package::crates_api::fetch_repo_url(client, name).await {
-        Some(r) => r,
-        None => return PrebuiltAvailability::Unknown,
+    let Some(repo) = crate::package::crates_api::fetch_repo_url(client, name).await else {
+        return PrebuiltAvailability::Unknown;
     };
 
     // bins 让 monorepo + binary 名 ≠ package 名的情况能命中

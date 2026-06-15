@@ -135,7 +135,7 @@ async fn try_api_winning_url(
                 Err(github_api::GithubApiError::NotFound) => {
                     crate::display::status_debug(
                         "downloader",
-                        &format!("{}: API tag={} 404", spec_name, tag),
+                        &format!("{spec_name}: API tag={tag} 404"),
                     );
                     None
                 }
@@ -143,8 +143,7 @@ async fn try_api_winning_url(
                     crate::display::status_debug(
                         "downloader",
                         &format!(
-                            "{}: API tag={} error={}, falling back to URL enumeration",
-                            spec_name, tag, e
+                            "{spec_name}: API tag={tag} error={e}, falling back to URL enumeration"
                         ),
                     );
                     Some(Err(e))

@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **release profile 优化**：`Cargo.toml` 新增 `[profile.release]`——`lto = true`（fat LTO，最大化跨 crate 内联 / 死代码消除）、`codegen-units = 1`、`strip = true`（剥离符号，缩小发布二进制）。**刻意不设 `panic = "abort"`**：进度条 teardown（`PbGuard` 的 `Drop`、终端恢复）和 `tempfile` 清理依赖 unwind，abort 会跳过它们。纯构建产物变化，不影响任何运行时行为 / 契约。
+- **启用一组精选 clippy lint**：`Cargo.toml` 新增 `[lints.clippy]`——`uninlined_format_args` / `redundant_closure` / `map_unwrap_or` / `manual_let_else`，均设为 `warn`，由 CI 的 `-D warnings` 兜底强制。刻意只取稳定、低噪声、基本可自动修复的风格 lint，不开整组 `pedantic`/`nursery`（对二进制 crate 会刷大量无价值的 doc-backtick / `# Errors` 噪声）。配套把全仓库现有代码按这组 lint 修齐（格式串内联参数、`match … => return` 改 let-else 等），纯风格调整，逻辑不变。
+
 ## [0.12.6] - 2026-06-15
 
 ### Added
