@@ -9,8 +9,8 @@
 //! 定生成所有边界场景，CI runner 上不需要任何预装包。
 
 use cargo_fresh::models::{
-    JsonCheckError, JsonReport, JsonResult, JsonSkipped, JsonSummary, JsonUpdateCandidate,
-    PrebuiltAvailability,
+    InstallMethod, JsonCheckError, JsonReport, JsonResult, JsonSkipped, JsonSummary,
+    JsonUpdateCandidate, PrebuiltAvailability,
 };
 use jsonschema::Validator;
 
@@ -41,6 +41,7 @@ fn empty_run_matches_schema() {
     let report = JsonReport {
         schema_version: 2,
         format: "cargo-fresh-v1",
+        version: env!("CARGO_PKG_VERSION"),
         include_prerelease: false,
         dry_run: false,
         registry_url: None,
@@ -73,6 +74,7 @@ fn invalid_payload_is_rejected() {
     let mut value = serde_json::to_value(JsonReport {
         schema_version: 2,
         format: "cargo-fresh-v1",
+        version: env!("CARGO_PKG_VERSION"),
         include_prerelease: false,
         dry_run: false,
         registry_url: None,
@@ -118,6 +120,7 @@ fn full_run_matches_schema() {
     let report = JsonReport {
         schema_version: 2,
         format: "cargo-fresh-v1",
+        version: env!("CARGO_PKG_VERSION"),
         include_prerelease: true,
         dry_run: true,
         registry_url: Some("https://mirror.example.com"),
@@ -178,12 +181,15 @@ fn full_run_matches_schema() {
                 old_version: Some("14.1.0"),
                 new_version: Some("14.1.1"),
                 success: true,
+                install_method: InstallMethod::Downloader.json_str(),
             },
             JsonResult {
                 name: "cargo-fresh",
                 old_version: Some("0.10.6"),
                 new_version: None,
                 success: false,
+                // 失败/中止 → Unknown → json_str() == None → JSON null
+                install_method: InstallMethod::Unknown.json_str(),
             },
         ],
         summary: JsonSummary {
@@ -211,6 +217,7 @@ fn prebuilt_variants_match_schema() {
         let report = JsonReport {
             schema_version: 2,
             format: "cargo-fresh-v1",
+            version: env!("CARGO_PKG_VERSION"),
             include_prerelease: false,
             dry_run: false,
             registry_url: None,

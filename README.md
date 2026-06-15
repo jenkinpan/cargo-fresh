@@ -148,6 +148,8 @@ Fields available beyond the bare `1` shape (additive history under `2`):
 - **`skipped[].reason_code`** — stable enum (`path_source` / `git_source` / `unknown_source`). Branch on this in scripts rather than the prose `reason`.
 - **`version_check_errors[]`** — packages whose latest-version lookup failed; each has `name`, `kind` (`not_found` / `unavailable`), and a human-readable `error`. `updates_available[]` excludes these.
 - **`summary.selected` / `attempted` / `check_errors`** — counts for chosen / install-attempted / lookup-failed packages.
+- **`version`** (top level) — the cargo-fresh release that produced the report (e.g. `"0.12.5"`), so archived JSON is self-describing. Branch on `schema_version` / `format`, not this.
+- **`results[].install_method`** — which path actually ran: `prebuilt` (downloader fetched a prebuilt binary) / `source` (fell back to `cargo install`) / `null` (install didn't complete). Shares the `prebuilt` / `source` vocabulary with `updates_available[].prebuilt`, so you can compare the `--check-prebuilt` prediction against the real outcome.
 
 ```bash
 # Names of packages with updates available

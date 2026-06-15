@@ -605,6 +605,7 @@ fn build_report<'a>(
             old_version: r.old_version.as_deref(),
             new_version: r.new_version.as_deref(),
             success: r.success,
+            install_method: r.install_method.json_str(),
         })
         .collect();
 
@@ -626,6 +627,7 @@ fn build_report<'a>(
     JsonReport {
         schema_version: 2,
         format: "cargo-fresh-v1",
+        version: env!("CARGO_PKG_VERSION"),
         include_prerelease: cli.include_prerelease,
         dry_run: cli.dry_run,
         registry_url: cli.registry_url.as_deref(),

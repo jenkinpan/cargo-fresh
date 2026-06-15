@@ -7,6 +7,7 @@
   "required": [
     "schema_version",
     "format",
+    "version",
     "include_prerelease",
     "dry_run",
     "registry_url",
@@ -27,7 +28,11 @@
     "format": {
       "type": "string",
       "const": "cargo-fresh-v1",
-      "description": "Format discriminator. Lets downstream scripts pin a known shape without parsing semver."
+      "description": "Format discriminator. Lets downstream scripts pin a known shape without parsing semver. Note: this is the wire-format family, versioned independently of `schema_version` (the field-level schema major) — `cargo-fresh-v1` and `schema_version=2` coexisting is expected, they version different things."
+    },
+    "version": {
+      "type": "string",
+      "description": "The cargo-fresh release that produced this report (its crate version, e.g. \"0.12.5\"). Self-describing for archived JSON and bug reports; not a stability discriminator — branch on `schema_version`/`format`, not this."
     },
     "include_prerelease": {
       "type": "boolean",
@@ -117,7 +122,7 @@
     },
     "result": {
       "type": "object",
-      "required": ["name", "old_version", "new_version", "success"],
+      "required": ["name", "old_version", "new_version", "success", "install_method"],
       "properties": {
         "name": { "type": "string" },
         "old_version": { "type": ["string", "null"] },
@@ -125,7 +130,12 @@
           "type": ["string", "null"],
           "description": "Version observed after the install attempt. May equal `old_version` if the update ran but the binary didn't actually change."
         },
-        "success": { "type": "boolean" }
+        "success": { "type": "boolean" },
+        "install_method": {
+          "type": ["string", "null"],
+          "enum": ["prebuilt", "source", null],
+          "description": "Which install path actually ran: 'prebuilt' = the self-hosted downloader fetched a prebuilt GitHub Release binary, 'source' = fell back to `cargo install` (compiled from source). null when the install did not complete (failure / Ctrl-C abort). Shares the 'prebuilt'/'source' vocabulary with updates_available[].prebuilt so scripts can compare the --check-prebuilt prediction against the actual outcome."
+        }
       }
     },
     "checkError": {

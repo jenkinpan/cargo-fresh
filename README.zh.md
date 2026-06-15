@@ -148,6 +148,8 @@ cargo fresh --format=json --batch
 - **`skipped[].reason_code`** —— 稳定枚举（`path_source` / `git_source` / `unknown_source`）。脚本判断请用这个而非 `reason` 字符串。
 - **`version_check_errors[]`** —— 版本查询失败的包，含 `name`、`kind`（`not_found` / `unavailable`）、可读 `error`。这些包不会出现在 `updates_available[]` 里。
 - **`summary.selected` / `attempted` / `check_errors`** —— 已选 / 已尝试安装 / 查询失败的包数。
+- **`version`**（顶层）—— 产出这份报告的 cargo-fresh 版本（如 `"0.12.5"`），让归档的 JSON 自描述。脚本判断请用 `schema_version` / `format`，不要用它。
+- **`results[].install_method`** —— 实际走的安装路径：`prebuilt`（downloader 拉到预编译二进制）/ `source`（回退到 `cargo install`）/ `null`（安装未完成）。与 `updates_available[].prebuilt` 共用词汇表，可对比 `--check-prebuilt` 的预测与实际结果。
 
 ```bash
 # 列出所有可更新包名

@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- **JSON 报告新增顶层 `version` 字段**：值为产出报告的 cargo-fresh crate 版本（`env!("CARGO_PKG_VERSION")`，如 `"0.12.5"`），让归档/issue 里贴的 JSON 自描述，不必再追问“你跑的哪个版本”。它**不是**稳定性判别符——脚本仍应 branch 在 `schema_version` / `format` 上。
+- **JSON `results[].install_method` 字段**：报告每个实际安装的包走了哪条路径——`"prebuilt"`（自托管 downloader 拉到 GitHub Release 预编译二进制）/ `"source"`（回退到 `cargo install` 源码编译）/ `null`（失败/中止，没走到安装）。刻意复用 `updates_available[].prebuilt` 的词汇表，脚本可用同一组枚举对比 `--check-prebuilt` 的**预测**与实际**结果**。数据本就在 `UpdateResult.install_method` 里（驱动人读 summary 的 `Prebuilt:` / `Compiled:` 分组），此前只是没序列化到 JSON。
+- 两者均为 additive，`schema_version` 保持 `2`。`docs/json-schema.json` 同步加入这两个 property（`version` 与 `results[].install_method` 均进 `required`，后者允许 `null`）。
+
 ### Fixed
 
 - **JSON schema 契约一致性**：移除 `docs/json-schema.json` 中 `checkError` 对象上多余的 `additionalProperties: false`——它是全 schema 唯一一处严格模式，且与「1.x 只做 additive 字段新增」的稳定性承诺直接冲突（带上它，任何 1.1 新增字段都会在 1.0 schema 下校验失败）。现在所有对象一致保持开放，前向兼容。`schema_version` 不变（仍为 `2`，纯放宽校验、不影响任何已发出的字段）。

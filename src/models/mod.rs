@@ -165,6 +165,21 @@ pub enum InstallMethod {
     Unknown,
 }
 
+impl InstallMethod {
+    /// JSON `results[].install_method` 的取值——刻意复用 `PrebuiltAvailability`
+    /// 的词汇表（`"prebuilt"` / `"source"`），这样脚本能用同一组枚举把
+    /// `updates_available[].prebuilt`（预测）和 `results[].install_method`（实际）
+    /// 直接对比。`Unknown`（失败/中止，没走到安装）映射成 `None` → JSON `null`，
+    /// 语义是“不适用”，区别于探测失败的 `"unknown"`。
+    pub fn json_str(self) -> Option<&'static str> {
+        match self {
+            InstallMethod::Downloader => Some("prebuilt"),
+            InstallMethod::CargoInstall => Some("source"),
+            InstallMethod::Unknown => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct UpdateResult {
     pub package_name: String,
@@ -241,6 +256,9 @@ impl PackageInfo {
 pub struct JsonReport<'a> {
     pub schema_version: u32,
     pub format: &'static str,
+    /// 产出这份报告的 cargo-fresh 版本（`env!("CARGO_PKG_VERSION")`）。
+    /// 让归档/issue 里贴的 JSON 自描述，无需另问“你跑的哪个版本”。
+    pub version: &'static str,
     pub include_prerelease: bool,
     pub dry_run: bool,
     pub registry_url: Option<&'a str>,
@@ -286,6 +304,10 @@ pub struct JsonResult<'a> {
     pub old_version: Option<&'a str>,
     pub new_version: Option<&'a str>,
     pub success: bool,
+    /// 实际走的安装路径：`"prebuilt"`（downloader）/ `"source"`（cargo install）/
+    /// `null`（失败/中止，没走到安装）。与 `updates_available[].prebuilt` 共用词汇表，
+    /// 便于脚本对比“预测 vs 实际”。
+    pub install_method: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
