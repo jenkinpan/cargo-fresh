@@ -4,7 +4,7 @@ This is the detailed, item-by-item plan referenced from `CLAUDE.md`. `CLAUDE.md`
 keeps the one-line-per-release summary; this file carries the rationale, the
 remaining 1.0 checklist, and the deliberately-deferred items.
 
-**Status as of v0.12.5.** The code is feature-complete for 1.0; what remains is a
+**Status as of v0.12.6.** The code is feature-complete for 1.0; what remains is a
 feedback-bake window and freezing the public contract.
 
 ## What 1.0 freezes
@@ -82,12 +82,12 @@ remain allowed within 1.x.
   stable contract.
 - ✅ **0.12.5** — code cleanup: removed `CommandSelector` dead code, unreachable
   `cargo_search_fallback` loop, redundant `.iter().find()` in `main.rs`.
-- ✅ **perf (unreleased)** — concurrent GitHub API tag probing in downloader
+- ✅ **0.12.6** — perf: concurrent GitHub API tag probing in downloader
   (`try_api_winning_url`, `FuturesUnordered` + `Semaphore(2)`, cuts 3–5 RTT
   for monorepo packages) and `--check-prebuilt` probe (`probe_prebuilt`, same
-  pattern). `registry_override` wrapped in `Arc` in `check_package_updates`
-  (one heap alloc instead of N).
-- ✅ **contract audit (unreleased)** — pre-freeze pass over the JSON schema and
+  pattern); `registry_override` wrapped in `Arc` in `check_package_updates`
+  (one heap alloc instead of N). Plus the pre-freeze **contract audit** below
+  (additive / docs-only, `schema_version` stays `2`):
   the frozen CLI flag set (`schema_version` stays `2`, all changes additive /
   docs-only, zero BREAKING):
   - Removed the lone `additionalProperties: false` on `checkError` in

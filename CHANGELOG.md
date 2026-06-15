@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.12.6] - 2026-06-15
+
 ### Added
 
 - **JSON 报告新增顶层 `version` 字段**：值为产出报告的 cargo-fresh crate 版本（`env!("CARGO_PKG_VERSION")`，如 `"0.12.5"`），让归档/issue 里贴的 JSON 自描述，不必再追问“你跑的哪个版本”。它**不是**稳定性判别符——脚本仍应 branch 在 `schema_version` / `format` 上。
