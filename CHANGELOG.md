@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **JSON schema 契约一致性**：移除 `docs/json-schema.json` 中 `checkError` 对象上多余的 `additionalProperties: false`——它是全 schema 唯一一处严格模式，且与「1.x 只做 additive 字段新增」的稳定性承诺直接冲突（带上它，任何 1.1 新增字段都会在 1.0 schema 下校验失败）。现在所有对象一致保持开放，前向兼容。`schema_version` 不变（仍为 `2`，纯放宽校验、不影响任何已发出的字段）。
+
+### Tests
+
+- **补全 1.0 flag inventory 锁定测试**：`tests/cli.rs::help_lists_core_flags` 现在断言全部 14 个冻结 flag（补上此前漏掉的 `--verbose` / `--updates-only` / `--no-interactive` / `--jobs`）外加短名 `-v` / `-u` / `-j`。契约说「`--help` flag set 冻结」，但旧测试只覆盖其中 10 个——误删/误改这 4 个 flag 此前不会被 CI 挡住。
+
 ### Perf
 
 - **下载器 API tag 探测并发化**：`try_api_winning_url` 对 6 个 GitHub Release tag 候选从串行切换为 `FuturesUnordered` + `Semaphore(2)` 并发探测，第一个命中即返回。monorepo 包（tauri-cli 等）从最多 6 RTT 降至 ~3 RTT，典型节省 200–800ms。

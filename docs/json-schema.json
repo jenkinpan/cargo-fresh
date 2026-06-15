@@ -131,7 +131,6 @@
     "checkError": {
       "type": "object",
       "required": ["name", "kind", "error"],
-      "additionalProperties": false,
       "properties": {
         "name": { "type": "string" },
         "kind": {

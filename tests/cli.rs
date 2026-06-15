@@ -23,19 +23,32 @@ fn version_flag_prints_crate_version() {
 fn help_lists_core_flags() {
     let assert = bin().arg("--help").assert().success();
     let out = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    // 完整冻结的 flag 清单——1.0 契约把 `--help` 的 flag set 钉死，
+    // 这里必须覆盖每一个 frozen flag（含短名），否则误删/误改不会被 CI 挡住。
     for flag in [
-        "--dry-run",
+        "--verbose",
+        "--updates-only",
+        "--no-interactive",
+        "--include-prerelease",
         "--batch",
         "--filter",
         "--exclude",
-        "--include-prerelease",
+        "--dry-run",
         "--registry-url",
         "--format",
         "--no-cargo-search-fallback",
         "--check-prebuilt",
         "--debug",
+        "--jobs",
     ] {
         assert!(out.contains(flag), "help missing {flag}\n--- help ---\n{out}");
+    }
+    // 短名也属于冻结契约（-v / -u / -j）。
+    for short in ["-v", "-u", "-j"] {
+        assert!(
+            out.contains(short),
+            "help missing short flag {short}\n--- help ---\n{out}"
+        );
     }
 }
 
