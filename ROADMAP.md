@@ -87,6 +87,24 @@ remain allowed within 1.x.
   for monorepo packages) and `--check-prebuilt` probe (`probe_prebuilt`, same
   pattern). `registry_override` wrapped in `Arc` in `check_package_updates`
   (one heap alloc instead of N).
+- ✅ **contract audit (unreleased)** — pre-freeze pass over the JSON schema and
+  the frozen CLI flag set (`schema_version` stays `2`, all changes additive /
+  docs-only, zero BREAKING):
+  - Removed the lone `additionalProperties: false` on `checkError` in
+    `docs/json-schema.json` — it conflicted with the 1.x additive-only promise
+    (a closed object rejects valid future field additions).
+  - `tests/cli.rs::help_lists_core_flags` now asserts the **full** 14-flag
+    inventory + short names `-v` / `-u` / `-j`, so accidental removal/rename of
+    any frozen flag fails CI (it previously covered only 10).
+  - Added JSON `version` (top level — the producing cargo-fresh release, for
+    self-describing reports) and `results[].install_method` (`prebuilt` /
+    `source` / `null`, sharing vocabulary with `updates_available[].prebuilt`
+    so scripts can compare the `--check-prebuilt` prediction vs the real
+    outcome).
+  - Decided **not** to rename `--no-cargo-search-fallback` (the precise name is
+    correct; `--no-fallback` would falsely imply it also disables the
+    downloader → `cargo install` install fallback). Clarified the flag's scope
+    in help text + both READMEs instead.
 
 ## In progress
 
