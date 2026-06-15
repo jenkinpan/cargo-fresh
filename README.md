@@ -107,7 +107,7 @@ cargo fresh --format=json
 | `--exclude <PATTERN>` | Drop matching packages; repeatable; applied after `--filter` |
 | `--dry-run` | Print the exact `cargo install …` commands without running them |
 | `--registry-url <URL>` | Override sparse-index base URL (mirror support) |
-| `--no-cargo-search-fallback` | Don't fall back to `cargo search` when the sparse index fails (also `CARGO_FRESH_NO_FALLBACK=1`) |
+| `--no-cargo-search-fallback` | Don't fall back to `cargo search` when the sparse index fails (also `CARGO_FRESH_NO_FALLBACK=1`). Only the version-check fallback; the downloader → `cargo install` install fallback is unaffected |
 | `--check-prebuilt` | Probe each candidate to mark `[prebuilt]` / `[source]` / `[unknown]`. Off by default — each probe issues a few HEAD requests |
 | `--debug` | Emit downloader decision traces to stderr for issue reports. Not part of the 1.0 stability contract; don't parse it |
 | `-j, --jobs <N>` | Concurrent package updates. Default `4`; `0` = unlimited; `1` = serial. `cargo install` fallback still serializes on cargo's `$CARGO_HOME` lock |

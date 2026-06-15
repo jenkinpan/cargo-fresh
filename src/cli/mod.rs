@@ -56,6 +56,10 @@ pub struct Cli {
     /// Disable the `cargo search` fallback when the sparse index request fails.
     /// `cargo search` is slow (spawns a cargo subprocess, parses output) and brittle.
     /// You can also set `CARGO_FRESH_NO_FALLBACK=1` to achieve the same effect.
+    ///
+    /// Scope: this only disables the version-check fallback (sparse index →
+    /// `cargo search`). It does NOT touch the install-path fallback
+    /// (downloader → `cargo install`), which is separate and always active.
     #[arg(long)]
     pub no_cargo_search_fallback: bool,
 

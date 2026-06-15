@@ -107,7 +107,7 @@ cargo fresh --format=json
 | `--exclude <PATTERN>` | 剔除匹配的包；可重复；在 `--filter` 之后应用 |
 | `--dry-run` | 打印将要执行的 `cargo install …` 命令而不真正运行 |
 | `--registry-url <URL>` | 覆盖 sparse-index 基础 URL（镜像支持） |
-| `--no-cargo-search-fallback` | sparse index 失败时不回退 `cargo search`（等价 `CARGO_FRESH_NO_FALLBACK=1`） |
+| `--no-cargo-search-fallback` | sparse index 失败时不回退 `cargo search`（等价 `CARGO_FRESH_NO_FALLBACK=1`）。仅作用于版本检查这条回退；下载器 → `cargo install` 的安装回退不受影响 |
 | `--check-prebuilt` | 探测每个候选包，标记 `[prebuilt]` / `[source]` / `[unknown]`。默认关——每包会发几个 HEAD 请求 |
 | `--debug` | 向 stderr 输出 downloader 决策 trace，供 issue 排查使用。不属于 1.0 稳定契约；不要解析它 |
 | `-j, --jobs <N>` | 并发更新数。默认 `4`；`0` = 不限；`1` = 串行。`cargo install` 回退路径会在 cargo 的 `$CARGO_HOME` 锁上自然串行化 |
