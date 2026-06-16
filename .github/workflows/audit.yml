@@ -21,9 +21,6 @@ on:
 
 permissions:
   contents: read
-  # cargo-audit 在 PR 上以 check-run 形式回报需要 checks:write
-  checks: write
-  issues: write
 
 jobs:
   cargo-deny:
@@ -41,6 +38,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: rustsec/audit-check@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          key: audit
+      # 直接跑 cargo-audit CLI,而非 rustsec/audit-check action——后者最新发布版仍声明
+      # node20,无 node24 tag 可用,会持续报 GitHub runtime 弃用注解。CLI 自包含、无第三方
+      # Node action 依赖,Cargo.lock 改动时本作业才触发,装一次开销可接受。
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Run cargo-audit
+        run: cargo audit
