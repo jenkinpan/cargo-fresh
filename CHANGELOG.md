@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.12.7] - 2026-06-17
+
 ### Changed
 
 - **release profile 优化**：`Cargo.toml` 新增 `[profile.release]`——`lto = true`（fat LTO，最大化跨 crate 内联 / 死代码消除）、`codegen-units = 1`、`strip = true`（剥离符号，缩小发布二进制）。**刻意不设 `panic = "abort"`**：进度条 teardown（`PbGuard` 的 `Drop`、终端恢复）和 `tempfile` 清理依赖 unwind，abort 会跳过它们。纯构建产物变化，不影响任何运行时行为 / 契约。

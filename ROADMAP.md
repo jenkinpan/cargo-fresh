@@ -4,7 +4,7 @@ This is the detailed, item-by-item plan referenced from `CLAUDE.md`. `CLAUDE.md`
 keeps the one-line-per-release summary; this file carries the rationale, the
 remaining 1.0 checklist, and the deliberately-deferred items.
 
-**Status as of v0.12.6.** The code is feature-complete for 1.0; what remains is a
+**Status as of v0.12.7.** The code is feature-complete for 1.0; what remains is a
 feedback-bake window and freezing the public contract.
 
 ## What 1.0 freezes
@@ -105,6 +105,15 @@ remain allowed within 1.x.
     correct; `--no-fallback` would falsely imply it also disables the
     downloader → `cargo install` install fallback). Clarified the flag's scope
     in help text + both READMEs instead.
+- ✅ **0.12.7** — pre-1.0 robustness + maintenance (no BREAKING / no schema
+  change): `package::http_client()` made fallible so a broken system TLS backend
+  degrades gracefully (version-check reports an `Unavailable` `CheckError`,
+  downloader falls back to `cargo install`, `--check-prebuilt` skips) instead of
+  panicking (exit 101); `audit.yml` swaps `rustsec/audit-check` (stuck on the
+  deprecated node20 runtime, no node24 release tag) for the `cargo-audit` CLI;
+  `github_api` test coverage 9→16 (`match_winning_asset` + the `401` / `5xx` /
+  malformed-200-body status arms); plus `[profile.release]` (lto / codegen-units=1
+  / strip, deliberately not `panic = "abort"`) and a curated `[lints.clippy]` set.
 
 ## In progress
 
