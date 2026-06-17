@@ -396,8 +396,11 @@ async fn try_downloader_install(
     cancel_arc: Arc<AtomicBool>,
     verbose: bool,
 ) -> Result<bool, DownloaderError> {
-    // 先从 crates.io API 拿 repo_url；拿不到直接走 cargo install
-    let client = crate::package::http_client();
+    // 先从 crates.io API 拿 repo_url；拿不到直接走 cargo install。
+    // HTTP 客户端建不起来 → downloader 没法工作，当作"不支持"回退 cargo install。
+    let Ok(client) = crate::package::http_client() else {
+        return Ok(false);
+    };
     let repo_url = crate::package::crates_api::fetch_repo_url(client, package_name).await;
     crate::display::status_debug(
         "downloader",

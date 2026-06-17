@@ -233,7 +233,10 @@ fn tag_candidates(pkg: &str, version: &str) -> Vec<String> {
 /// github.com,触发匿名限流后报 `[probe failed]`,接着 update 阶段的
 /// HEAD 也连带 throttle 失败。串行后单包 ~1-2s,4 个候选最多 ~10s,值得。
 pub async fn annotate_updates(packages: &mut [PackageInfo]) {
-    let client = crate::package::http_client();
+    // 建不起 HTTP 客户端就没法预检——直接跳过，让所有候选保持未标注状态。
+    let Ok(client) = crate::package::http_client() else {
+        return;
+    };
     let targets: Vec<(usize, String, String)> = packages
         .iter()
         .enumerate()

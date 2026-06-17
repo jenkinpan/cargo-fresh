@@ -11,6 +11,11 @@
 
 - **release profile 优化**：`Cargo.toml` 新增 `[profile.release]`——`lto = true`（fat LTO，最大化跨 crate 内联 / 死代码消除）、`codegen-units = 1`、`strip = true`（剥离符号，缩小发布二进制）。**刻意不设 `panic = "abort"`**：进度条 teardown（`PbGuard` 的 `Drop`、终端恢复）和 `tempfile` 清理依赖 unwind，abort 会跳过它们。纯构建产物变化，不影响任何运行时行为 / 契约。
 - **启用一组精选 clippy lint**：`Cargo.toml` 新增 `[lints.clippy]`——`uninlined_format_args` / `redundant_closure` / `map_unwrap_or` / `manual_let_else`，均设为 `warn`，由 CI 的 `-D warnings` 兜底强制。刻意只取稳定、低噪声、基本可自动修复的风格 lint，不开整组 `pedantic`/`nursery`（对二进制 crate 会刷大量无价值的 doc-backtick / `# Errors` 噪声）。配套把全仓库现有代码按这组 lint 修齐（格式串内联参数、`match … => return` 改 let-else 等），纯风格调整，逻辑不变。
+- **CI：`audit.yml` 用 `cargo-audit` CLI 取代 `rustsec/audit-check` action**。后者最新发布版（v2.0.0）仍声明 `node20`、且没有 `node24` 的 release tag，会持续触发 GitHub Actions 运行时弃用注解（node20→node24 强制迁移已于 2026-06-16 开始）。改成直接跑 `cargo install cargo-audit --locked` + `cargo audit`（复用 `ci.yml` 同款 `dtolnay/rust-toolchain@stable` + `Swatinem/rust-cache`），自包含、无第三方 Node action 依赖；顺带删掉只为 action 的 PR check-run 上报而存在的 `checks: write` / `issues: write` 权限。纯 CI 改动，工具行为不变。
+
+### Fixed
+
+- **HTTP 客户端构建失败不再 panic 整个进程**。`reqwest::Client::builder().build()` 在系统 TLS 后端无法初始化（损坏的根证书库 / 缺失的 crypto provider 等）时会 `Err`；旧实现 `.expect("build reqwest client")` 直接 panic（exit 101，附带 backtrace）。现在 `package::http_client()` 返回 `Result`，三个调用方各自优雅降级：版本检查上报一条 `Unavailable` 类 `CheckError`、downloader 当作"不支持"回退 `cargo install`、`--check-prebuilt` 预检直接跳过。极端环境下从硬崩溃变成可读的检查失败 + 正常退出码。
 
 ## [0.12.6] - 2026-06-15
 

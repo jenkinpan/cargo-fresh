@@ -21,15 +21,26 @@ pub mod registry;
 pub mod sparse_index;
 
 /// 单进程共享的 HTTP 客户端，启用 connection pool。
-pub(crate) fn http_client() -> &'static reqwest::Client {
+///
+/// `reqwest::Client::builder().build()` 在系统 TLS 后端无法初始化时会 `Err`
+/// （损坏的根证书库 / 缺失的 crypto provider 等）。旧实现 `.expect(...)` 会让
+/// 进程 panic（exit 101）；这里改成把错误冒泡给调用方，让它们各自优雅降级
+/// （版本检查报 CheckError、downloader 回退 cargo install、预检直接跳过）。
+pub(crate) fn http_client() -> Result<&'static reqwest::Client> {
+    use anyhow::Context;
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .user_agent(concat!("cargo-fresh/", env!("CARGO_PKG_VERSION")))
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .expect("build reqwest client")
-    })
+    if let Some(c) = CLIENT.get() {
+        return Ok(c);
+    }
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("cargo-fresh/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .context("failed to initialize HTTP client (system TLS backend unavailable?)")?;
+    // 并发下另一个线程可能已经塞进去了；忽略 set 的返回值，统一从 get() 取，
+    // 保证返回的引用指向最终留在 OnceLock 里的那个实例。
+    let _ = CLIENT.set(client);
+    Ok(CLIENT.get().expect("client just initialized"))
 }
 
 /// 同时拿稳定版与最新预发布版的并发上限，避免 crates.io 限流 / 本地 fd 耗尽
@@ -366,7 +377,21 @@ pub async fn fetch_latest_versions(
     verbose: bool,
 ) -> VersionLookup {
     let base = registry::sparse_index_base(registry_override);
-    let sparse_err = match sparse_index::fetch_latest(http_client(), &base, package_name).await {
+    let client = match http_client() {
+        Ok(c) => c,
+        Err(e) => {
+            // HTTP 客户端建不起来（系统 TLS 后端坏了）——所有网络路径都没法走，
+            // 当作一次检查失败上报，而不是 panic 整个进程。
+            return VersionLookup {
+                versions: sparse_index::LatestVersions::default(),
+                error: Some(crate::models::CheckError {
+                    kind: crate::models::CheckErrorKind::Unavailable,
+                    message: e.to_string(),
+                }),
+            };
+        }
+    };
+    let sparse_err = match sparse_index::fetch_latest(client, &base, package_name).await {
         Ok(v) => {
             return VersionLookup {
                 versions: v,
