@@ -33,7 +33,13 @@ pub enum CargoFreshError {
 /// 嗅探规则：
 /// 1. 先看错误链里是否有 `CargoFreshError` —— 我们自己显式建模的几个路径
 /// 2. 再看链里是否有 `reqwest::Error` 且 `is_connect()` / `is_timeout()` —— 网络层判定
-/// 3. 都不匹配返回 None
+/// 3. 再看链里是否有 `globset::Error` —— `--filter` / `--exclude` 传了非法 glob
+/// 4. 都不匹配返回 None
+///
+/// 注意：每包安装失败（权限被拒、GitHub 限流等）不会走到这里——它们被
+/// `run_one_update` 收成 `Failed` 结果、单独打 `Failed` 行，从不以顶层
+/// `anyhow::Error` 形式冒泡。所以这里只覆盖 `run()` 里 `?` 直接外抛的几条
+/// 启动期路径（列包、过滤模式编译、网络）。
 pub fn hint_for(err: &anyhow::Error) -> Option<&'static str> {
     for cause in err.chain() {
         if let Some(cf) = cause.downcast_ref::<CargoFreshError>() {
@@ -50,6 +56,12 @@ pub fn hint_for(err: &anyhow::Error) -> Option<&'static str> {
                      or set HTTPS_PROXY if behind a proxy.",
                 );
             }
+        }
+        if cause.downcast_ref::<globset::Error>().is_some() {
+            return Some(
+                "Invalid glob in `--filter` / `--exclude`. Patterns use glob syntax \
+                 (`*`, `?`, `[abc]`); quote the pattern in your shell and close any `[` bracket.",
+            );
         }
     }
     None
@@ -82,5 +94,15 @@ mod tests {
     fn hint_for_unrelated_error_returns_none() {
         let err = anyhow::anyhow!("something else entirely");
         assert!(hint_for(&err).is_none());
+    }
+
+    #[test]
+    fn hint_for_invalid_glob() {
+        // 走真实的 filter_packages 路径,确保 globset 错误真的能被嗅探到
+        // （而不是手搓一个假的 globset::Error 类型）。
+        let mut packages = Vec::new();
+        let err = crate::package::filter_packages(&mut packages, "[unclosed")
+            .expect_err("unclosed bracket should be an invalid glob");
+        assert!(hint_for(&err).unwrap().contains("--filter"));
     }
 }

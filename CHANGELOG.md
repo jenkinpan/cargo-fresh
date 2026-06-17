@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`--filter` / `--exclude` 非法 glob 现在给可执行提示**：传了语法错误的 glob（如未闭合的 `[`）时，`errors::hint_for` 现在嗅探到 `globset::Error` 并补一行 `Hint`，说明用的是 glob 语法（`*` / `?` / `[abc]`）、要在 shell 里引用模式并闭合 `[`。此前只打裸的 globset 报错。属 `hint_for` 启动期错误覆盖的补全——每包安装失败（权限/限流）走的是 `Failed` 行、不经 `hint_for`，故不在此列。
+
 ## [0.12.7] - 2026-06-17
 
 ### Changed
