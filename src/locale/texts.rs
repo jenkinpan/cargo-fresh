@@ -48,6 +48,19 @@ pub fn get_english_text(key: &str) -> &'static str {
         "update_instructions" => "To update manually: cargo install --force <name>",
         "interactive_instructions" => "Or drop --no-interactive for interactive selection",
 
+        // Error hints (errors::hint_for — the `Hint:` line after a top-level failure)
+        "hint_cargo_list_failed" => {
+            "Is `cargo` on your PATH? Try `cargo --version` to verify the toolchain."
+        }
+        "hint_network_connect_timeout" => {
+            "Network connect/timeout. Check connectivity to index.crates.io, \
+             or set HTTPS_PROXY if behind a proxy."
+        }
+        "hint_invalid_glob" => {
+            "Invalid glob in `--filter` / `--exclude`. Patterns use glob syntax \
+             (`*`, `?`, `[abc]`); quote the pattern in your shell and close any `[` bracket."
+        }
+
         // Version labels
         "version_unchanged" => "version unchanged",
         "unknown_version" => "unknown",
@@ -162,6 +175,16 @@ pub fn get_chinese_text(key: &str) -> &'static str {
         // 提示
         "update_instructions" => "手动更新：cargo install --force <name>",
         "interactive_instructions" => "或去掉 --no-interactive 进入交互模式",
+
+        // 错误提示（errors::hint_for——顶层失败后那行 `Hint:`）
+        "hint_cargo_list_failed" => "`cargo` 是否在 PATH 中？运行 `cargo --version` 验证工具链。",
+        "hint_network_connect_timeout" => {
+            "网络连接/超时。检查到 index.crates.io 的连通性，若处于代理后请设置 HTTPS_PROXY。"
+        }
+        "hint_invalid_glob" => {
+            "`--filter` / `--exclude` 的 glob 非法。模式使用 glob 语法\
+             （`*`、`?`、`[abc]`）；请在 shell 中引用模式并闭合 `[`。"
+        }
 
         // 版本标签
         "version_unchanged" => "版本未变",
@@ -285,6 +308,9 @@ mod tests {
             "aborted_by_user",
             "update_instructions",
             "interactive_instructions",
+            "hint_cargo_list_failed",
+            "hint_network_connect_timeout",
+            "hint_invalid_glob",
             "version_unchanged",
             "unknown_version",
             "version_info_unknown",

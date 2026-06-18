@@ -4,7 +4,7 @@ This is the detailed, item-by-item plan referenced from `CLAUDE.md`. `CLAUDE.md`
 keeps the one-line-per-release summary; this file carries the rationale, the
 remaining 1.0 checklist, and the deliberately-deferred items.
 
-**Status as of v0.12.7.** The code is feature-complete for 1.0; what remains is a
+**Status as of v0.12.8.** The code is feature-complete for 1.0; what remains is a
 feedback-bake window and freezing the public contract.
 
 ## What 1.0 freezes
@@ -114,6 +114,14 @@ remain allowed within 1.x.
   `github_api` test coverage 9→16 (`match_winning_asset` + the `401` / `5xx` /
   malformed-200-body status arms); plus `[profile.release]` (lto / codegen-units=1
   / strip, deliberately not `panic = "abort"`) and a curated `[lints.clippy]` set.
+- ✅ **0.12.8** — pre-1.0 i18n consistency (no BREAKING / no schema change):
+  `errors::hint_for` was the only user-facing output bypassing the bilingual i18n
+  system — it returned hardcoded English, so a Chinese-locale user saw a Chinese
+  error followed by an English `Hint:` line. Now `hint_for` returns a `Hint` enum
+  (`CargoListFailed` / `NetworkConnectTimeout` / `InvalidGlob`) and `main` renders
+  it via `Language::get_text(hint.locale_key())`, with text in
+  `src/locale/texts.rs` (English unchanged, Chinese added). Locks the new keys
+  with `errors::every_hint_has_bilingual_text` + `texts::test_text_consistency`.
 
 ## In progress
 

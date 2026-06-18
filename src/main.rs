@@ -114,7 +114,10 @@ async fn main() {
             anstream::eprintln!("error: {err:?}");
             if let Some(hint) = cargo_fresh::errors::hint_for(&err) {
                 if !cargo_fresh::display::is_json_mode() {
-                    status_dim("Hint", hint);
+                    // hint 文案按用户语言渲染——和其它所有用户可见字符串走同一条
+                    // i18n 路径（locale::texts），不在 errors.rs 里硬编码英文。
+                    let language = cargo_fresh::locale::detect_language();
+                    status_dim("Hint", language.get_text(hint.locale_key()));
                 }
             }
             std::process::exit(EXIT_FAILED);

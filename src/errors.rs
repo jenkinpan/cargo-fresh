@@ -28,7 +28,31 @@ pub enum CargoFreshError {
     },
 }
 
-/// 把 anyhow 错误链嗅探成可执行提示。返回 `None` 时调用方按原样打印错误。
+/// 一条可执行提示。`hint_for` 只返回**哪一条**提示（locale key），具体文案由
+/// `main` 通过 `Language::get_text(hint.locale_key())` 按用户语言渲染——和 cargo-fresh
+/// 其它所有用户可见字符串走同一条 i18n 路径（`src/locale/texts.rs`），不在这里硬编码英文。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hint {
+    /// `cargo install --list` 子进程失败：检查 cargo 是否在 PATH。
+    CargoListFailed,
+    /// reqwest 连接/超时：检查网络连通性 / 代理。
+    NetworkConnectTimeout,
+    /// `--filter` / `--exclude` 传了非法 glob。
+    InvalidGlob,
+}
+
+impl Hint {
+    /// 对应 `src/locale/texts.rs` 里的本地化键，喂给 `Language::get_text`。
+    pub fn locale_key(self) -> &'static str {
+        match self {
+            Hint::CargoListFailed => "hint_cargo_list_failed",
+            Hint::NetworkConnectTimeout => "hint_network_connect_timeout",
+            Hint::InvalidGlob => "hint_invalid_glob",
+        }
+    }
+}
+
+/// 把 anyhow 错误链嗅探成一条 [`Hint`]。返回 `None` 时调用方按原样打印错误。
 ///
 /// 嗅探规则：
 /// 1. 先看错误链里是否有 `CargoFreshError` —— 我们自己显式建模的几个路径
@@ -40,28 +64,19 @@ pub enum CargoFreshError {
 /// `run_one_update` 收成 `Failed` 结果、单独打 `Failed` 行，从不以顶层
 /// `anyhow::Error` 形式冒泡。所以这里只覆盖 `run()` 里 `?` 直接外抛的几条
 /// 启动期路径（列包、过滤模式编译、网络）。
-pub fn hint_for(err: &anyhow::Error) -> Option<&'static str> {
+pub fn hint_for(err: &anyhow::Error) -> Option<Hint> {
     for cause in err.chain() {
-        if let Some(cf) = cause.downcast_ref::<CargoFreshError>() {
-            return Some(match cf {
-                CargoFreshError::CargoListFailed { .. } => {
-                    "Is `cargo` on your PATH? Try `cargo --version` to verify the toolchain."
-                }
-            });
+        if cause.downcast_ref::<CargoFreshError>().is_some() {
+            // 目前 CargoFreshError 只有 CargoListFailed 一个变体。
+            return Some(Hint::CargoListFailed);
         }
         if let Some(re) = cause.downcast_ref::<reqwest::Error>() {
             if re.is_connect() || re.is_timeout() {
-                return Some(
-                    "Network connect/timeout. Check connectivity to index.crates.io, \
-                     or set HTTPS_PROXY if behind a proxy.",
-                );
+                return Some(Hint::NetworkConnectTimeout);
             }
         }
         if cause.downcast_ref::<globset::Error>().is_some() {
-            return Some(
-                "Invalid glob in `--filter` / `--exclude`. Patterns use glob syntax \
-                 (`*`, `?`, `[abc]`); quote the pattern in your shell and close any `[` bracket.",
-            );
+            return Some(Hint::InvalidGlob);
         }
     }
     None
@@ -77,7 +92,7 @@ mod tests {
             source: anyhow::anyhow!("exit code 101"),
         }
         .into();
-        assert!(hint_for(&err).unwrap().contains("cargo --version"));
+        assert_eq!(hint_for(&err), Some(Hint::CargoListFailed));
     }
 
     #[test]
@@ -87,7 +102,7 @@ mod tests {
             source: anyhow::anyhow!("exit code 101"),
         })
         .context("while listing installed packages");
-        assert!(hint_for(&err).unwrap().contains("cargo --version"));
+        assert_eq!(hint_for(&err), Some(Hint::CargoListFailed));
     }
 
     #[test]
@@ -103,6 +118,22 @@ mod tests {
         let mut packages = Vec::new();
         let err = crate::package::filter_packages(&mut packages, "[unclosed")
             .expect_err("unclosed bracket should be an invalid glob");
-        assert!(hint_for(&err).unwrap().contains("--filter"));
+        assert_eq!(hint_for(&err), Some(Hint::InvalidGlob));
+    }
+
+    #[test]
+    fn every_hint_has_bilingual_text() {
+        // 每个 Hint 变体的 locale_key 在英文和中文里都必须有非空文案——
+        // 否则 main 会打出空 `Hint:` 行。
+        use crate::locale::texts::{get_chinese_text, get_english_text};
+        for hint in [
+            Hint::CargoListFailed,
+            Hint::NetworkConnectTimeout,
+            Hint::InvalidGlob,
+        ] {
+            let key = hint.locale_key();
+            assert!(!get_english_text(key).is_empty(), "missing EN for {key}");
+            assert!(!get_chinese_text(key).is_empty(), "missing ZH for {key}");
+        }
     }
 }

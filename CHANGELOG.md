@@ -7,9 +7,15 @@
 
 ## [Unreleased]
 
+## [0.12.8] - 2026-06-18
+
 ### Added
 
 - **`--filter` / `--exclude` 非法 glob 现在给可执行提示**：传了语法错误的 glob（如未闭合的 `[`）时，`errors::hint_for` 现在嗅探到 `globset::Error` 并补一行 `Hint`，说明用的是 glob 语法（`*` / `?` / `[abc]`）、要在 shell 里引用模式并闭合 `[`。此前只打裸的 globset 报错。属 `hint_for` 启动期错误覆盖的补全——每包安装失败（权限/限流）走的是 `Failed` 行、不经 `hint_for`，故不在此列。
+
+### Changed
+
+- **错误 `Hint:` 行现在跟随用户语言**。此前 `errors::hint_for` 直接返回硬编码英文文案，是 cargo-fresh 里唯一绕过双语 i18n 系统的用户可见输出——中文环境的用户会先看到中文报错、再跟一行英文 `Hint`。现在 `hint_for` 返回一个 `Hint` 枚举（`CargoListFailed` / `NetworkConnectTimeout` / `InvalidGlob`），由 `main` 通过 `Language::get_text(hint.locale_key())` 按语言渲染，文案落在 `src/locale/texts.rs`（英文行为完全不变，新增对应中文）。纯一致性修复，不影响契约 / 退出码 / JSON。
 
 ## [0.12.7] - 2026-06-17
 
